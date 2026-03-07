@@ -1,14 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'url';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
   base: './',
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
-      '@shared': path.resolve(__dirname, '../shared'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@shared': fileURLToPath(new URL('../shared', import.meta.url)),
     },
   },
   server: {
@@ -16,8 +18,8 @@ export default defineConfig({
     strictPort: true,
     fs: {
       allow: [
-        path.resolve(__dirname),
-        path.resolve(__dirname, '../shared'),
+        fileURLToPath(new URL('.', import.meta.url)),
+        fileURLToPath(new URL('../shared', import.meta.url)),
       ],
     },
   },
@@ -26,11 +28,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html'),
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
       },
     },
   },
   define: {
     'process.env': {},
+    global: 'globalThis',
   },
 });
+
