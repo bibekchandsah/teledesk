@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import { MessageCircle } from 'lucide-react';
 import ChatSidebar from '../components/ChatSidebar';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
@@ -90,7 +91,26 @@ const ChatListPage: React.FC = () => {
 
       {/* Main content (chat window or empty state) */}
       <div className="chat-main-area">
-        <Outlet />
+        {chatId ? (
+          <Outlet />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 16,
+              color: 'var(--text-secondary)',
+              userSelect: 'none',
+            }}
+          >
+            <MessageCircle size={56} style={{ opacity: 0.9 }} />
+            <p style={{ margin: 0, fontSize: 16, opacity: 0.8 }}>Select a chat to start messaging</p>
+          </div>
+        )}
       </div>
 
       {/* New Chat Modal */}

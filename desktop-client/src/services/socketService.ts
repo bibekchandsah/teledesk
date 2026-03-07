@@ -73,6 +73,7 @@ export const leaveChatRoom = (chatId: string): void => {
 
 // ─── Messaging ────────────────────────────────────────────────────────────
 export const sendMessage = (payload: {
+  messageId?: string;
   chatId: string;
   content: string;
   type: Message['type'];

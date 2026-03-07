@@ -89,6 +89,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     socket.on(
       SOCKET_EVENTS.SEND_MESSAGE,
       async (payload: {
+        messageId?: string;
         chatId: string;
         content: string;
         type: Message['type'];
@@ -112,7 +113,10 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           }
 
           const message: Message = {
-            messageId: generateId(),
+            // Honor client-provided messageId for optimistic UI (must be valid UUID format)
+            messageId: (payload.messageId && /^[0-9a-f-]{36}$/.test(payload.messageId))
+              ? payload.messageId
+              : generateId(),
             chatId: payload.chatId,
             senderId: uid,
             content: sanitizeString(payload.content || ''),
@@ -134,12 +138,15 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
           await saveMessage(message);
 
-          // Broadcast to all members in chat room
+          // Broadcast to all members in chat room (handles open chat windows)
           io.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.NEW_MESSAGE, message);
 
-          // Notify offline members via their personal room
+          // Always notify every non-sender via their personal room too.
+          // This ensures online members who have NOT joined the chat room
+          // (i.e. they are on a different chat or the chat list) still receive
+          // the message for unread-count tracking. The client store deduplicates.
           for (const memberId of chat.members) {
-            if (memberId !== uid && !onlineUsers.has(memberId)) {
+            if (memberId !== uid) {
               io.to(`user:${memberId}`).emit(SOCKET_EVENTS.NEW_MESSAGE, message);
             }
           }
@@ -153,22 +160,44 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     );
 
     // ─── Typing Indicator ─────────────────────────────────────────────────
-    socket.on(SOCKET_EVENTS.TYPING, (payload: { chatId: string; isTyping: boolean; userName: string }) => {
-      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.USER_TYPING, {
+    socket.on(SOCKET_EVENTS.TYPING, async (payload: { chatId: string; isTyping: boolean; userName: string }) => {
+      const data = {
         chatId: payload.chatId,
         userId: uid,
         userName: payload.userName,
         isTyping: payload.isTyping,
-      });
+      };
+      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.USER_TYPING, data);
+      // Also notify members via personal room (in case receiver is on different chat)
+      const chat = await getChatById(payload.chatId, uid).catch(() => null);
+      if (chat) {
+        for (const memberId of chat.members) {
+          if (memberId !== uid) {
+            io.to(`user:${memberId}`).emit(SOCKET_EVENTS.USER_TYPING, data);
+          }
+        }
+      }
     });
     // ─── Live Typing Preview ─────────────────────────────────────────────
-    socket.on(SOCKET_EVENTS.LIVE_TYPING, (payload: { chatId: string; text: string; userName: string }) => {
-      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.LIVE_TYPING_UPDATE, {
+    socket.on(SOCKET_EVENTS.LIVE_TYPING, async (payload: { chatId: string; text: string; userName: string }) => {
+      const data = {
         chatId: payload.chatId,
         userId: uid,
         userName: payload.userName,
         text: payload.text,
-      });
+      };
+      // Emit to chat room (users who have this chat open)
+      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.LIVE_TYPING_UPDATE, data);
+      // Also emit to every member's personal room so they receive it
+      // even when navigated elsewhere (receiver respects their own setting client-side)
+      const chat = await getChatById(payload.chatId, uid).catch(() => null);
+      if (chat) {
+        for (const memberId of chat.members) {
+          if (memberId !== uid) {
+            io.to(`user:${memberId}`).emit(SOCKET_EVENTS.LIVE_TYPING_UPDATE, data);
+          }
+        }
+      }
     });
     // ─── Read Receipts ────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.MESSAGE_READ, (payload: { chatId: string; messageId: string }) => {

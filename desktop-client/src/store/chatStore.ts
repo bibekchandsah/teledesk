@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { Chat, Message, User } from '@shared/types';
 import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi } from '../services/apiService';
 
+// ─── localStorage helpers for unread counts ────────────────────────────────
+const UNREAD_KEY = 'teledesk_unread_counts';
+const loadUnreadCounts = (): Record<string, number> => {
+  try { return JSON.parse(localStorage.getItem(UNREAD_KEY) || '{}'); } catch { return {}; }
+};
+const saveUnreadCounts = (counts: Record<string, number>) => {
+  try { localStorage.setItem(UNREAD_KEY, JSON.stringify(counts)); } catch {}
+};
+
 interface ChatState {
   chats: Chat[];
   activeChat: Chat | null;
@@ -45,11 +54,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   liveTypingTexts: {},
   onlineUsers: new Set(),
   userProfiles: {},
-  unreadCounts: {},
+  unreadCounts: loadUnreadCounts(),
   pinnedChatIds: [],
   archivedChatIds: [],
 
-  setChats: (chats) => set({ chats }),
+  setChats: (chats) => set((state) => {
+    // Seed unread from chat.unreadCount for chats not yet tracked in memory
+    const seeded = { ...state.unreadCounts };
+    for (const chat of chats) {
+      if (!(chat.chatId in seeded) && chat.unreadCount) {
+        seeded[chat.chatId] = chat.unreadCount;
+      }
+    }
+    saveUnreadCounts(seeded);
+    return { chats, unreadCounts: seeded };
+  }),
 
   setActiveChat: (chat) => set({ activeChat: chat }),
 
@@ -133,17 +152,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })),
 
   incrementUnread: (chatId) =>
-    set((state) => ({
-      unreadCounts: {
-        ...state.unreadCounts,
-        [chatId]: (state.unreadCounts[chatId] || 0) + 1,
-      },
-    })),
+    set((state) => {
+      const updated = { ...state.unreadCounts, [chatId]: (state.unreadCounts[chatId] || 0) + 1 };
+      saveUnreadCounts(updated);
+      return { unreadCounts: updated };
+    }),
 
   clearUnread: (chatId) =>
-    set((state) => ({
-      unreadCounts: { ...state.unreadCounts, [chatId]: 0 },
-    })),
+    set((state) => {
+      const updated = { ...state.unreadCounts, [chatId]: 0 };
+      saveUnreadCounts(updated);
+      return { unreadCounts: updated };
+    }),
 
   updateChatLastMessage: (message) =>
     set((state) => ({

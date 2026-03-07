@@ -1,5 +1,4 @@
 import React from 'react';
-import UserAvatar from './UserAvatar';
 
 interface TypingUser {
   userId: string;
@@ -46,7 +45,6 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ users, liveTexts = []
         color: 'var(--text-secondary)',
       }}
     >
-      {firstUser && <UserAvatar name={firstUser.userName} size={24} />}
       {isLive ? (
         // Live text preview bubble
         <div

@@ -24,6 +24,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const navigate = useNavigate();
   const isConnectedRef = useRef(false);
 
+  // Use a ref so socket handlers always read the latest activeChat
+  // without needing to re-register on every navigation
+  const activeChatRef = useRef(activeChat);
+  useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+
+  const liveTypingRef = useRef(liveTypingEnabled);
+  useEffect(() => { liveTypingRef.current = liveTypingEnabled; }, [liveTypingEnabled]);
+
+  // Deduplicate messages received via both chat-room and personal-room broadcasts
+  const processedMsgIds = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -32,11 +43,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // ─── Message Events ──────────────────────────────────────────────────
     const handleNewMessage = (message: Message) => {
+      // Deduplicate: backend emits to both chat room + personal room
+      if (processedMsgIds.current.has(message.messageId)) return;
+      processedMsgIds.current.add(message.messageId);
+      // Keep the set bounded so it doesn't grow forever
+      if (processedMsgIds.current.size > 500) {
+        const first = processedMsgIds.current.values().next().value;
+        if (first) processedMsgIds.current.delete(first);
+      }
+
       addMessage(message);
       updateChatLastMessage(message);
 
-      // Notify if chat not active
-      if (activeChat?.chatId !== message.chatId && message.senderId !== currentUser.uid) {
+      if (message.senderId === currentUser.uid) return;
+
+      // Window is minimized/hidden or the message is for a different chat
+      const windowHidden = document.hidden || !document.hasFocus();
+      const differentChat = activeChatRef.current?.chatId !== message.chatId;
+
+      if (differentChat || windowHidden) {
         incrementUnread(message.chatId);
         showNotification({
           title: message.senderName || 'New Message',
@@ -68,7 +93,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       userName: string;
       text: string;
     }) => {
-      if (data.userId !== currentUser.uid && liveTypingEnabled) {
+      if (data.userId !== currentUser.uid && liveTypingRef.current) {
         setLiveTypingText(data.chatId, data.userId, data.userName, data.text);
       }
     };
@@ -158,7 +183,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
     };
-  }, [currentUser, activeChat, liveTypingEnabled, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, setIncomingCall, navigate]);
+  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, setIncomingCall, navigate]);
 
   return (
     <SocketContext.Provider value={{ isConnected: isConnectedRef.current }}>

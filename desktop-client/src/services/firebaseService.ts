@@ -11,7 +11,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, query, where, limit, onSnapshot, updateDoc, Unsubscribe } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, getDocs, collection, query, where, limit, orderBy, onSnapshot, updateDoc, Unsubscribe } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, UploadTask } from 'firebase/storage';
 import { User, Message, Chat } from '@shared/types';
 
@@ -208,6 +208,7 @@ export const listenToMessages = (
   const q = query(
     collection(firestoreDb, 'messages'),
     where('chatId', '==', chatId),
+    orderBy('timestamp', 'desc'),
     limit(limitCount),
   );
 
@@ -216,6 +217,7 @@ export const listenToMessages = (
     (snapshot) => {
       const messages = snapshot.docs
         .map((d) => d.data() as Message)
+        // Firestore returned newest-first; reverse for chronological display
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       callback(messages);
     },

@@ -1,4 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+// crypto.randomUUID() is available in Electron/Chromium without polyfill
+const genId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
@@ -184,6 +189,14 @@ const ChatWindow: React.FC = () => {
     clearUnread(chatId);
     markChatRead(chatId).catch(console.error);
 
+    // When the window is restored/focused while this chat is open, clear unread
+    const handleVisible = () => {
+      if (!document.hidden) clearUnread(chatId);
+    };
+    const handleFocus = () => clearUnread(chatId);
+    document.addEventListener('visibilitychange', handleVisible);
+    window.addEventListener('focus', handleFocus);
+
     const unsubscribe = listenToMessages(
       chatId,
       (msgs) => {
@@ -206,6 +219,8 @@ const ChatWindow: React.FC = () => {
     return () => {
       leaveChatRoom(chatId);
       unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisible);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [chatId, setMessages, clearUnread]);
 
@@ -329,7 +344,36 @@ const ChatWindow: React.FC = () => {
   const handleSend = () => {
     if (!inputText.trim() || !chatId || !currentUser) return;
 
+    const messageId = genId();
+    const optimisticMsg: Message = {
+      messageId,
+      chatId,
+      senderId: currentUser.uid,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      content: inputText.trim(),
+      type: 'text',
+      timestamp: new Date().toISOString(),
+      readBy: [currentUser.uid],
+      ...(replyingTo && {
+        replyTo: {
+          messageId: replyingTo.messageId,
+          senderId: replyingTo.senderId,
+          senderName: replyingTo.senderName,
+          content: replyingTo.content,
+          type: replyingTo.type,
+          fileUrl: replyingTo.fileUrl,
+          fileName: replyingTo.fileName,
+        },
+      }),
+    };
+    // Show message immediately (optimistic UI)
+    const { addMessage, updateChatLastMessage } = useChatStore.getState();
+    addMessage(optimisticMsg);
+    updateChatLastMessage(optimisticMsg);
+
     sendMessage({
+      messageId,
       chatId,
       content: inputText.trim(),
       type: 'text',

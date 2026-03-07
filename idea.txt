@@ -176,21 +176,26 @@ add call page where user can see the call history
     Voice	PhoneIncoming green	PhoneOutgoing accent	PhoneMissed red	PhoneOff grey
     Video	Video green	Video accent	VideoOff red	VideoOff grey
     # Missed, no answer, declined, and cancelled all now show red (#f87171).
-
 open specific chat in new window
-add saved message page where user can forward messages to saved message page
 alow user to edit
-lock chat for specific user
-bold/normal for unread/read messages
-allow user to send message themself too
-allow user to change camera & microphone during calling
-during call they can chat too in right sidebar
-screen share during call
-react messaages
+bold/normal for unread/read messages:
+    Offline, other user chatroom, unfocused window
+chats with unread messages:
+    Chat name — bold (fontWeight: 700)
+    Last message preview — bold (fontWeight: 600) and primary color
+    Timestamp — accent color
+    Unread badge — stacked directly below the timestamp on the right side
 select messaages
+add saved message page where user can forward messages to saved message page
+lock chat for specific user
+allow user to send message themself too
+during call they can chat too in right sidebar
+allow user to increase sidebar width
+react messaages
+allow user to change camera & microphone during calling
+screen share during call
 set app lock & if forgot enter registered email and verify it with link to get code
 show logged in devices
-allow user to increase sidebar width
 
 
 

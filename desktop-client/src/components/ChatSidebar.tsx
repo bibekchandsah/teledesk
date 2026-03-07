@@ -309,8 +309,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
                 size={46}
                 online={chat.type === 'private' ? info.online : undefined}
               />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
+                {/* Left: name + preview */}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <span
                     style={{
                       fontWeight: unread > 0 ? 700 : 500,
@@ -327,20 +328,16 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
                     {isChatPinned && <Pin size={11} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
                     {info.name}
                   </span>
-                  {chat.lastMessage && (
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>
-                      {formatTime(chat.lastMessage.timestamp)}
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
                   <span
                     style={{
+                      display: 'block',
                       fontSize: 13,
+                      fontWeight: unread > 0 ? 600 : 400,
                       color: unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      marginTop: 2,
                     }}
                   >
                     {chat.lastMessage
@@ -352,6 +349,14 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
                         )
                       : 'Start a conversation'}
                   </span>
+                </div>
+                {/* Right: time on top, unread badge below */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 4 }}>
+                  {chat.lastMessage && (
+                    <span style={{ fontSize: 11, color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      {formatTime(chat.lastMessage.timestamp)}
+                    </span>
+                  )}
                   {unread > 0 && (
                     <span
                       style={{
@@ -361,8 +366,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
                         padding: '1px 7px',
                         fontSize: 11,
                         fontWeight: 700,
-                        flexShrink: 0,
-                        marginLeft: 4,
+                        minWidth: 18,
+                        textAlign: 'center',
                       }}
                     >
                       {unread > 99 ? '99+' : unread}
