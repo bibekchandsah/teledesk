@@ -7,6 +7,7 @@ import {
   shell,
   Menu,
   Tray,
+  session,
 } from 'electron';
 import path from 'path';
 
@@ -187,6 +188,17 @@ ipcMain.on('open-chat-window', (_event, chatId: string) => {
 
 // ─── App Lifecycle ─────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  // Grant camera & microphone permissions for the renderer
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'mediaKeySystem', 'camera', 'microphone', 'display-capture'];
+    callback(allowed.includes(permission));
+  });
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = ['media', 'mediaKeySystem', 'camera', 'microphone', 'display-capture'];
+    return allowed.includes(permission);
+  });
+
   createWindow();
 
   // Create tray (graceful - don't crash if icon missing in dev)

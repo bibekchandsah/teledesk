@@ -4,6 +4,11 @@ Copy-Item desktop-client/.env.example desktop-client/.env
 cd backend-server; npm run dev
 cd desktop-client; npm run electron:dev
 
+Rebuild the Electron main process and restart:
+cd "d:\programming exercise\social media\desktop-client"
+npx tsc -p tsconfig.electron.json && npm run electron:dev
+
+
 http://localhost:5173/
 
 echo "# teledesk" >> README.md
@@ -165,14 +170,19 @@ toggle active status & live typing
 
 
 
-add call page where user can see the call history
 add archive page where user can archive/unarchieve specific user chat
-add saved message page where user can forward messages to saved message page
-lock chat for specific user
+add call page where user can see the call history
+    Call type	Incoming	Outgoing	Missed/No answer	Declined/Cancelled
+    Voice	PhoneIncoming green	PhoneOutgoing accent	PhoneMissed red	PhoneOff grey
+    Video	Video green	Video accent	VideoOff red	VideoOff grey
+    # Missed, no answer, declined, and cancelled all now show red (#f87171).
+
 open specific chat in new window
+add saved message page where user can forward messages to saved message page
+alow user to edit
+lock chat for specific user
 bold/normal for unread/read messages
 allow user to send message themself too
-alow user to edit
 allow user to change camera & microphone during calling
 during call they can chat too in right sidebar
 screen share during call

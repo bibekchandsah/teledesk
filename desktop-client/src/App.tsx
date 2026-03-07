@@ -1,7 +1,7 @@
 import React, { useEffect, Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive } from 'lucide-react';
+import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone } from 'lucide-react';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
@@ -35,6 +35,7 @@ import SettingsPage from './pages/SettingsPage';
 import UserProfile from './pages/UserProfile';
 import CallScreen from './pages/CallScreen';
 import IncomingCallModal from './pages/IncomingCallModal';
+import CallHistoryPage from './pages/CallHistoryPage';
 import { useCallStore } from './store/callStore';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
@@ -119,6 +120,13 @@ const AppInner: React.FC = () => {
               <MessageCircle size={22} />
             </NavLink>
             <NavLink
+              to="/calls"
+              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+              title="Calls"
+            >
+              <Phone size={22} />
+            </NavLink>
+            <NavLink
               to="/profile"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
               title="Profile"
@@ -153,6 +161,11 @@ const AppInner: React.FC = () => {
               <Route path="/settings" element={
                 <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
                   <SettingsPage />
+                </div>
+              } />
+              <Route path="/calls" element={
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  <CallHistoryPage />
                 </div>
               } />
               <Route path="/profile/:uid?" element={
