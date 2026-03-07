@@ -1,0 +1,369 @@
+﻿import React, { useRef, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
+import UserAvatar from '../components/UserAvatar';
+import { updateMyProfile, uploadAvatar } from '../services/apiService';
+import { emitActiveStatusChange } from '../services/socketService';
+import { Pencil, Sun, Moon } from 'lucide-react';
+
+const SettingsPage: React.FC = () => {
+  const { logout } = useAuth();
+  const { currentUser, setCurrentUser } = useAuthStore();
+  const { theme, toggleTheme, liveTypingEnabled, toggleLiveTyping } = useUIStore();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Profile editing state
+  const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarProgress, setAvatarProgress] = useState(0);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed || !currentUser || trimmed === currentUser.name) {
+      setEditingName(false);
+      return;
+    }
+    setIsSavingName(true);
+    try {
+      const res = await updateMyProfile({ name: trimmed });
+      if (res.success && res.data) setCurrentUser(res.data);
+    } catch (e) {
+      console.error('[Profile] Failed to update name', e);
+    } finally {
+      setIsSavingName(false);
+      setEditingName(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB.'); return; }
+    setIsUploadingAvatar(true);
+    setAvatarProgress(0);
+    try {
+      const uploadRes = await uploadAvatar(file);
+      if (!uploadRes.success || !uploadRes.data?.url) throw new Error('Upload failed');
+      setAvatarProgress(100);
+      const res = await updateMyProfile({ avatar: uploadRes.data.url });
+      if (res.success && res.data) setCurrentUser(res.data);
+    } catch (err) {
+      console.error('[Profile] Avatar upload failed', err);
+    } finally {
+      setIsUploadingAvatar(false);
+      setAvatarProgress(0);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await logout();
+    setIsLoggingOut(false);
+  };
+
+  const handleToggleActiveStatus = async () => {
+    const newVal = !showActiveStatus;
+    setShowActiveStatus(newVal);
+    try {
+      const res = await updateMyProfile({ showActiveStatus: newVal });
+      if (res.success && res.data) setCurrentUser(res.data);
+      emitActiveStatusChange(newVal);
+    } catch (e) {
+      console.error('[Settings] Failed to update active status', e);
+      setShowActiveStatus(!newVal); // rollback on error
+    }
+  };
+
+  if (!currentUser) return null;
+
+  return (
+    <div
+      className="responsive-scroll-page"
+      style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: 32,
+        maxWidth: 600,
+        margin: '0 auto',
+        width: '100%',
+      }}
+    >
+      <h2 style={{ color: 'var(--text-primary)', marginBottom: 28 }}>Settings</h2>
+
+      {/* Profile Section */}
+      <Section title="Profile">
+        {/* Avatar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <UserAvatar name={currentUser.name} avatar={currentUser.avatar} size={64} />
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+              title="Change profile picture"
+              style={{
+                position: 'absolute', bottom: 0, right: 0,
+                width: 22, height: 22, borderRadius: '50%',
+                backgroundColor: 'var(--accent)', border: '2px solid var(--bg-secondary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: '#fff', padding: 0,
+              }}
+            >
+              {isUploadingAvatar ? `${avatarProgress}%` : <Pencil size={11} />}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleAvatarChange}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Editable display name */}
+            {editingName ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setEditingName(false); setNameInput(currentUser.name); } }}
+                  maxLength={100}
+                  style={{
+                    fontSize: 16, fontWeight: 600, color: 'var(--text-primary)',
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--accent)',
+                    borderRadius: 6, padding: '4px 8px', flex: 1, minWidth: 0,
+                  }}
+                />
+                <button
+                  onClick={handleSaveName}
+                  disabled={isSavingName}
+                  style={{ ...smallBtnStyle, backgroundColor: 'var(--accent)', color: '#fff', border: 'none' }}
+                >
+                  {isSavingName ? '...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setEditingName(false); setNameInput(currentUser.name); }}
+                  style={smallBtnStyle}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 18, color: 'var(--text-primary)' }}>{currentUser.name}</span>
+                <button
+                  onClick={() => { setNameInput(currentUser.name); setEditingName(true); }}
+                  title="Edit name"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: 2, display: 'flex', alignItems: 'center' }}
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            )}
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>{currentUser.email}</div>
+          </div>
+        </div>
+      </Section>
+
+      {/* Appearance */}
+      <Section title="Appearance">
+        <SettingRow label="Theme" description={`Currently: ${theme} mode`}>
+          <button
+            onClick={toggleTheme}
+            style={toggleBtnStyle}
+          >
+            {theme === 'dark'
+              ? <><Sun size={16} style={{ marginRight: 6 }} />Light Mode</>
+              : <><Moon size={16} style={{ marginRight: 6 }} />Dark Mode</>}
+          </button>
+        </SettingRow>
+      </Section>
+
+      {/* Privacy & Security */}
+      <Section title="Privacy & Security">
+        <SettingRow label="End-to-End Encryption" description="All messages are encrypted with AES-256">
+          <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>✓ Enabled</span>
+        </SettingRow>
+        <SettingRow
+          label="Live Typing Preview"
+          description="When both users enable this, you see each other’s text as they type"
+        >
+          <button
+            onClick={toggleLiveTyping}
+            style={{
+              width: 46,
+              height: 26,
+              borderRadius: 13,
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: liveTypingEnabled ? 'var(--accent)' : 'var(--bg-tertiary)',
+              position: 'relative',
+              transition: 'background-color 0.2s',
+              flexShrink: 0,
+            }}
+            aria-label="Toggle live typing preview"
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 3,
+                left: liveTypingEnabled ? 23 : 3,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                backgroundColor: '#fff',
+                transition: 'left 0.2s',
+              }}
+            />
+          </button>
+        </SettingRow>
+        <SettingRow
+          label="Show Active Status"
+          description="When enabled, contacts can see when you're online — only if they've also enabled this"
+        >
+          <button
+            onClick={handleToggleActiveStatus}
+            style={{
+              width: 46,
+              height: 26,
+              borderRadius: 13,
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: showActiveStatus ? 'var(--accent)' : 'var(--bg-tertiary)',
+              position: 'relative',
+              transition: 'background-color 0.2s',
+              flexShrink: 0,
+            }}
+            aria-label="Toggle active status visibility"
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 3,
+                left: showActiveStatus ? 23 : 3,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                backgroundColor: '#fff',
+                transition: 'left 0.2s',
+              }}
+            />
+          </button>
+        </SettingRow>
+      </Section>
+
+      {/* About */}
+      <Section title="About">
+        <SettingRow label="App Version" description="TeleDesk Desktop">
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>1.0.0</span>
+        </SettingRow>
+      </Section>
+
+      {/* Danger Zone */}
+      <Section title="Account">
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          style={{
+            padding: '10px 20px',
+            borderRadius: 10,
+            border: '1px solid #ef4444',
+            backgroundColor: 'transparent',
+            color: '#ef4444',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: 14,
+            opacity: isLoggingOut ? 0.7 : 1,
+          }}
+        >
+          {isLoggingOut ? 'Signing out...' : 'Sign Out'}
+        </button>
+      </Section>
+    </div>
+  );
+};
+
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div style={{ marginBottom: 32 }}>
+    <h3
+      style={{
+        color: 'var(--accent)',
+        fontSize: 13,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 12,
+      }}
+    >
+      {title}
+    </h3>
+    <div
+      style={{
+        backgroundColor: 'var(--bg-secondary)',
+        borderRadius: 12,
+        padding: '8px 16px',
+        border: '1px solid var(--border)',
+      }}
+    >
+      {children}
+    </div>
+  </div>
+);
+
+const SettingRow: React.FC<{
+  label: string;
+  description?: string;
+  children?: React.ReactNode;
+}> = ({ label, description, children }) => (
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '12px 0',
+      borderBottom: '1px solid var(--border)',
+    }}
+  >
+    <div>
+      <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 500 }}>{label}</div>
+      {description && (
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
+          {description}
+        </div>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+const toggleBtnStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  borderRadius: 8,
+  border: '1px solid var(--border)',
+  backgroundColor: 'var(--bg-tertiary)',
+  color: 'var(--text-primary)',
+  cursor: 'pointer',
+  fontSize: 13,
+  fontWeight: 500,
+};
+
+const smallBtnStyle: React.CSSProperties = {
+  padding: '4px 10px',
+  borderRadius: 6,
+  border: '1px solid var(--border)',
+  backgroundColor: 'var(--bg-tertiary)',
+  color: 'var(--text-primary)',
+  cursor: 'pointer',
+  fontSize: 13,
+  fontWeight: 500,
+  flexShrink: 0,
+};
+
+export default SettingsPage;

@@ -1,0 +1,586 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '../store/authStore';
+import { useUIStore } from '../store/uiStore';
+import UserAvatar from './UserAvatar';
+import { formatTime, truncate } from '../utils/formatters';
+import { Chat } from '@shared/types';
+import { deleteChat as deleteChatApi } from '../services/apiService';
+import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink } from 'lucide-react';
+
+interface ChatSidebarProps {
+  onNewChat: () => void;
+}
+
+const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
+  const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat } =
+    useChatStore();
+  const { currentUser } = useAuthStore();
+  const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived } = useUIStore();
+  const navigate = useNavigate();
+
+  // ─── Context Menu State ───────────────────────────────────────────────────
+  type CtxMenu = { chatId: string; x: number; y: number };
+  const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ chatId: string; scope: 'me' | 'both' } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const ctxRef = useRef<HTMLDivElement | null>(null);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (!ctxRef.current?.contains(e.target as Node)) setCtxMenu(null);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [ctxMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent, chatId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ chatId, x: e.clientX, y: e.clientY });
+  };
+
+  const requestDelete = (chatId: string, scope: 'me' | 'both') => {
+    setCtxMenu(null);
+    if (scope === 'both') {
+      setConfirmDelete({ chatId, scope });
+    } else {
+      performDelete(chatId, scope);
+    }
+  };
+
+  const performDelete = async (chatId: string, scope: 'me' | 'both') => {
+    setDeleting(true);
+    setConfirmDelete(null);
+    try {
+      await deleteChatApi(chatId, scope);
+      if (activeChat?.chatId === chatId) navigate('/chats');
+      removeChat(chatId);
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const getChatDisplayInfo = useCallback(
+    (chat: Chat) => {
+      if (chat.type === 'private') {
+        const otherUid = chat.members.find((m) => m !== currentUser?.uid);
+        const profile = otherUid ? userProfiles[otherUid] : null;
+        const isPeerVisible = profile?.showActiveStatus !== false;
+        const isSelfVisible = currentUser?.showActiveStatus !== false;
+        return {
+          name: profile?.name || 'Unknown',
+          avatar: profile?.avatar,
+          online: otherUid ? (onlineUsers.has(otherUid) && isPeerVisible && isSelfVisible) : false,
+        };
+      }
+      return {
+        name: chat.chatId, // Will be replaced by group name
+        avatar: undefined,
+        online: false,
+      };
+    },
+    [currentUser, userProfiles, onlineUsers],
+  );
+
+  const filteredChats = useMemo(() => {
+    let list = chats;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = chats.filter((chat) => {
+        const info = getChatDisplayInfo(chat);
+        return (
+          info.name.toLowerCase().includes(q) ||
+          chat.lastMessage?.content.toLowerCase().includes(q)
+        );
+      });
+    }
+    // Pinned chats float to the top, archived chats hidden from main list
+    return [...list]
+      .filter((chat) => !archivedChatIds.includes(chat.chatId))
+      .sort((a, b) => {
+        const aP = pinnedChatIds.includes(a.chatId) ? 0 : 1;
+        const bP = pinnedChatIds.includes(b.chatId) ? 0 : 1;
+        return aP - bP;
+      });
+  }, [chats, searchQuery, getChatDisplayInfo, pinnedChatIds, archivedChatIds]);
+
+  const handleChatClick = (chat: Chat) => {
+    setActiveChat(chat);
+    navigate(`/chats/${chat.chatId}`);
+  };
+
+  return (
+    <aside
+      className="chat-sidebar"
+      style={{
+        width: 320,
+        minWidth: 260,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: 'var(--bg-secondary)',
+        borderRight: '1px solid var(--border)',
+        position: 'relative',
+      }}
+    >
+      {/* ─── Header ──────────────────────────────────────────────────────── */}
+      <div
+        style={{
+          padding: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        {showArchived ? (
+          <>
+            <button
+              onClick={() => setShowArchived(false)}
+              style={{ ...iconBtnStyle, marginRight: 6 }}
+              title="Back"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
+              Archived Chats
+            </h2>
+          </>
+        ) : (
+          <>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Chats
+            </h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setNewGroupModal(true)}
+                title="New group"
+                style={iconBtnStyle}
+              >
+                <Users size={18} />
+              </button>
+              <button onClick={onNewChat} title="New chat" style={iconBtnStyle}>
+                <PenSquare size={18} />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Search — only in main view */}
+      {!showArchived && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+          <input
+            type="text"
+            placeholder="Search chats..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 20,
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              fontSize: 14,
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Chat List */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {/* ─── Archived Chats View ──────────────────────────────────────── */}
+        {showArchived && (() => {
+          const archivedChats = chats.filter((c) => archivedChatIds.includes(c.chatId));
+          if (archivedChats.length === 0) return (
+            <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)', fontSize: 14 }}>
+              No archived chats
+            </div>
+          );
+          return archivedChats.map((chat) => {
+            const info = getChatDisplayInfo(chat);
+            const unread = unreadCounts[chat.chatId] || 0;
+            const isActive = activeChat?.chatId === chat.chatId;
+            return (
+              <div
+                key={chat.chatId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '10px 16px',
+                  backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
+                  transition: 'background-color 0.15s',
+                }}
+                onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
+                onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+              >
+                <div
+                  onClick={() => handleChatClick(chat)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}
+                >
+                  <UserAvatar name={info.name} avatar={info.avatar} size={42} online={undefined} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: unread > 0 ? 700 : 500, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {info.name}
+                      </span>
+                      {chat.lastMessage && (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                          {formatTime(chat.lastMessage.timestamp)}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                      {chat.lastMessage ? truncate(chat.lastMessage.type === 'text' ? chat.lastMessage.content : `[${chat.lastMessage.type}]`, 40) : 'No messages'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleArchiveChat(chat.chatId)}
+                  title="Unarchive"
+                  style={{ ...iconBtnStyle, flexShrink: 0 }}
+                >
+                  <ArchiveRestore size={16} />
+                </button>
+              </div>
+            );
+          });
+        })()}
+        {filteredChats.length === 0 && !showArchived && (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: 32,
+              color: 'var(--text-secondary)',
+              fontSize: 14,
+            }}
+          >
+            {searchQuery ? 'No chats found' : 'No chats yet. Start a conversation!'}
+          </div>
+        )}
+        {filteredChats.map((chat) => {
+          const info = getChatDisplayInfo(chat);
+          const unread = unreadCounts[chat.chatId] || 0;
+          const isActive = activeChat?.chatId === chat.chatId;
+          const isChatPinned = pinnedChatIds.includes(chat.chatId);
+          if (showArchived) return null;
+
+          return (
+            <div
+              key={chat.chatId}
+              onClick={() => handleChatClick(chat)}
+              onContextMenu={(e) => handleContextMenu(e, chat.chatId)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 16px',
+                cursor: 'pointer',
+                backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
+                transition: 'background-color 0.15s',
+                position: 'relative',
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive)
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)';
+                const btn = (e.currentTarget as HTMLDivElement).querySelector<HTMLButtonElement>('.chat-menu-btn');
+                if (btn) btn.style.display = 'flex';
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive)
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+                const btn = (e.currentTarget as HTMLDivElement).querySelector<HTMLButtonElement>('.chat-menu-btn');
+                if (btn) btn.style.display = 'none';
+              }}
+            >
+              <UserAvatar
+                name={info.name}
+                avatar={info.avatar}
+                size={46}
+                online={chat.type === 'private' ? info.online : undefined}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontWeight: unread > 0 ? 700 : 500,
+                      fontSize: 15,
+                      color: 'var(--text-primary)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    {isChatPinned && <Pin size={11} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+                    {info.name}
+                  </span>
+                  {chat.lastMessage && (
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                      {formatTime(chat.lastMessage.timestamp)}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {chat.lastMessage
+                      ? truncate(
+                          chat.lastMessage.type === 'text'
+                            ? chat.lastMessage.content
+                            : `${chat.lastMessage.type}`,
+                          50,
+                        )
+                      : 'Start a conversation'}
+                  </span>
+                  {unread > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: 'var(--accent)',
+                        color: '#fff',
+                        borderRadius: 10,
+                        padding: '1px 7px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        marginLeft: 4,
+                      }}
+                    >
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Three-dot menu button (shown on hover) */}
+              <button
+                className="chat-menu-btn"
+                onClick={(e) => { e.stopPropagation(); handleContextMenu(e, chat.chatId); }}
+                style={{
+                  display: 'none',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--bg-tertiary)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 28,
+                  height: 28,
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  flexShrink: 0,
+                }}
+              >
+                <MoreVertical size={16} />
+              </button>
+            </div>
+          );
+        })}
+
+        {/* ─── Archived Chats Footer Entry ─────────────────────────────────── */}
+        {!showArchived && archivedChatIds.length > 0 && (
+          <div
+            onClick={() => setShowArchived(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 18px',
+              cursor: 'pointer',
+              borderTop: '1px solid var(--border)',
+              color: 'var(--text-secondary)',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Archive size={16} />
+            <span style={{ fontSize: 14 }}>Archived</span>
+            <span style={{
+              marginLeft: 'auto',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+              borderRadius: 10,
+              padding: '1px 8px',
+              fontSize: 12,
+              fontWeight: 600,
+            }}>
+              {archivedChatIds.length}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Context Menu ─────────────────────────────────────────────────── */}
+      {ctxMenu && (
+        <div
+          ref={ctxRef}
+          style={{
+            position: 'fixed',
+            top: ctxMenu.y,
+            left: ctxMenu.x,
+            zIndex: 1000,
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            overflow: 'hidden',
+            minWidth: 180,
+          }}
+        >
+          <button
+            onClick={() => {
+              if (window.electronAPI) {
+                window.electronAPI.openChatWindow(ctxMenu.chatId);
+              } else {
+                window.open(`/popup/${ctxMenu.chatId}`, '_blank', 'width=900,height=680,noopener');
+              }
+              setCtxMenu(null);
+            }}
+            style={ctxMenuItemStyle}
+          >
+            <ExternalLink size={14} style={{ marginRight: 6 }} />Open in new window
+          </button>
+          <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+          <button
+            onClick={() => { togglePinChat(ctxMenu.chatId); setCtxMenu(null); }}
+            style={ctxMenuItemStyle}
+          >
+            {pinnedChatIds.includes(ctxMenu.chatId)
+              ? <><PinOff size={14} style={{ marginRight: 6 }} />Unpin chat</>
+              : <><Pin size={14} style={{ marginRight: 6 }} />Pin chat</>}
+          </button>
+          <button
+            onClick={() => { toggleArchiveChat(ctxMenu.chatId); setCtxMenu(null); }}
+            style={ctxMenuItemStyle}
+          >
+            {archivedChatIds.includes(ctxMenu.chatId)
+              ? <><ArchiveRestore size={14} style={{ marginRight: 6 }} />Unarchive chat</>
+              : <><Archive size={14} style={{ marginRight: 6 }} />Archive chat</>}
+          </button>
+          {activeChat?.chatId === ctxMenu.chatId && (
+            <button
+              onClick={() => { setActiveChat(null); navigate('/chats'); setCtxMenu(null); }}
+              style={ctxMenuItemStyle}
+            >
+              <X size={14} style={{ marginRight: 6 }} />Close chat
+            </button>
+          )}
+          <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+          <button
+            onClick={() => requestDelete(ctxMenu.chatId, 'me')}
+            style={ctxMenuItemStyle}
+          >
+            <Trash2 size={14} style={{ marginRight: 6 }} />Delete for me
+          </button>
+          <button
+            onClick={() => requestDelete(ctxMenu.chatId, 'both')}
+            style={{ ...ctxMenuItemStyle, color: 'var(--error, #e74c3c)' }}
+          >
+            <Trash2 size={14} style={{ marginRight: 6 }} />Delete for everyone
+          </button>
+        </div>
+      )}
+
+      {/* ─── Confirm Delete for Both ──────────────────────────────────────── */}
+      {confirmDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2000,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: '24px 28px',
+              maxWidth: 340,
+              width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 17 }}>
+              Delete for everyone?
+            </h3>
+            <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
+              This will permanently delete the chat and all messages for all participants. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                style={{ ...btnStyle, backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => performDelete(confirmDelete.chatId, 'both')}
+                disabled={deleting}
+                style={{ ...btnStyle, backgroundColor: 'var(--error, #e74c3c)', color: '#fff' }}
+              >
+                {deleting ? 'Deleting…' : 'Delete for everyone'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+};
+
+const iconBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: 18,
+  padding: 4,
+  borderRadius: 6,
+  color: 'var(--text-secondary)',
+};
+
+const ctxMenuItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  padding: '10px 16px',
+  background: 'none',
+  border: 'none',
+  textAlign: 'left',
+  cursor: 'pointer',
+  fontSize: 14,
+  color: 'var(--text-primary)',
+};
+
+const btnStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  borderRadius: 8,
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: 14,
+  fontWeight: 600,
+};
+
+export default ChatSidebar;

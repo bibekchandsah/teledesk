@@ -1,0 +1,194 @@
+Copy-Item backend-server/.env.example backend-server/.env
+Copy-Item desktop-client/.env.example desktop-client/.env
+
+cd backend-server; npm run dev
+cd desktop-client; npm run electron:dev
+
+http://localhost:5173/
+
+echo "# teledesk" >> README.md
+git init
+git add .
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/bibekchandsah/teledesk.git
+git push -u origin main
+
+
+
+These credentials come from a Firebase Service Account key. Here's how to get them:
+    Go to the Firebase Console(console.firebase.google.com) and open your project
+    Click the gear icon (⚙️) next to "Project Overview" → Project settings
+    Go to the Service accounts tab
+    Click "Generate new private key" → Generate key
+    A .json file will download. It looks like this:
+        {
+          "type": "service_account",
+          "project_id": "your-project-id",
+          "private_key_id": "abc123...",
+          "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+          "client_email": "firebase-adminsdk-xxxx@your-project.iam.gserviceaccount.com",
+          "client_id": "123456789",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "FIREBASE_STORAGE_BUCKET": your-project-id.appspot.com (from Storage tab)
+          ...
+        }
+
+Go to Firebase Console → your project
+    Click the gear icon (⚙️) → Project settings
+    Scroll down to "Your apps" section → click the Web app (</>) icon
+        If no web app exists yet, click "Add app" → choose Web → register it
+    You'll see a config block like this:
+        const firebaseConfig = {
+          apiKey: "AIzaSy...",
+          authDomain: "your-project.firebaseapp.com",
+          projectId: "your-project-id",
+          storageBucket: "your-project.appspot.com",
+          messagingSenderId: "123456789",
+          appId: "1:123456789:web:abc123..."
+        };
+
+Steps to finish:
+Go to Firebase Console → your project → Firestore Database → Create database → Test mode → pick a region
+Reload the Electron window (Ctrl+R) — you'll now see the main chat UI even before Firestore is ready
+
+
+user1
+bibeksha48@gmail.com
+google_password
+
+bibeksha488@gmail.com
+bibeksha488
+
+testuser2@gmail.com
+testuser2
+
+allow user to see realtime text when typing
+
+
+Scenario	Caller A sees	Receiver B sees
+A cancels before B answers	Voice call cancelled	Voice call cancelled
+30 s no answer	Voice call — no answer	Missed voice call
+B manually declines	Voice call declined	Voice call declined
+Call completed	Voice call · 1:23	Voice call · 1:23
+
+Settings → Privacy & Security → "Live Typing Preview" toggle
+A's setting	B's setting	What happens
+OFF	anything	A sends no live text → B sees nothing
+ON	OFF	B ignores received live events → B sees only ... dots (or nothing)
+ON	ON	B sees A's text in real-time as A types, and vice versa
+
+Search icon (🔍) in the chat header — clicking it toggles a search bar below the header.
+Search bar in ChatWindow.tsx:
+    Text input with live filtering — matches are computed as you type
+    Shows a 1 / N counter for current match position
+    ▲ / ▼ buttons (or Shift+Enter / Enter) to navigate between matches
+    ✕ button (or Escape) to close and clear
+    Auto-focuses when opened; resets when switching chats
+Scroll-to-match — navigating prev/next automatically scrolls the matching message bubble into view (block: center, smooth).
+Highlight in MessageBubble.tsx:
+    Matched text gets a yellow <mark> highlight in the message content
+    The currently active match gets an accent-colored outline around the whole bubble
+
+
+message right click option: (shown inside chat window)
+    Reply message -  "Reply" context menu item (CornerUpLeft icon), and a quoted reply block shown at the top of the bubble when message.replyTo is set
+    Forward message -
+    Edit message — only for your own, non-deleted text messages
+    Copy message — for any non-deleted message with text content
+    Delete for me — always available
+    Delete for everyone — for non-deleted messages
+    Pin message - max 50 message (test overflow) (chatwindow.tsx, chatservice.ts)
+    close chat
+    select messages
+    react messages
+double click any message to reply it
+The reply quote div now has a subtle background and pointer cursor to make it feel clickable and scroll back to that message
+scroll up / down in chat
+
+Bottom action bar (replaces input while in selection mode):
+    Cancel + selected count on the left
+    Copy — copies all selected messages' text to clipboard, then exits
+    Forward — opens the forward modal for the all selected message, then exits
+    Pin — pins/unpins all selected messages, then exits
+    Delete for me (trash icon)
+    Delete for everyone (red trash + "All" label)
+
+
+Escape to cancel — a global keydown listener calls exitSelectionMode() when Escape is pressed, regardless of which element has focus.
+Drag to select — while in selection mode, clicking and dragging through the message list selects a range:
+    mousedown on a message row records that message as the drag anchor
+    mousemove (while the left button is held) calculates the range between the anchor and the currently hovered message and updates selectedIds to that whole slice
+    mouseup clears the anchor
+
+Now drag-to-select works in both modes:
+    Outside selection mode: mousedown on any message records the anchor. As soon as the cursor moves to a different message while holding the button, it automatically enters selection mode and starts selecting the range. A plain click on a message (no drag) does nothing — selection mode is not triggered.
+    Already in selection mode: drag works exactly as before, selecting the range between anchor and current message.
+
+sidebar right click option:
+    open in new window
+    archieve chat
+    pin chat
+    close chat
+    lock chat 
+
+
+pinned chat
+    Right-click menu on any chat in the sidebar now shows "Pin chat" / "Unpin chat" (with Pin/PinOff icons) above the delete options
+    Pinned chats float to the top of the list, sorted above unpinned ones
+    A small pin icon appears next to the chat name for pinned chats
+    Persisted in localStorage — pinned chats survive app restarts
+
+
+"Archive chat" / "Unarchive chat" — toggles archive state, persisted in Firestore via PATCH /api/users/me/archived-chats, synced across devices. Archived chats are hidden from the main chat list.
+"Close chat" — only shown when that chat is currently open (active). Clicking it clears the active chat and navigates back to /chats.
+archivedChatIds is initialized from the user's DB profile on login, same pattern as pinnedChatIds.
+"Archived" footer row — appears at the bottom of the chat list whenever there are archived chats. Shows the count badge. Clicking it switches the sidebar into archived view.
+Archived chats view — replaces the normal chat list. Shows all archived chats with their last message/time, and an ArchiveRestore button on each row to unarchive with one click. Clicking the chat itself still opens it normally.
+Header changes — when in archived view, the header shows a back arrow (←) and "Archived Chats" title instead of the normal "Chats" + action buttons. Clicking the back arrow returns to the normal view.
+The search bar is hidden while in archived view.
+An Archive icon is now in the left nav sidebar between Profile and Settings. Clicking it:
+    Navigates to /chats
+    Opens the archived chats view in the sidebar (highlights the icon as active)
+Clicking the Chats icon resets back to the normal chat list.
+
+
+
+show deleted message preview instantly for delete for me/everyone
+show edited message instantly to both user
+starting date in pills
+click in voice/video call message to trigger call icon
+edit username & profile icon
+toggle active status & live typing
+
+
+
+
+add call page where user can see the call history
+add archive page where user can archive/unarchieve specific user chat
+add saved message page where user can forward messages to saved message page
+lock chat for specific user
+open specific chat in new window
+bold/normal for unread/read messages
+allow user to send message themself too
+alow user to edit
+allow user to change camera & microphone during calling
+during call they can chat too in right sidebar
+screen share during call
+react messaages
+select messaages
+set app lock & if forgot enter registered email and verify it with link to get code
+show logged in devices
+allow user to increase sidebar width
+
+
+
+user A send message single tick
+user B receives message double tick
+
+
+
+
+
+

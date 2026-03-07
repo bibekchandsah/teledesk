@@ -1,0 +1,15 @@
+# TeleDesk - Dependencies
+node_modules/
+dist/
+dist-electron/
+release/
+.env
+logs/
+*.log
+
+# Build output
+build/
+
+# OS
+.DS_Store
+Thumbs.db
