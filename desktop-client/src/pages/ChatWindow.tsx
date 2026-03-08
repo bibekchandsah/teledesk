@@ -733,7 +733,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
     startCall(peer.uid, peer.profile?.name || 'User', type, peer.profile?.avatar);
   };
 
-  if (!activeChat || !chatId) {
+  if (!activeChat) {
+    // If we have a chatId target (popup/direct link) but chats haven't loaded yet,
+    // show a loading spinner instead of the "select a chat" placeholder.
+    if (chatId) {
+      return (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 12,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--accent, #6366f1)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        </div>
+      );
+    }
     return (
       <div
         style={{

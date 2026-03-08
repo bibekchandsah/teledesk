@@ -96,6 +96,22 @@ const AppInner: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── Popup window mode (bypass loading screen — auth resolves inside) ────
+  if (isPopupWindow) {
+    return (
+      <SocketProvider>
+        <CallProvider>
+          <div style={{ height: '100vh', overflow: 'hidden' }}>
+            <Routes>
+              <Route path="/popup/:chatId" element={<PopupChatPage />} />
+              <Route path="*" element={<Navigate to="/popup" replace />} />
+            </Routes>
+          </div>
+        </CallProvider>
+      </SocketProvider>
+    );
+  }
+
   if (isLoading) {
     return (
       <div
@@ -144,22 +160,6 @@ const AppInner: React.FC = () => {
           <Route path="*" element={<IncomingCallWindowPage />} />
         </Routes>
       </div>
-    );
-  }
-
-  // ─── Popup window mode (no nav sidebar, no chat sidebar) ────────────────
-  if (isPopupWindow) {
-    return (
-      <SocketProvider>
-        <CallProvider>
-          <div style={{ height: '100vh', overflow: 'hidden' }}>
-            <Routes>
-              <Route path="/popup/:chatId" element={<PopupChatPage />} />
-              <Route path="*" element={<Navigate to="/popup" replace />} />
-            </Routes>
-          </div>
-        </CallProvider>
-      </SocketProvider>
     );
   }
 
