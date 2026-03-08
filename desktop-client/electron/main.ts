@@ -8,6 +8,7 @@ import {
   Menu,
   Tray,
   session,
+  desktopCapturer,
 } from 'electron';
 import path from 'path';
 
@@ -151,6 +152,24 @@ ipcMain.on('window-close', () => mainWindow?.hide());
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
 
+// Desktop screen/window sources for screen share
+ipcMain.handle(
+  'get-desktop-sources',
+  async (_event, opts: { types: Array<'screen' | 'window'>; thumbnailSize?: { width: number; height: number } }) => {
+    const sources = await desktopCapturer.getSources({
+      types: opts.types ?? ['screen', 'window'],
+      thumbnailSize: opts.thumbnailSize ?? { width: 320, height: 180 },
+      fetchWindowIcons: true,
+    });
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      thumbnail: s.thumbnail.toDataURL(),
+      appIconURL: s.appIcon ? s.appIcon.toDataURL() : null,
+    }));
+  },
+);
+
 // Open a chat in a new window
 ipcMain.on('open-chat-window', (_event, chatId: string) => {
   const win = new BrowserWindow({
@@ -189,15 +208,21 @@ ipcMain.on('open-chat-window', (_event, chatId: string) => {
 // ─── App Lifecycle ─────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Grant camera & microphone permissions for the renderer
+  const allowedPermissions = [
+    'media', 'mediaKeySystem', 'camera', 'microphone',
+    'display-capture', 'audiocapture', 'audioCapture',
+    'videocapture', 'videoCapture', 'mediaDevices',
+  ];
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowed = ['media', 'mediaKeySystem', 'camera', 'microphone', 'display-capture'];
-    callback(allowed.includes(permission));
+    callback(allowedPermissions.includes(permission));
   });
 
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    const allowed = ['media', 'mediaKeySystem', 'camera', 'microphone', 'display-capture'];
-    return allowed.includes(permission);
+    return allowedPermissions.includes(permission);
   });
+
+  // Allow getUserMedia / enumerateDevices unconditionally in the renderer
+  session.defaultSession.setDevicePermissionHandler(() => true);
 
   createWindow();
 

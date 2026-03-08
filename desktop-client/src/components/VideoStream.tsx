@@ -7,6 +7,7 @@ interface VideoStreamProps {
   mirror?: boolean;
   label?: string;
   style?: React.CSSProperties;
+  objectFit?: 'cover' | 'contain';
 }
 
 const VideoStream: React.FC<VideoStreamProps> = ({
@@ -15,6 +16,7 @@ const VideoStream: React.FC<VideoStreamProps> = ({
   mirror = false,
   label,
   style,
+  objectFit = 'cover',
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -43,7 +45,7 @@ const VideoStream: React.FC<VideoStreamProps> = ({
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit: objectFit,
             transform: mirror ? 'scaleX(-1)' : 'none',
           }}
         />

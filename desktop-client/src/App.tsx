@@ -1,7 +1,7 @@
 import React, { useEffect, Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone } from 'lucide-react';
+import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark } from 'lucide-react';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
@@ -36,13 +36,17 @@ import UserProfile from './pages/UserProfile';
 import CallScreen from './pages/CallScreen';
 import IncomingCallModal from './pages/IncomingCallModal';
 import CallHistoryPage from './pages/CallHistoryPage';
+import BookmarksPage from './pages/BookmarksPage';
 import { useCallStore } from './store/callStore';
+import { useChatStore } from './store/chatStore';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
-  const { theme, showArchived, setShowArchived } = useUIStore();
+  const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar } = useUIStore();
   const { activeCall, incomingCall } = useCallStore();
+  const { archivedChatIds } = useChatStore();
+  const hasArchived = archivedChatIds.length > 0;
   const navigate = useNavigate();
   const location = useLocation();
   const isPopupWindow = location.pathname.startsWith('/popup');
@@ -111,14 +115,22 @@ const AppInner: React.FC = () => {
         <div className="app-container">
           {/* Navigation Sidebar */}
           <nav className="nav-sidebar">
-            <NavLink
-              to="/chats"
-              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+            <button
+              className={`nav-btn${location.pathname.startsWith('/chats') && sidebarOpen ? ' active' : ''}`}
               title="Chats"
-              onClick={() => setShowArchived(false)}
+              onClick={() => {
+                setShowArchived(false);
+                if (location.pathname.startsWith('/chats')) {
+                  toggleSidebar();
+                } else {
+                  setSidebarOpen(true);
+                  navigate('/chats');
+                }
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <MessageCircle size={22} />
-            </NavLink>
+            </button>
             <NavLink
               to="/calls"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
@@ -127,20 +139,29 @@ const AppInner: React.FC = () => {
               <Phone size={22} />
             </NavLink>
             <NavLink
+              to="/bookmarks"
+              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+              title="Saved Messages"
+            >
+              <Bookmark size={22} />
+            </NavLink>
+            <NavLink
               to="/profile"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
               title="Profile"
             >
               <User size={22} />
             </NavLink>
-            <button
-              className={`nav-btn${showArchived ? ' active' : ''}`}
-              title="Archived chats"
-              onClick={() => { setShowArchived(true); navigate('/chats'); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              <Archive size={22} />
-            </button>
+            {hasArchived && (
+              <button
+                className={`nav-btn nav-btn--archive${showArchived ? ' active' : ''}`}
+                title="Archived chats"
+                onClick={() => { setShowArchived(true); navigate('/chats'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <Archive size={22} />
+              </button>
+            )}
             <NavLink
               to="/settings"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
@@ -166,6 +187,11 @@ const AppInner: React.FC = () => {
               <Route path="/calls" element={
                 <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                   <CallHistoryPage />
+                </div>
+              } />
+              <Route path="/bookmarks" element={
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  <BookmarksPage />
                 </div>
               } />
               <Route path="/profile/:uid?" element={

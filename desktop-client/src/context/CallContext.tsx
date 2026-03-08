@@ -6,6 +6,10 @@ import {
   createReceiverPeer,
   processSignal,
   hangUp,
+  hasPeer,
+  setCallTarget,
+  processRenegotiationOffer,
+  processRenegotiationAnswer,
 } from '../services/webrtcService';
 import { useCallStore } from '../store/callStore';
 import { useAuthStore } from '../store/authStore';
@@ -19,6 +23,7 @@ interface CallContextValue {
     targetName: string,
     callType: 'video' | 'voice',
     localStream: MediaStream,
+    targetAvatar?: string,
   ) => void;
   acceptIncomingCall: (localStream: MediaStream) => void;
   rejectIncomingCall: () => void;
@@ -127,6 +132,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // listener in acceptIncomingCall — so the offer isn't sent too early.
       const stream = localStreamRef.current;
       if (!stream) return;
+      // Store signaling targets so startScreenShare can trigger renegotiation
+      setCallTarget(activeCallRef.current!.receiverId, data.callId);
       createInitiatorPeer(
         stream,
         data.callId,
@@ -141,9 +148,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // ─── Receive WebRTC Answer (caller gets this) ───────────────────────
     // Uses ref so it never has a stale callId, and is never torn down mid-negotiation.
+    // Uses processRenegotiationAnswer (direct _pc bypass) for ALL answers — both the
+    // initial handshake answer and any renegotiation answers — so that simple-peer's
+    // internal state machine cannot interfere or reject answers on later cycles.
     const handleAnswer = (data: { from: string; callId: string; answer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      processSignal(data.answer);
+      processRenegotiationAnswer(data.answer);
     };
 
     // ─── ICE Candidates ─────────────────────────────────────────────────
@@ -181,11 +191,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
+    // ─── Re-offer for renegotiation (e.g. screen share added to voice call) ──
+    // The one-time handleOffer inside acceptIncomingCall handles the INITIAL offer.
+    // This permanent handler processes any subsequent offers (renegotiation) when a
+    // peer is already connected. It uses the raw RTCPeerConnection directly so that
+    // simple-peer's state machine doesn't interfere with manual renegotiation.
+    const handleRenegotiationOffer = (data: { from: string; callId: string; offer: RTCSessionDescriptionInit }) => {
+      if (activeCallRef.current?.callId !== data.callId) return;
+      if (!hasPeer()) return; // no peer yet — initial offer is handled separately
+      processRenegotiationOffer(data.offer, data.from, data.callId);
+    };
+
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
     socket.on(SOCKET_EVENTS.ANSWER, handleAnswer);
     socket.on(SOCKET_EVENTS.ICE_CANDIDATE, handleIceCandidate);
     socket.on(SOCKET_EVENTS.CALL_ENDED, handleCallEnded);
     socket.on(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
+    socket.on(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
 
     return () => {
       socket.off(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
@@ -193,6 +215,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off(SOCKET_EVENTS.ICE_CANDIDATE, handleIceCandidate);
       socket.off(SOCKET_EVENTS.CALL_ENDED, handleCallEnded);
       socket.off(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
+      socket.off(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
@@ -202,6 +225,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     targetName: string,
     callType: 'video' | 'voice',
     localStream: MediaStream,
+    targetAvatar?: string,
   ): void => {
     if (!currentUser) return;
     const callId = `${currentUser.uid}_${targetUserId}_${Date.now()}`;
@@ -213,6 +237,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callerName: currentUser.name,
       receiverId: targetUserId,
       receiverName: targetName,
+      receiverAvatar: targetAvatar,
       type: callType,
       status: 'ringing' as const,
     };
@@ -274,6 +299,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }) => {
       if (data.callId !== incomingCall.callId) return;
       socket?.off(SOCKET_EVENTS.OFFER, handleOffer);
+      // Store signaling targets so processRenegotiationOffer can send answers
+      setCallTarget(incomingCall.callerId, incomingCall.callId);
 
       createReceiverPeer(
         localStream,

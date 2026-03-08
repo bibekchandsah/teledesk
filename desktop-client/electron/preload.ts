@@ -20,9 +20,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Platform info
   platform: process.platform,
+
+  // Screen share: get available screen/window sources with thumbnails
+  getDesktopSources: (opts?: {
+    types?: Array<'screen' | 'window'>;
+    thumbnailSize?: { width: number; height: number };
+  }): Promise<DesktopSource[]> =>
+    ipcRenderer.invoke('get-desktop-sources', opts ?? { types: ['screen', 'window'] }),
 });
 
 // ─── TypeScript type declaration for renderer use ─────────────────────────
+export interface DesktopSource {
+  id: string;
+  name: string;
+  thumbnail: string;   // dataURL
+  appIconURL: string | null;
+}
+
 export interface ElectronAPI {
   showNotification: (payload: { title: string; body: string; icon?: string }) => void;
   minimizeWindow: () => void;
@@ -31,6 +45,10 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>;
   openChatWindow: (chatId: string) => void;
   platform: NodeJS.Platform;
+  getDesktopSources: (opts?: {
+    types?: Array<'screen' | 'window'>;
+    thumbnailSize?: { width: number; height: number };
+  }) => Promise<DesktopSource[]>;
 }
 
 declare global {

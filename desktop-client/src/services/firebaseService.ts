@@ -161,6 +161,24 @@ export const getOrCreatePrivateChatDirect = async (
       where('members', 'array-contains', myUid),
     ),
   );
+
+  if (myUid === targetUid) {
+    // Self-chat: find chat where every member is own uid
+    for (const d of existing.docs) {
+      const c = d.data() as Chat;
+      if (c.members.every((m) => m === myUid)) return c;
+    }
+    const chatId = genId();
+    const chat: Chat = {
+      chatId,
+      type: 'private',
+      members: [myUid, myUid],
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(doc(firestoreDb, 'chats', chatId), chat);
+    return chat;
+  }
+
   for (const d of existing.docs) {
     const c = d.data() as Chat;
     if (c.members.includes(targetUid)) return c;

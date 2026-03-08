@@ -2,7 +2,8 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, Check, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck } from 'lucide-react';
+import { useBookmarkStore } from '../store/bookmarkStore';
 
 interface MessageBubbleProps {
   message: Message;
@@ -11,16 +12,16 @@ interface MessageBubbleProps {
   senderAvatar?: string;
   showSender?: boolean;
   onDelete?: (messageId: string, scope: 'me' | 'both') => void;
-  onEdit?: (messageId: string, newContent: string) => void;
+  onStartEdit?: (message: Message) => void;
   onCall?: (callType: 'voice' | 'video') => void;
   onReply?: (message: Message) => void;
   onForward?: (message: Message) => void;
+  onBookmark?: (message: Message) => void;
   onPin?: (message: Message, action: 'pin' | 'unpin') => void;
   isPinned?: boolean;
   onScrollToMessage?: (messageId: string) => void;
   onCloseChat?: () => void;
   onEnterSelect?: (messageId: string) => void;
-  triggerEdit?: boolean;
   searchQuery?: string;
   isActiveSearchMatch?: boolean;
   isHighlighted?: boolean;
@@ -33,16 +34,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   senderAvatar,
   showSender = false,
   onDelete,
-  onEdit,
+  onStartEdit,
   onCall,
   onReply,
   onForward,
+  onBookmark,
   onPin,
   isPinned = false,
   onScrollToMessage,
   onCloseChat,
   onEnterSelect,
-  triggerEdit = false,
   searchQuery,
   isActiveSearchMatch = false,
   isHighlighted = false,
@@ -53,15 +54,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const menuRef = useRef<HTMLDivElement | null>(null);
   // ─── Double-click reply flash ─────────────────────────────────────────────
   const [replyFlash, setReplyFlash] = useState(false);
-  // ─── Inline edit state ───────────────────────────────────────────────────
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState('');
-  const editInputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Trigger edit from outside (e.g. selection mode)
-  useEffect(() => {
-    if (triggerEdit) handleStartEdit();
-  }, [triggerEdit]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ─── Bookmark state ───────────────────────────────────────────────────────
+  const { isBookmarked, addBookmark, removeBookmark } = useBookmarkStore();
+  const bookmarked = isBookmarked(message.messageId);
   useEffect(() => {
     if (!ctxMenu) return;
     const close = (e: MouseEvent) => {
@@ -100,25 +95,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const handleStartEdit = () => {
     setCtxMenu(null);
-    setEditText(message.content ?? '');
-    setIsEditing(true);
-    // Focus the textarea after the DOM updates
-    setTimeout(() => {
-      editInputRef.current?.focus();
-      const len = editInputRef.current?.value.length ?? 0;
-      editInputRef.current?.setSelectionRange(len, len);
-    }, 0);
+    onStartEdit?.(message);
   };
-
-  const handleSaveEdit = () => {
-    const trimmed = editText.trim();
-    if (trimmed && trimmed !== message.content) {
-      onEdit?.(message.messageId, trimmed);
-    }
-    setIsEditing(false);
-  };
-
-  const handleCancelEdit = () => setIsEditing(false);
 
   const handleCopy = () => {
     setCtxMenu(null);
@@ -140,6 +118,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleForward = () => {
     setCtxMenu(null);
     onForward?.(message);
+  };
+
+  const handleBookmark = () => {
+    setCtxMenu(null);
+    if (bookmarked) {
+      removeBookmark(message.messageId);
+    } else {
+      addBookmark(message);
+      onBookmark?.(message);
+    }
   };
 
   const handlePin = () => {
@@ -261,44 +249,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       default:
         return (
-          <>
-            {isEditing ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <textarea
-                  ref={editInputRef}
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveEdit(); }
-                    if (e.key === 'Escape') handleCancelEdit();
-                  }}
-                  rows={2}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(0,0,0,0.15)',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    borderRadius: 8,
-                    padding: '6px 8px',
-                    color: 'inherit',
-                    fontSize: 14,
-                    fontFamily: 'inherit',
-                    resize: 'none',
-                    outline: 'none',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <button onClick={handleCancelEdit} title="Cancel (Esc)" style={editActionBtnStyle}>
-                    <X size={14} />
-                  </button>
-                  <button onClick={handleSaveEdit} title="Save (Enter)" style={{ ...editActionBtnStyle, color: '#22c55e' }}>
-                    <Check size={14} />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p style={{ margin: 0, wordBreak: 'break-word' }}>{highlightText(message.content ?? '', searchQuery)}</p>
-            )}
-          </>
+          <p style={{ margin: 0, wordBreak: 'break-word' }}>{highlightText(message.content ?? '', searchQuery)}</p>
         );
     }
   };
@@ -475,6 +426,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <Forward size={14} style={{ marginRight: 6 }} />Forward message
           </button>
         )}
+        {!message.deleted && (
+          <button onClick={handleBookmark} style={bookmarked ? { ...menuItemStyle, color: 'var(--accent)' } : menuItemStyle}>
+            {bookmarked
+              ? <><BookmarkCheck size={14} style={{ marginRight: 6 }} />Remove bookmark</>  
+              : <><Bookmark size={14} style={{ marginRight: 6 }} />Save to bookmarks</>}
+          </button>
+        )}
         {!message.deleted && onPin && (
           <button onClick={handlePin} style={menuItemStyle}>
             {isPinned
@@ -506,18 +464,6 @@ const menuItemStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontSize: 14,
   color: 'var(--text-primary)',
-};
-
-const editActionBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  padding: '2px 6px',
-  borderRadius: 6,
-  color: 'inherit',
-  display: 'flex',
-  alignItems: 'center',
-  opacity: 0.8,
 };
 
 /** Splits `text` and wraps occurrences of `query` in a yellow highlight span. */

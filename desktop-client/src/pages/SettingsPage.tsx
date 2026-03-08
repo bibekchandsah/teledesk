@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
@@ -10,10 +10,51 @@ import { Pencil, Sun, Moon } from 'lucide-react';
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
   const { currentUser, setCurrentUser } = useAuthStore();
-  const { theme, toggleTheme, liveTypingEnabled, toggleLiveTyping } = useUIStore();
+  const { theme, toggleTheme, liveTypingEnabled, toggleLiveTyping, selectedMicId, setSelectedMicId } = useUIStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
 
-  // Profile editing state
+  // Enumerate microphone devices
+  useEffect(() => {
+    const loadDevices = async () => {
+      const md = navigator.mediaDevices;
+      if (!md) {
+        console.warn('[Settings] navigator.mediaDevices unavailable');
+        return;
+      }
+      // Try to enumerate straight away — in Electron mic permission is usually
+      // already granted, so labels are populated without a getUserMedia call.
+      const tryEnum = async () => {
+        const devices = await md.enumerateDevices();
+        const mics = devices.filter((d) => d.kind === 'audioinput');
+        // Labels are empty when permission hasn't been granted yet
+        if (mics.length > 0 && mics.some((d) => d.label)) return mics;
+        return null;
+      };
+
+      let mics = await tryEnum().catch(() => null);
+      if (!mics) {
+        // Ask for permission then re-enumerate to get labels
+        try {
+          const s = await md.getUserMedia({ audio: true });
+          s.getTracks().forEach((t) => t.stop());
+          mics = await tryEnum().catch(() => null);
+        } catch (err) {
+          console.warn('[Settings] Mic permission denied:', err);
+          // Still enumerate — labels will be blank but devices are listed
+          mics = await md.enumerateDevices()
+            .then((d) => d.filter((x) => x.kind === 'audioinput'))
+            .catch(() => null);
+        }
+      }
+      if (mics && mics.length > 0) {
+        console.log('[Settings] Mic devices:', mics);
+        setMicDevices(mics);
+      }
+    };
+    loadDevices();
+  }, []);
+
   const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
@@ -256,6 +297,40 @@ const SettingsPage: React.FC = () => {
               }}
             />
           </button>
+        </SettingRow>
+      </Section>
+
+      {/* Audio */}
+      <Section title="Audio &amp; Microphone">
+        <SettingRow
+          label="Microphone"
+          description={micDevices.length === 0 ? 'Grant microphone permission to see devices' : `${micDevices.length} device${micDevices.length !== 1 ? 's' : ''} found`}
+        >
+          {micDevices.length > 0 ? (
+            <select
+              value={selectedMicId}
+              onChange={(e) => setSelectedMicId(e.target.value)}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                fontSize: 13,
+                cursor: 'pointer',
+                maxWidth: 220,
+              }}
+            >
+              <option value="">Default microphone</option>
+              {micDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>—</span>
+          )}
         </SettingRow>
       </Section>
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import ChatSidebar from '../components/ChatSidebar';
@@ -11,15 +11,41 @@ import UserAvatar from '../components/UserAvatar';
 import { User } from '@shared/types';
 
 const ChatListPage: React.FC = () => {
-  const { setChats, setUserProfile } = useChatStore();
+  const { setChats, setUserProfile, userProfiles } = useChatStore();
   const { currentUser } = useAuthStore();
   const { newGroupModalOpen, setNewGroupModal } = useUIStore();
+  const { sidebarOpen } = useUIStore();
   const navigate = useNavigate();
   const { chatId } = useParams<{ chatId?: string }>();
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const isResizingSidebar = useRef(false);
+
+  const handleSidebarResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingSidebar.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizingSidebar.current) return;
+      setSidebarWidth(Math.min(600, Math.max(200, startWidth + (ev.clientX - startX))));
+    };
+    const onMouseUp = () => {
+      isResizingSidebar.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  // Keep a ref so the Firestore callback can read current profiles without
+  // being listed as a dependency (which would cause infinite re-subscriptions).
+  const userProfilesRef = useRef(userProfiles);
+  useEffect(() => { userProfilesRef.current = userProfiles; }, [userProfiles]);
 
   // ─── Listen to chats in realtime ──────────────────────────────────────────
   useEffect(() => {
@@ -28,12 +54,15 @@ const ChatListPage: React.FC = () => {
     const unsubscribe = listenToUserChats(currentUser.uid, async (chats) => {
       setChats(chats);
 
-      // Load profiles of chat members
+      // Load profiles of chat members (including own uid for self-chats).
+      // Only fetch profiles not already cached in the store.
       const memberIds = new Set<string>();
       chats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
-      memberIds.delete(currentUser.uid);
+      const hasSelfChat = chats.some((c) => c.members.every((m) => m === currentUser.uid));
+      if (!hasSelfChat) memberIds.delete(currentUser.uid);
 
       for (const uid of memberIds) {
+        if (userProfilesRef.current[uid]) continue; // already loaded — skip the network call
         const res = await getUserById(uid);
         if (res.success && res.data) setUserProfile(res.data);
       }
@@ -84,10 +113,31 @@ const ChatListPage: React.FC = () => {
 
   return (
     <div
-      className={`chat-list-layout${chatId ? ' has-chat' : ''}`}
+      className={`chat-list-layout${chatId ? ' has-chat' : ''}${!sidebarOpen ? ' sidebar-hidden' : ''}`}
       style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: 'var(--bg-primary)' }}
     >
-      <ChatSidebar onNewChat={() => setShowNewChat(true)} />
+      {sidebarOpen && (
+        <>
+          <ChatSidebar onNewChat={() => setShowNewChat(true)} width={sidebarWidth} />
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleSidebarResizeMouseDown}
+            style={{
+              width: 5,
+              height: '100%',
+              cursor: 'col-resize',
+              flexShrink: 0,
+              backgroundColor: 'transparent',
+              transition: 'background-color 0.15s',
+              zIndex: 5,
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.opacity = '0.4'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+            title="Drag to resize"
+          />
+        </>
+      )}
 
       {/* Main content (chat window or empty state) */}
       <div className="chat-main-area">
@@ -95,6 +145,7 @@ const ChatListPage: React.FC = () => {
           <Outlet />
         ) : (
           <div
+            className="chat-no-chat-placeholder"
             style={{
               flex: 1,
               height: '100%',
@@ -162,7 +213,12 @@ const ChatListPage: React.FC = () => {
                 >
                   <UserAvatar name={user.name} avatar={user.avatar} size={40} />
                   <div>
-                    <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{user.name}</div>
+                    <div style={{ fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {user.name}
+                      {user.uid === currentUser?.uid && (
+                        <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}>(You)</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.email}</div>
                   </div>
                 </div>

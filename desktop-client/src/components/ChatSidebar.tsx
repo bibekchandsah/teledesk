@@ -11,9 +11,10 @@ import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive
 
 interface ChatSidebarProps {
   onNewChat: () => void;
+  width?: number;
 }
 
-const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
+const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat } =
     useChatStore();
   const { currentUser } = useAuthStore();
@@ -25,7 +26,53 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ chatId: string; scope: 'me' | 'both' } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showTopBar, setShowTopBar] = useState(false);
   const ctxRef = useRef<HTMLDivElement | null>(null);
+  const chatListRef = useRef<HTMLDivElement>(null);
+  const lastScrollTopRef = useRef(0);
+  const cooldownRef = useRef(false);       // prevents flicker on layout reflow
+  const touchStartYRef = useRef<number | null>(null);
+
+  // Re-show top-bar when user types a search query
+  useEffect(() => { if (searchQuery) setShowTopBar(true); }, [searchQuery]);
+
+  // Safe toggle — ignores changes while layout is settling after a toggle
+  const setTopBarSafe = useCallback((visible: boolean) => {
+    if (cooldownRef.current) return;
+    setShowTopBar((prev) => {
+      if (prev === visible) return prev;
+      cooldownRef.current = true;
+      setTimeout(() => { cooldownRef.current = false; }, 450);
+      return visible;
+    });
+  }, []);
+
+  // Scroll handler — hides on scroll-down, reveals on scroll-up
+  const handleListScroll = useCallback(() => {
+    const el = chatListRef.current;
+    if (!el) return;
+    const current = el.scrollTop;
+    const diff = current - lastScrollTopRef.current;
+    lastScrollTopRef.current = current;
+    if (diff > 10) setTopBarSafe(false);
+    else if (diff < -10 || current < 5) setTopBarSafe(true);
+  }, [setTopBarSafe]);
+
+  // Touch handlers — swipe-down reveals even when list isn't scrollable
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY;
+  }, []);
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchStartYRef.current === null) return;
+    const el = chatListRef.current;
+    const atTop = !el || el.scrollTop < 5;
+    const deltaY = e.touches[0].clientY - touchStartYRef.current;
+    if (atTop && deltaY > 45) setTopBarSafe(true);   // pull-down at top
+    else if (deltaY < -45) setTopBarSafe(false);      // swipe-up anywhere
+  }, [setTopBarSafe]);
+  const handleTouchEnd = useCallback(() => {
+    touchStartYRef.current = null;
+  }, []);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -69,14 +116,21 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
   const getChatDisplayInfo = useCallback(
     (chat: Chat) => {
       if (chat.type === 'private') {
-        const otherUid = chat.members.find((m) => m !== currentUser?.uid);
+        const isSelfChat = chat.members.every((m) => m === currentUser?.uid);
+        const otherUid = isSelfChat
+          ? currentUser?.uid
+          : chat.members.find((m) => m !== currentUser?.uid);
         const profile = otherUid ? userProfiles[otherUid] : null;
         const isPeerVisible = profile?.showActiveStatus !== false;
         const isSelfVisible = currentUser?.showActiveStatus !== false;
         return {
-          name: profile?.name || 'Unknown',
+          name: isSelfChat
+            ? `${profile?.name || currentUser?.name || 'Unknown'} (You)`
+            : profile?.name || 'Unknown',
           avatar: profile?.avatar,
-          online: otherUid ? (onlineUsers.has(otherUid) && isPeerVisible && isSelfVisible) : false,
+          online: !isSelfChat && otherUid
+            ? onlineUsers.has(otherUid) && isPeerVisible && isSelfVisible
+            : false,
         };
       }
       return {
@@ -119,8 +173,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
     <aside
       className="chat-sidebar"
       style={{
-        width: 320,
-        minWidth: 260,
+        width: width ?? 320,
+        minWidth: 200,
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -173,31 +227,66 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
         )}
       </div>
 
-      {/* Search — only in main view */}
+      {/* Search + Archived folder — collapses on scroll-down on mobile */}
       {!showArchived && (
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-          <input
-            type="text"
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: 20,
-              border: '1px solid var(--border)',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
+        <div className={`sidebar-topbar${showTopBar ? '' : ' sidebar-topbar--hidden'}`}>
+          <div style={{ padding: '8px 12px' }}>
+            <input
+              type="text"
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 20,
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-primary)',
+                fontSize: 14,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          {archivedChatIds.length > 0 && (
+            <div
+              onClick={() => setShowArchived(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+                cursor: 'pointer', transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', backgroundColor: 'var(--bg-tertiary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Archive size={18} style={{ color: 'var(--text-secondary)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Archived</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {archivedChatIds.length} {archivedChatIds.length === 1 ? 'chat' : 'chats'}
+                </div>
+              </div>
+              <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />
+            </div>
+          )}
+          <div style={{ height: 1, backgroundColor: 'var(--border)' }} />
         </div>
       )}
 
       {/* Chat List */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        ref={chatListRef}
+        onScroll={handleListScroll}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ flex: 1, overflowY: 'auto' }}
+      >
         {/* ─── Archived Chats View ──────────────────────────────────────── */}
         {showArchived && (() => {
           const archivedChats = chats.filter((c) => archivedChatIds.includes(c.chatId));
@@ -399,37 +488,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat }) => {
           );
         })}
 
-        {/* ─── Archived Chats Footer Entry ─────────────────────────────────── */}
-        {!showArchived && archivedChatIds.length > 0 && (
-          <div
-            onClick={() => setShowArchived(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 18px',
-              cursor: 'pointer',
-              borderTop: '1px solid var(--border)',
-              color: 'var(--text-secondary)',
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            <Archive size={16} />
-            <span style={{ fontSize: 14 }}>Archived</span>
-            <span style={{
-              marginLeft: 'auto',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              borderRadius: 10,
-              padding: '1px 8px',
-              fontSize: 12,
-              fontWeight: 600,
-            }}>
-              {archivedChatIds.length}
-            </span>
-          </div>
-        )}
+
       </div>
 
       {/* ─── Context Menu ─────────────────────────────────────────────────── */}

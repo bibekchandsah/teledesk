@@ -76,6 +76,7 @@ export interface CallSession {
   callerAvatar?: string;
   receiverId: string;
   receiverName?: string;
+  receiverAvatar?: string;
   type: 'video' | 'voice';
   status: 'ringing' | 'active' | 'ended' | 'rejected' | 'missed';
   startedAt?: string;

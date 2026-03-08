@@ -19,16 +19,29 @@ import { getLocalStream } from '../services/webrtcService';
 import { useCallContext } from '../context/CallContext';
 import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil } from 'lucide-react';
+import { useCallStore } from '../store/callStore';
+import { useBookmarkStore } from '../store/bookmarkStore';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark } from 'lucide-react';
 
-const ChatWindow: React.FC = () => {
-  const { chatId } = useParams<{ chatId: string }>();
-  const navigate = useNavigate();
+interface ChatWindowProps {
+  /** When provided (e.g. rendered in-call sidebar), skips useParams and disables nav. */
+  chatId?: string;
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
+  const { chatId: chatIdParam } = useParams<{ chatId: string }>();
+  const chatId = chatIdProp ?? chatIdParam;
+  const navigateRouter = useNavigate();
+  // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
+  const navigate = chatIdProp ? () => {} : navigateRouter;
   const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat } =
     useChatStore();
   const { currentUser } = useAuthStore();
   const { startCall } = useCallContext();
+  const { activeCall } = useCallStore();
+  const isInCall = !!activeCall;
   const { liveTypingEnabled } = useUIStore();
+  const { addBookmark, isBookmarked, removeBookmark } = useBookmarkStore();
 
   // When opened directly via URL (e.g. "open in new window"), activeChat won't be
   // set from a sidebar click.  Resolve it from the chats list as soon as it loads.
@@ -92,7 +105,7 @@ const ChatWindow: React.FC = () => {
   // ─── Selection mode ───────────────────────────────────────────────────────
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [editTriggerMsgId, setEditTriggerMsgId] = useState<string | null>(null);
+  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
   // Older messages loaded via scroll-up pagination (kept separate from live store)
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -100,6 +113,7 @@ const ChatWindow: React.FC = () => {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks which chatId we've already instant-scrolled to bottom for
@@ -144,6 +158,7 @@ const ChatWindow: React.FC = () => {
     setReplyingTo(null);
     setForwardingMsgs([]);
     setForwardTargetIds(new Set());
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, [chatId]);
 
   // Focus search input when opened
@@ -309,15 +324,19 @@ const ChatWindow: React.FC = () => {
   // ─── Get peer info for private chat header ────────────────────────────────
   const peerInfo = useCallback(() => {
     if (!activeChat || activeChat.type !== 'private') return null;
-    const peerId = activeChat.members.find((m) => m !== currentUser?.uid);
+    const isSelfChat = activeChat.members.every((m) => m === currentUser?.uid);
+    const peerId = isSelfChat
+      ? currentUser?.uid
+      : activeChat.members.find((m) => m !== currentUser?.uid);
     if (!peerId) return null;
     const peerProfile = userProfiles[peerId];
     const isPeerVisible = peerProfile?.showActiveStatus !== false;
     const isSelfVisible = currentUser?.showActiveStatus !== false;
     return {
       uid: peerId,
+      isSelf: isSelfChat,
       profile: peerProfile,
-      online: onlineUsers.has(peerId) && isPeerVisible && isSelfVisible,
+      online: !isSelfChat && onlineUsers.has(peerId) && isPeerVisible && isSelfVisible,
     };
   }, [activeChat, currentUser, userProfiles, onlineUsers]);
 
@@ -343,6 +362,17 @@ const ChatWindow: React.FC = () => {
   // ─── Send text message ────────────────────────────────────────────────────
   const handleSend = () => {
     if (!inputText.trim() || !chatId || !currentUser) return;
+
+    // ── Edit mode: save the edit instead of sending a new message ────────
+    if (editingMsg) {
+      if (inputText.trim() !== editingMsg.content) {
+        handleEditMessage(editingMsg.messageId, inputText.trim());
+      }
+      setEditingMsg(null);
+      setInputText('');
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+      return;
+    }
 
     const messageId = genId();
     const optimisticMsg: Message = {
@@ -401,13 +431,31 @@ const ChatWindow: React.FC = () => {
 
   // ─── Reply / Forward handlers ─────────────────────────────────────────────
   const handleReply = useCallback((message: Message) => {
+    setEditingMsg(null);
     setReplyingTo(message);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
   const handleForward = useCallback((message: Message) => {
     setForwardingMsgs([message]);
     setForwardTargetIds(new Set());
   }, []);
+
+  // Helper to get the display name of the active chat (for bookmark source)
+  const getActiveChatName = useCallback(() => {
+    if (!activeChat) return undefined;
+    if (activeChat.type === 'group') return activeChat.chatId;
+    const otherUid = activeChat.members.find((m) => m !== currentUser?.uid);
+    return otherUid ? userProfiles[otherUid]?.name : undefined;
+  }, [activeChat, currentUser, userProfiles]);
+
+  const handleBookmarkMessage = useCallback((message: Message) => {
+    if (isBookmarked(message.messageId)) {
+      removeBookmark(message.messageId);
+    } else {
+      addBookmark(message, getActiveChatName());
+    }
+  }, [isBookmarked, addBookmark, removeBookmark, getActiveChatName]);
 
   const handlePin = useCallback(async (message: Message, action: 'pin' | 'unpin') => {
     if (!chatId) return;
@@ -442,7 +490,15 @@ const ChatWindow: React.FC = () => {
 
   const handleForwardTo = useCallback((targetChatIds: string[]) => {
     if (!forwardingMsgs.length || !currentUser) return;
+    const BOOKMARK_ID = '__bookmarks__';
     for (const targetChatId of targetChatIds) {
+      if (targetChatId === BOOKMARK_ID) {
+        // Save to bookmarks instead of sending to a chat
+        for (const msg of forwardingMsgs) {
+          addBookmark({ ...msg, forwarded: true }, getActiveChatName());
+        }
+        continue;
+      }
       for (const msg of forwardingMsgs) {
         sendMessage({
           chatId: targetChatId,
@@ -459,7 +515,7 @@ const ChatWindow: React.FC = () => {
     }
     setForwardingMsgs([]);
     setForwardTargetIds(new Set());
-  }, [forwardingMsgs, currentUser]);
+  }, [forwardingMsgs, currentUser, addBookmark, getActiveChatName]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -538,9 +594,15 @@ const ChatWindow: React.FC = () => {
     setSelectedIds(new Set());
   }, []);
 
-  // Escape key cancels selection mode
+  // Escape key cancels selection mode and edit mode
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') exitSelectionMode(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        exitSelectionMode();
+        setEditingMsg(null);
+        setInputText('');
+      }
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [exitSelectionMode]);
@@ -622,10 +684,23 @@ const ChatWindow: React.FC = () => {
   const handleSelectionEdit = useCallback(() => {
     if (selectedIds.size !== 1) return;
     const [msgId] = [...selectedIds];
+    const msg = chatMessages.find((m) => m.messageId === msgId);
+    if (msg) {
+      setEditingMsg(msg);
+      setReplyingTo(null);
+      setInputText(msg.content ?? '');
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.style.height = 'auto';
+          inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+          const len = inputRef.current.value.length;
+          inputRef.current.setSelectionRange(len, len);
+        }
+      }, 0);
+    }
     exitSelectionMode();
-    setEditTriggerMsgId(msgId);
-    setTimeout(() => setEditTriggerMsgId(null), 300);
-  }, [selectedIds, exitSelectionMode]);
+  }, [selectedIds, chatMessages, exitSelectionMode]);
 
   const handleSelectionReply = useCallback(() => {
     if (selectedIds.size !== 1) return;
@@ -655,11 +730,12 @@ const ChatWindow: React.FC = () => {
   const handleStartCall = async (type: 'video' | 'voice') => {
     if (!peer) return;
     const stream = await getLocalStream(type).catch((err) => {
-      alert(`Cannot access ${type === 'video' ? 'camera/microphone' : 'microphone'}: ${err.message}`);
+      const detail = err?.message || err?.name || 'Please check that your camera/microphone is connected and that the app has permission to use it in Windows privacy settings.';
+      alert(`Cannot access ${type === 'video' ? 'camera/microphone' : 'microphone'}: ${detail}`);
       return null;
     });
     if (!stream) return;
-    startCall(peer.uid, peer.profile?.name || 'User', type, stream);
+    startCall(peer.uid, peer.profile?.name || 'User', type, stream, peer.profile?.avatar);
   };
 
   if (!activeChat || !chatId) {
@@ -715,17 +791,22 @@ const ChatWindow: React.FC = () => {
         {peer ? (
           <>
             <UserAvatar
-              name={peer.profile?.name || 'User'}
-              avatar={peer.profile?.avatar}
+              name={peer.profile?.name || currentUser?.name || 'User'}
+              avatar={peer.profile?.avatar || currentUser?.avatar}
               size={40}
               online={peer.online}
             />
             <div>
-              <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                {peer.profile?.name || 'User'}
+              <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {peer.isSelf
+                  ? (peer.profile?.name || currentUser?.name || 'You')
+                  : (peer.profile?.name || 'User')}
+                {peer.isSelf && (
+                  <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)' }}>(You)</span>
+                )}
               </div>
-              <div style={{ fontSize: 12, color: peer.online ? '#22c55e' : 'var(--text-secondary)' }}>
-                {peer.online ? 'Online' : 'Offline'}
+              <div style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)') }}>
+                {peer.isSelf ? 'Message yourself' : (peer.online ? 'Online' : 'Offline')}
               </div>
             </div>
           </>
@@ -739,16 +820,18 @@ const ChatWindow: React.FC = () => {
           {activeChat.type === 'private' && (
             <>
               <button
-                onClick={() => handleStartCall('voice')}
-                title="Voice call"
-                style={headerBtnStyle}
+                onClick={() => !isInCall && handleStartCall('voice')}
+                title={isInCall ? 'Already in a call' : 'Voice call'}
+                disabled={isInCall}
+                style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
               >
                 <Phone size={18} />
               </button>
               <button
-                onClick={() => handleStartCall('video')}
-                title="Video call"
-                style={headerBtnStyle}
+                onClick={() => !isInCall && handleStartCall('video')}
+                title={isInCall ? 'Already in a call' : 'Video call'}
+                disabled={isInCall}
+                style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
               >
                 <Video size={18} />
               </button>
@@ -1140,16 +1223,29 @@ const ChatWindow: React.FC = () => {
                   senderAvatar={userProfiles[msg.senderId]?.avatar}
                   showSender={activeChat.type === 'group'}
                   onDelete={selectionMode ? undefined : handleDeleteMessage}
-                  onEdit={selectionMode ? undefined : handleEditMessage}
+                  onStartEdit={selectionMode ? undefined : (msg) => {
+                    setEditingMsg(msg);
+                    setReplyingTo(null);
+                    setInputText(msg.content ?? '');
+                    setTimeout(() => {
+                      if (inputRef.current) {
+                        inputRef.current.focus();
+                        inputRef.current.style.height = 'auto';
+                        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+                        const len = inputRef.current.value.length;
+                        inputRef.current.setSelectionRange(len, len);
+                      }
+                    }, 0);
+                  }}
                   onCall={msg.type === 'call' ? handleStartCall : undefined}
                   onReply={selectionMode ? undefined : handleReply}
                   onForward={selectionMode ? undefined : handleForward}
+                  onBookmark={selectionMode ? undefined : handleBookmarkMessage}
                   onPin={selectionMode ? undefined : handlePin}
                   isPinned={(activeChat.pinnedMessageIds ?? []).includes(msg.messageId)}
                   onScrollToMessage={handleScrollToMessage}
                   onCloseChat={selectionMode ? undefined : (() => { setActiveChat(null); navigate('/chats'); })}
                   onEnterSelect={selectionMode ? undefined : enterSelectionMode}
-                  triggerEdit={editTriggerMsgId === msg.messageId}
                   searchQuery={isSearchMatch ? searchQuery : undefined}
                   isActiveSearchMatch={isActiveMatch}
                   isHighlighted={highlightedMsgId === msg.messageId}
@@ -1255,6 +1351,35 @@ const ChatWindow: React.FC = () => {
         </div>
       )}
 
+      {/* Edit message bar */}
+      {editingMsg && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 16px',
+            borderTop: '1px solid var(--border)',
+            backgroundColor: 'var(--bg-tertiary)',
+          }}
+        >
+          <Pencil size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>Edit message</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {editingMsg.content}
+            </div>
+          </div>
+          <button
+            onClick={() => { setEditingMsg(null); setInputText(''); }}
+            style={{ ...iconBtnStyle, width: 24, height: 24, flexShrink: 0 }}
+            title="Cancel edit (Esc)"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Reply preview bar */}
       {replyingTo && (
         <div
@@ -1303,7 +1428,7 @@ const ChatWindow: React.FC = () => {
           alignItems: 'flex-end',
           gap: 8,
           padding: '12px 16px',
-          borderTop: replyingTo ? 'none' : '1px solid var(--border)',
+          borderTop: (replyingTo || editingMsg) ? 'none' : '1px solid var(--border)',
           backgroundColor: 'var(--bg-secondary)',
         }}
       >
@@ -1323,6 +1448,7 @@ const ChatWindow: React.FC = () => {
           <Paperclip size={20} />
         </button>
         <textarea
+          ref={inputRef}
           value={inputText}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -1408,6 +1534,63 @@ const ChatWindow: React.FC = () => {
             </div>
             {/* Target chat list with checkboxes */}
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* ─── Saved Messages (Bookmarks) entry ─── */}
+              {(() => {
+                const BOOKMARK_ID = '__bookmarks__';
+                const checked = forwardTargetIds.has(BOOKMARK_ID);
+                return (
+                  <button
+                    key={BOOKMARK_ID}
+                    onClick={() => {
+                      setForwardTargetIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(BOOKMARK_ID)) next.delete(BOOKMARK_ID); else next.add(BOOKMARK_ID);
+                        return next;
+                      });
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      background: checked ? 'var(--bg-active)' : 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: 'var(--text-primary)',
+                      fontSize: 14,
+                      borderBottom: '1px solid var(--border)',
+                      marginBottom: 4,
+                    }}
+                    onMouseEnter={(e) => { if (!checked) (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--bg-tertiary)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = checked ? 'var(--bg-active)' : 'transparent'; }}
+                  >
+                    <div style={{
+                      width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                      border: `2px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
+                      backgroundColor: checked ? 'var(--accent)' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {checked && (
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%', backgroundColor: 'var(--accent)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <Bookmark size={18} color="#fff" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Saved Messages</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Bookmark for yourself</div>
+                    </div>
+                  </button>
+                );
+              })()}
               {chats
                 .filter((c) => c.chatId !== chatId)
                 .map((c) => {

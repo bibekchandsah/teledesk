@@ -1,3 +1,8 @@
+/* ─── Call PiP swap hint ──────────────────────────────────────────────────── */
+div:hover > div > .pip-swap-hint {
+  opacity: 1 !important;
+}
+
 /* ─── CSS Variables (Dark Theme) ─────────────────────────────────────────── */
 :root {
   --bg-primary: #0f172a;
@@ -184,8 +189,31 @@ body {
   }
 }
 
+/* ─── Sidebar top-bar (search + archived): always visible on desktop ────────── */
+.sidebar-topbar {
+  overflow: hidden;
+}
+
 /* ─── Responsive: Mobile (≤ 768px) ─────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Collapsible search + archived row in chat sidebar */
+  .sidebar-topbar {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+  }
+  .sidebar-topbar:not(.sidebar-topbar--hidden) {
+    max-height: 200px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Hide archive button from bottom nav on mobile */
+  .nav-btn--archive {
+    display: none !important;
+  }
+
   /* App layout: stack vertically, nav goes to bottom */
   .app-container {
     flex-direction: column;
@@ -243,6 +271,17 @@ body {
     transform: translateX(100%);
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1;
+  }
+
+  /* Hide the "select a chat" empty state on mobile — the sidebar fills that role */
+  /* But show it when sidebar is explicitly hidden via toggle */
+  .chat-list-layout:not(.sidebar-hidden) .chat-no-chat-placeholder {
+    display: none !important;
+  }
+
+  /* When sidebar is toggled off with no chat open, slide main area into view */
+  .chat-list-layout.sidebar-hidden .chat-main-area {
+    transform: translateX(0) !important;
   }
 
   /* When a chat is open: swap panels */

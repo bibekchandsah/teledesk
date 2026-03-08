@@ -3,7 +3,7 @@ import { useCallStore } from '../store/callStore';
 import { useCallContext } from '../context/CallContext';
 import UserAvatar from '../components/UserAvatar';
 import { getLocalStream } from '../services/webrtcService';
-import { Phone, Video } from 'lucide-react';
+import { Phone } from 'lucide-react';
 
 const IncomingCallModal: React.FC = () => {
   const { incomingCall } = useCallStore();
@@ -40,11 +40,37 @@ const IncomingCallModal: React.FC = () => {
           boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
         }}
       >
-        <div style={{ marginBottom: 16 }}>
+        <div style={{
+          marginBottom: 20,
+          display: 'flex',
+          justifyContent: 'center',
+          position: 'relative',
+        }}>
+          {/* Pulsing ring */}
+          <div style={{
+            position: 'absolute',
+            width: 104, height: 104,
+            borderRadius: '50%',
+            border: '2px solid var(--accent)',
+            opacity: 0.5,
+            animation: 'pulse 1.5s ease-out infinite',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+          }} />
+          <div style={{
+            position: 'absolute',
+            width: 120, height: 120,
+            borderRadius: '50%',
+            border: '2px solid var(--accent)',
+            opacity: 0.25,
+            animation: 'pulse 1.5s ease-out infinite 0.4s',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+          }} />
           <UserAvatar
             name={incomingCall.callerName}
             avatar={incomingCall.callerAvatar}
-            size={80}
+            size={90}
           />
         </div>
         <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 20 }}>
@@ -53,10 +79,6 @@ const IncomingCallModal: React.FC = () => {
         <p style={{ margin: '0 0 28px', color: 'var(--text-secondary)', fontSize: 14 }}>
           Incoming {incomingCall.type} call...
         </p>
-
-        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center', animation: 'pulse 1.5s infinite' }}>
-          {incomingCall.type === 'video' ? <Video size={36} color="var(--accent)" /> : <Phone size={36} color="var(--accent)" />}
-        </div>
 
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
           <button

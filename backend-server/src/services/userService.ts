@@ -51,10 +51,7 @@ export const searchUsers = async (query: string, requestingUid: string): Promise
 
   snapshot.forEach((doc) => {
     const user = doc.data() as User;
-    if (
-      user.uid !== requestingUid &&
-      (user.name?.toLowerCase().includes(q) || user.email?.toLowerCase().includes(q))
-    ) {
+    if (user.name?.toLowerCase().includes(q) || user.email?.toLowerCase().includes(q)) {
       results.push(user);
     }
   });

@@ -16,6 +16,24 @@ export const getOrCreatePrivateChat = async (
     .where('members', 'array-contains', userA)
     .get();
 
+  if (userA === userB) {
+    // Self-chat: find chat where every member is the same uid
+    for (const doc of snapshot.docs) {
+      const chat = doc.data() as Chat;
+      if (chat.members.every((m) => m === userA)) return chat;
+    }
+    const chatId = generateId();
+    const chat: Chat = {
+      chatId,
+      type: 'private',
+      members: [userA, userA],
+      createdAt: now(),
+    };
+    await db.collection('chats').doc(chatId).set(chat);
+    logger.info(`Self-chat created: ${chatId}`);
+    return chat;
+  }
+
   for (const doc of snapshot.docs) {
     const chat = doc.data() as Chat;
     if (chat.members.includes(userB)) return chat;

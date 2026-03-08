@@ -10,8 +10,10 @@ interface UIState {
   newGroupModalOpen: boolean;
   liveTypingEnabled: boolean;
   showArchived: boolean;
+  selectedMicId: string;
 
   setSidebarOpen: (open: boolean) => void;
+  setSelectedMicId: (id: string) => void;
   toggleSidebar: () => void;
   setSettingsOpen: (open: boolean) => void;
   setProfileModal: (open: boolean, userId?: string) => void;
@@ -32,8 +34,13 @@ export const useUIStore = create<UIState>((set) => ({
   newGroupModalOpen: false,
   liveTypingEnabled: localStorage.getItem('liveTypingEnabled') === 'true',
   showArchived: false,
+  selectedMicId: localStorage.getItem('selectedMicId') ?? '',
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setSelectedMicId: (id) => {
+    localStorage.setItem('selectedMicId', id);
+    set({ selectedMicId: id });
+  },
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setProfileModal: (open, userId) =>

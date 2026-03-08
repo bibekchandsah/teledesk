@@ -7,6 +7,7 @@ cd desktop-client; npm run electron:dev
 Rebuild the Electron main process and restart:
 cd "d:\programming exercise\social media\desktop-client"
 npx tsc -p tsconfig.electron.json && npm run electron:dev
+npx tsc -p tsconfig.electron.json; npm run electron:dev
 
 
 http://localhost:5173/
@@ -186,24 +187,61 @@ chats with unread messages:
     Timestamp — accent color
     Unread badge — stacked directly below the timestamp on the right side
 select messaages
+allow user to send message themself too: search, forward 
 add saved message page where user can forward messages to saved message page
-lock chat for specific user
-allow user to send message themself too
 during call they can chat too in right sidebar
 allow user to increase sidebar width
-react messaages
+    State	Mobile behaviour
+    Sidebar open, no chat	Sidebar fills screen (CSS slide), placeholder hidden behind it ✓
+    Sidebar toggled off, no chat	.sidebar-hidden class overrides translateX(100%) → main area slides into view showing the placeholder ✓
+    Chat open (any)	Chat window fills screen via .has-chat CSS ✓
+call profile with center and preview 
 allow user to change camera & microphone during calling
 screen share during call
+incoming call and outgoing call in separate window
+lock chat for specific user
+react messaages
 set app lock & if forgot enter registered email and verify it with link to get code
 show logged in devices
+message info of user profile
 
 
-
+when i open chat in new during call then it don't show call button disabled
 user A send message single tick
 user B receives message double tick
 
 
+calling logic
+if user a call user b and user b is online then show ringing
+if user a call user b and user b is offline then show calling
+if user a call user b and user b is offline but in 0-30 interval user b become online then show calling -> ringing (apply effect in realtime)
+if user a call user b and user b has minimized the window then show the window of calling
 
 
 
+   
 
+when user mouse is idle for 3 second then hide the call controls like microphone, camera, message, end call icon & duration in animated way and show again when cursor is moved
+switch you and caller camera to full screen
+drag pip camera preview to anywhere on the screen
+make you camera as circle, rectangle, hide to side with arrow showing
+allow user to toggle to grid and nomal where sender and receiver are half half on screen
+in microphone list also show the available speaker list and user can choose from their for sound output
+allow user to switch to video call mode form voice call mode and from voice call mode to video call mode
+allow user to resize pip camera
+maintain aspect ratio of full screen camera while resizing window
+
+
+still it don't fixed for example currently it's
+for first time: user A switch to video call mode then user B sees user A video
+                user b also switch to video call mode then user A sees user B video
+but for second time: user A/B turn off video then user A sees in voice call mode and user B sees blank
+                     user B/A also turn off video then user B sees in voice call mode and now both user are in voice call mode
+till this everything is good but 
+for third or n number of time: user A switch to video call mode then user B sees user A blank
+                               user B switch to video call mode then user A sees user B blank
+and when both user turn off video then it's falling back to voice call mode
+we need to fix for third or n number of time issue
+
+user A switch to video call mode then user B sees user A video
+user b also switch to video call mode then user A can't sees user B video

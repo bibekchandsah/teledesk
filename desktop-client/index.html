@@ -9,6 +9,23 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Node.js shims required by simple-peer — must run before any ES module -->
+    <script>
+      window.global = window.global || window;
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      window.process.version = window.process.version || 'v18.0.0';
+      window.process.browser = true;
+      if (!window.process.nextTick) {
+        window.process.nextTick = function (fn) {
+          var args = Array.prototype.slice.call(arguments, 1);
+          return Promise.resolve().then(function () { fn.apply(null, args); });
+        };
+      }
+      if (typeof window.Buffer === 'undefined') {
+        window.Buffer = { isBuffer: function() { return false; } };
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
