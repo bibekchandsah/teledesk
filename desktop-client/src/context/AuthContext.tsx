@@ -37,57 +37,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFirebaseUser(fbUser);
 
       if (fbUser) {
-        try {
-          setLoading(true);
-          const token = await fbUser.getIdToken();
+        // ── Step 1: Unblock the UI immediately with data we already have ──────
+        // Firebase resolves the cached auth state from local storage in ~50-100ms.
+        // Setting currentUser here removes the loading screen right away instead of
+        // waiting for backend HTTP + Firestore calls (which take 3-5 seconds).
+        const immediateProfile = {
+          uid: fbUser.uid,
+          name: fbUser.displayName || 'User',
+          email: fbUser.email || '',
+          avatar: fbUser.photoURL || '',
+          createdAt: new Date().toISOString(),
+          lastSeen: new Date().toISOString(),
+          onlineStatus: 'online' as const,
+        };
+        setCurrentUser(immediateProfile);
+        setLoading(false);
 
-          // Try to sync with backend
-          let userProfile = null;
+        // ── Step 2: Background sync — enrich profile without blocking the UI ──
+        (async () => {
           try {
-            const response = await syncUserProfile(
-              fbUser.displayName || 'User',
-              fbUser.email || '',
-              fbUser.photoURL || '',
-            );
-            if (response.success && response.data) {
-              userProfile = response.data;
+            const token = await fbUser.getIdToken();
+            initSocket(token);
+            requestNotificationPermission().catch(() => {});
+
+            // Try to sync with backend
+            let userProfile = null;
+            try {
+              const response = await syncUserProfile(
+                fbUser.displayName || 'User',
+                fbUser.email || '',
+                fbUser.photoURL || '',
+              );
+              if (response.success && response.data) {
+                userProfile = response.data;
+              }
+            } catch (syncErr) {
+              console.warn('[Auth] Backend sync failed, continuing offline:', syncErr);
             }
-          } catch (syncErr) {
-            console.warn('[Auth] Backend sync failed, continuing offline:', syncErr);
-          }
 
-          // Always write to Firestore directly (ensures user is searchable by others)
-          try {
-            const fsProfile = await upsertUserProfile(fbUser);
-            if (!userProfile) userProfile = fsProfile;
-          } catch (fsErr) {
-            console.warn('[Auth] Firestore write failed:', fsErr);
-          }
+            // Always write to Firestore directly (ensures user is searchable by others)
+            try {
+              const fsProfile = await upsertUserProfile(fbUser);
+              if (!userProfile) userProfile = fsProfile;
+            } catch (fsErr) {
+              console.warn('[Auth] Firestore write failed:', fsErr);
+            }
 
-          // Final fallback: build a minimal user from Firebase Auth
-          if (!userProfile) {
-            userProfile = {
-              uid: fbUser.uid,
-              name: fbUser.displayName || 'User',
-              email: fbUser.email || '',
-              avatar: fbUser.photoURL || '',
-              createdAt: new Date().toISOString(),
-              lastSeen: new Date().toISOString(),
-              onlineStatus: 'online' as const,
-            };
+            // Update with the richer profile once the background sync completes
+            if (userProfile) {
+              setCurrentUser(userProfile);
+              useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
+              useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
+            }
+          } catch (err) {
+            console.error('[Auth] Background sync failed:', err);
           }
-
-          setCurrentUser(userProfile);
-          useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
-          useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
-          initSocket(token);
-          await requestNotificationPermission();
-        } catch (err) {
-          console.error('[Auth] Failed to initialize session:', err);
-          setError('Failed to load user profile');
-        } finally {
-          setLoading(false);
-        }
+        })();
       } else {
         setCurrentUser(null);
         disconnectSocket();
