@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+﻿import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { getSocket } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import {
@@ -10,6 +10,7 @@ import {
   setCallTarget,
   processRenegotiationOffer,
   processRenegotiationAnswer,
+  getLocalStream,
 } from '../services/webrtcService';
 import { useCallStore } from '../store/callStore';
 import { useAuthStore } from '../store/authStore';
@@ -22,7 +23,6 @@ interface CallContextValue {
     targetUserId: string,
     targetName: string,
     callType: 'video' | 'voice',
-    localStream: MediaStream,
     targetAvatar?: string,
   ) => void;
   acceptIncomingCall: (localStream: MediaStream) => void;
@@ -31,6 +31,9 @@ interface CallContextValue {
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
+
+/** True when running inside Electron with call-window IPC available */
+const isElectron = (): boolean => !!window.electronAPI?.openCallWindow;
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
@@ -55,11 +58,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const currentUserRef = useRef(currentUser);
   const ringingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // Track call duration at the time the call window closes (for summary)
+  const callDurationRef = useRef(callDuration);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { callDurationRef.current = callDuration; }, [callDuration]);
 
   const clearRingingTimer = () => {
     if (ringingTimerRef.current !== null) {
@@ -69,8 +75,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Helper: post a call summary message into the shared chat.
-  // ONLY the CALLER should call this to avoid duplicate messages.
-  // receiverStatus lets the two sides show different labels (e.g. no_answer vs missed).
   const sendCallSummary = (
     call: NonNullable<typeof activeCall>,
     status: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined',
@@ -90,9 +94,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const m = Math.floor(durationSeconds / 60);
       const s = durationSeconds % 60;
       const dStr = m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
-      content = `[${typeName}] ${typeName} call · ${dStr}`;
+      content = `[${typeName}] ${typeName} call Â· ${dStr}`;
     } else if (status === 'no_answer') {
-      content = `[${typeName}] ${typeName} call — no answer`;
+      content = `[${typeName}] ${typeName} call â€” no answer`;
     } else if (status === 'missed') {
       content = `[${typeName}] Missed ${call.type} call`;
     } else {
@@ -112,94 +116,112 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // This effect registers stable socket handlers that use refs throughout.
-  // It only re-runs when the current user (and thus the socket) changes.
-  // Keeping it stable prevents handlers being torn down during WebRTC signaling
-  // (e.g. when callDuration ticks every second or activeCall state updates).
+  /** Relay a socket event to the call window via Electron IPC */
+  const relayToCallWindow = (event: string, data: unknown) => {
+    window.electronAPI?.relayToCallWindow?.(event, data);
+  };
+
+  // â”€â”€â”€ Socket event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!currentUser) return;
     const socket = getSocket();
     if (!socket) return;
 
-    // ─── Accept Call Confirmation ───────────────────────────────────────
+    // â”€â”€â”€ Accept Call Confirmation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleCallAccepted = (data: { callId: string; acceptorId: string }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
       clearRingingTimer();
       setActiveCall({ ...activeCallRef.current!, status: 'active' });
-      startCallTimer();
 
-      // Create initiator peer here — AFTER receiver has registered its OFFER
-      // listener in acceptIncomingCall — so the offer isn't sent too early.
-      const stream = localStreamRef.current;
-      if (!stream) return;
-      // Store signaling targets so startScreenShare can trigger renegotiation
-      setCallTarget(activeCallRef.current!.receiverId, data.callId);
-      createInitiatorPeer(
-        stream,
-        data.callId,
-        activeCallRef.current!.receiverId,
-        (remoteStream) => { setRemoteStream(remoteStream); },
-        (err) => {
-          console.error('[Call] Peer error:', err);
-          endCallCleanup();
-        },
-      );
+      if (isElectron()) {
+        // Electron: relay to call window which owns the WebRTC peer
+        relayToCallWindow(SOCKET_EVENTS.ACCEPT_CALL, data);
+        startCallTimer();
+      } else {
+        // Non-Electron fallback: create peer in this renderer
+        startCallTimer();
+        const stream = localStreamRef.current;
+        if (!stream) return;
+        setCallTarget(activeCallRef.current!.receiverId, data.callId);
+        createInitiatorPeer(
+          stream,
+          data.callId,
+          activeCallRef.current!.receiverId,
+          (remoteStream) => { setRemoteStream(remoteStream); },
+          (err) => {
+            console.error('[Call] Peer error:', err);
+            endCallCleanup();
+          },
+        );
+      }
     };
 
-    // ─── Receive WebRTC Answer (caller gets this) ───────────────────────
-    // Uses ref so it never has a stale callId, and is never torn down mid-negotiation.
-    // Uses processRenegotiationAnswer (direct _pc bypass) for ALL answers — both the
-    // initial handshake answer and any renegotiation answers — so that simple-peer's
-    // internal state machine cannot interfere or reject answers on later cycles.
+    // â”€â”€â”€ WebRTC Answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleAnswer = (data: { from: string; callId: string; answer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      processRenegotiationAnswer(data.answer);
+      if (isElectron()) {
+        relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
+      } else {
+        processRenegotiationAnswer(data.answer);
+      }
     };
 
-    // ─── ICE Candidates ─────────────────────────────────────────────────
-    // Never filtered by callId — simple-peer queues extras gracefully.
+    // â”€â”€â”€ ICE Candidates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleIceCandidate = (data: {
       from: string;
       callId: string;
       candidate: { candidate: string; sdpMLineIndex: number | null; sdpMid: string | null };
     }) => {
-      processSignal(data.candidate);
+      if (isElectron()) {
+        relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
+      } else {
+        processSignal(data.candidate);
+      }
     };
 
-    // ─── Call Ended ─────────────────────────────────────────────────────
+    // â”€â”€â”€ Call Ended (remote side ended the call) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleCallEnded = (data: { callId: string }) => {
       const ac = activeCallRef.current;
       const ic = incomingCallRef.current;
-      if (ac?.callId === data.callId || ic?.callId === data.callId) {
-        const wasActive = ac?.status === 'active';
-        clearRingingTimer();
-        stopCallTimer();
-        endCallCleanup();
-        showNotification({ title: 'TeleDesk', body: wasActive ? 'Call ended' : 'Call cancelled' });
+      if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+      const wasActive = ac?.status === 'active';
+      clearRingingTimer();
+      if (isElectron()) {
+        // Relay to call window so it can clean up WebRTC, then force-close
+        relayToCallWindow(SOCKET_EVENTS.CALL_ENDED, data);
+        window.electronAPI?.closeCallWindow?.();
+        window.electronAPI?.closeIncomingCallWindow?.();
       }
+      stopCallTimer();
+      endCallCleanup();
+      showNotification({ title: 'TeleDesk', body: wasActive ? 'Call ended' : 'Call cancelled' });
     };
 
-    // ─── Call Rejected ──────────────────────────────────────────────────
+    // â”€â”€â”€ Call Rejected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleCallRejected = (data: { callId: string }) => {
       const ac = activeCallRef.current;
-      if (ac?.callId === data.callId) {
-        clearRingingTimer();
-        sendCallSummary(ac, 'declined', 0, 'declined');
-        stopCallTimer();
-        endCallCleanup();
-        showNotification({ title: 'TeleDesk', body: 'Call was declined' });
+      if (ac?.callId !== data.callId) return;
+      clearRingingTimer();
+      sendCallSummary(ac, 'declined', 0, 'declined');
+      if (isElectron()) {
+        relayToCallWindow(SOCKET_EVENTS.CALL_REJECTED, data);
+        window.electronAPI?.closeCallWindow?.();
+        window.electronAPI?.closeIncomingCallWindow?.();
       }
+      stopCallTimer();
+      endCallCleanup();
+      showNotification({ title: 'TeleDesk', body: 'Call was declined' });
     };
 
-    // ─── Re-offer for renegotiation (e.g. screen share added to voice call) ──
-    // The one-time handleOffer inside acceptIncomingCall handles the INITIAL offer.
-    // This permanent handler processes any subsequent offers (renegotiation) when a
-    // peer is already connected. It uses the raw RTCPeerConnection directly so that
-    // simple-peer's state machine doesn't interfere with manual renegotiation.
+    // â”€â”€â”€ Renegotiation offer (e.g. screen share on voice call) â”€â”€â”€â”€â”€â”€â”€
     const handleRenegotiationOffer = (data: { from: string; callId: string; offer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      if (!hasPeer()) return; // no peer yet — initial offer is handled separately
-      processRenegotiationOffer(data.offer, data.from, data.callId);
+      if (isElectron()) {
+        relayToCallWindow(SOCKET_EVENTS.OFFER, data);
+      } else {
+        if (!hasPeer()) return;
+        processRenegotiationOffer(data.offer, data.from, data.callId);
+      }
     };
 
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
@@ -220,11 +242,72 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
+  // â”€â”€â”€ IPC bridge: events from call windows â†’ main window â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    // Call window sends socket emit requests â†’ execute on main socket
+    const unsubSocketEmit = window.electronAPI.onCallWindowSocketEmit?.((event, data) => {
+      const socket = getSocket();
+      socket?.emit(event, data);
+    });
+
+    // Call window lifecycle events
+    const unsubWindowEvent = window.electronAPI.onCallWindowEvent?.((event) => {
+      if (event === 'hangup') {
+        // Call window user clicked end call (already sent END_CALL socket via emitSocket)
+        const call = activeCallRef.current;
+        if (call) {
+          const dur = call.status === 'active' ? callDurationRef.current : 0;
+          const status = call.status === 'active' ? 'completed' : 'cancelled';
+          sendCallSummary(call, status, dur, status);
+        }
+        clearRingingTimer();
+        stopCallTimer();
+        endCallCleanup();
+      } else if (event === 'closed') {
+        // Window was closed via OS (e.g. clicking X) without going through hangup
+        const call = activeCallRef.current;
+        if (call) {
+          const socket = getSocket();
+          const targetId = call.callerId === currentUserRef.current?.uid
+            ? call.receiverId
+            : call.callerId;
+          socket?.emit(SOCKET_EVENTS.END_CALL, { to: targetId, callId: call.callId });
+          const dur = call.status === 'active' ? callDurationRef.current : 0;
+          const status = call.status === 'active' ? 'completed' : 'cancelled';
+          sendCallSummary(call, status, dur, status);
+        }
+        clearRingingTimer();
+        stopCallTimer();
+        endCallCleanup();
+      } else if (event === 'incoming-accepted') {
+        // The merged call window user accepted — sync state here, window handles socket
+        const ic = incomingCallRef.current;
+        if (!ic) return;
+        const acceptedSession = { ...ic, status: 'active' as const };
+        setActiveCall(acceptedSession);
+        activeCallRef.current = acceptedSession;
+        setIncomingCall(null);
+        startCallTimer();
+      } else if (event === 'incoming-rejected') {
+        // The merged call window user rejected — window already sent REJECT_CALL socket
+        setIncomingCall(null);
+      }
+    });
+
+    return () => {
+      unsubSocketEmit?.();
+      unsubWindowEvent?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // â”€â”€â”€ startCall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startCall = (
     targetUserId: string,
     targetName: string,
     callType: 'video' | 'voice',
-    localStream: MediaStream,
     targetAvatar?: string,
   ): void => {
     if (!currentUser) return;
@@ -242,12 +325,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'ringing' as const,
     };
 
-    // Persist stream so CallScreen shows local preview and handleCallAccepted can use it
-    localStreamRef.current = localStream;
-    setLocalStream(localStream);
-
     setActiveCall(callSession);
-    activeCallRef.current = callSession; // sync ref immediately for timer
+    activeCallRef.current = callSession;
 
     socket?.emit(SOCKET_EVENTS.CALL_USER, {
       targetUserId,
@@ -257,28 +336,52 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callerAvatar: currentUser.avatar,
     });
 
-    // Auto-cancel after 30 s if receiver doesn't pick up
+    if (isElectron()) {
+      // Electron: open the call window â€” it captures its own stream and handles WebRTC
+      window.electronAPI!.openCallWindow!({
+        callId,
+        callType,
+        isOutgoing: true,
+        targetUserId,
+        targetName,
+        targetAvatar,
+      });
+    } else {
+      // Non-Electron fallback: capture stream here and store for when ACCEPT_CALL arrives
+      getLocalStream(callType)
+        .then((stream) => {
+          localStreamRef.current = stream;
+          setLocalStream(stream);
+        })
+        .catch((err) => {
+          console.error('[Call] getLocalStream failed:', err);
+          endCallCleanup();
+        });
+    }
+
+    // Auto-cancel after 30 s if receiver doesn't answer
     clearRingingTimer();
     ringingTimerRef.current = setTimeout(() => {
       const call = activeCallRef.current;
       if (!call || call.callId !== callId || call.status !== 'ringing') return;
-      // Hang up to dismiss the receiver's incoming call screen
-      hangUp(targetUserId, callId);
-      // Caller sees "no answer", receiver sees "missed"
+      const socket2 = getSocket();
+      socket2?.emit(SOCKET_EVENTS.END_CALL, { to: targetUserId, callId });
+      if (!isElectron()) hangUp(targetUserId, callId);
       sendCallSummary(call, 'no_answer', 0, 'missed');
       stopCallTimer();
       endCallCleanup();
+      if (isElectron()) {
+        window.electronAPI?.closeCallWindow?.();
+      }
       showNotification({ title: 'TeleDesk', body: 'No answer' });
     }, 30000);
-
-    // Peer is created in handleCallAccepted after receiver accepts.
   };
 
+  // â”€â”€â”€ acceptIncomingCall (non-Electron / in-app modal fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const acceptIncomingCall = (localStream: MediaStream): void => {
     if (!incomingCall || !currentUser) return;
     const socket = getSocket();
 
-    // Persist stream so CallScreen shows local preview
     localStreamRef.current = localStream;
     setLocalStream(localStream);
 
@@ -289,9 +392,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setActiveCall({ ...incomingCall, status: 'active' });
     setIncomingCall(null);
-    startCallTimer(); // B's timer starts the moment they accept
+    startCallTimer();
 
-    // Listen for the offer from the caller
     const handleOffer = (data: {
       from: string;
       callId: string;
@@ -299,18 +401,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }) => {
       if (data.callId !== incomingCall.callId) return;
       socket?.off(SOCKET_EVENTS.OFFER, handleOffer);
-      // Store signaling targets so processRenegotiationOffer can send answers
       setCallTarget(incomingCall.callerId, incomingCall.callId);
-
       createReceiverPeer(
         localStream,
         incomingCall.callId,
         incomingCall.callerId,
         data.offer,
-        (remoteStream) => {
-          setRemoteStream(remoteStream);
-          // Timer already started in acceptIncomingCall
-        },
+        (remoteStream) => { setRemoteStream(remoteStream); },
         (err) => {
           console.error('[Call] Receiver peer error:', err);
           endCallCleanup();
@@ -321,11 +418,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket?.on(SOCKET_EVENTS.OFFER, handleOffer);
   };
 
+  // â”€â”€â”€ rejectIncomingCall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const rejectIncomingCall = (): void => {
     if (!incomingCall) return;
     const socket = getSocket();
-    // Do NOT send a call summary here — the caller will receive CALL_REJECTED
-    // and post the single summary from their side, avoiding duplicate messages.
     socket?.emit(SOCKET_EVENTS.REJECT_CALL, {
       callId: incomingCall.callId,
       callerId: incomingCall.callerId,
@@ -333,6 +429,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIncomingCall(null);
   };
 
+  // â”€â”€â”€ endActiveCall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const endActiveCall = (): void => {
     if (!activeCall) return;
     const targetId =
@@ -341,13 +438,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : activeCall.callerId;
 
     clearRingingTimer();
-    localStreamRef.current = null;
     const dur = activeCall.status === 'active' ? callDuration : 0;
     const status = activeCall.status === 'active' ? 'completed' : 'cancelled';
-    // Both sides see the same label (cancelled or completed)
     sendCallSummary(activeCall, status, dur, status);
 
-    hangUp(targetId, activeCall.callId);
+    const socket = getSocket();
+    socket?.emit(SOCKET_EVENTS.END_CALL, { to: targetId, callId: activeCall.callId });
+
+    if (isElectron()) {
+      window.electronAPI?.closeCallWindow?.();
+      window.electronAPI?.closeIncomingCallWindow?.();
+    } else {
+      localStreamRef.current = null;
+      hangUp(targetId, activeCall.callId);
+    }
+
     stopCallTimer();
     endCallCleanup();
   };
@@ -359,8 +464,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+const noOpCallContext: CallContextValue = {
+  startCall: () => {},
+  acceptIncomingCall: () => {},
+  rejectIncomingCall: () => {},
+  endActiveCall: () => {},
+};
+
 export const useCallContext = (): CallContextValue => {
   const ctx = useContext(CallContext);
-  if (!ctx) throw new Error('useCallContext must be used within CallProvider');
-  return ctx;
+  return ctx ?? noOpCallContext;
 };

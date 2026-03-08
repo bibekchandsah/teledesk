@@ -14,7 +14,12 @@ import path from 'path';
 
 // ─── Keep reference to prevent garbage collection ─────────────────────────
 let mainWindow: BrowserWindow | null = null;
+let callWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+// ─── Call window relay buffering ──────────────────────────────────────────
+let callWindowReady = false;
+let pendingRelayEvents: Array<{ event: string; data: unknown }> = [];
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_DEV_SERVER_URL = 'http://localhost:5173';
@@ -204,6 +209,127 @@ ipcMain.on('open-chat-window', (_event, chatId: string) => {
     }
   });
 });
+
+// ─── Call Window ──────────────────────────────────────────────────────────
+const createCallWindow = (initData: object) => {
+  if (callWindow && !callWindow.isDestroyed()) {
+    callWindow.focus();
+    return;
+  }
+  pendingRelayEvents = [];
+
+  const encoded = encodeURIComponent(JSON.stringify(initData));
+
+  callWindow = new BrowserWindow({
+    width: 960,
+    height: 680,
+    minWidth: 640,
+    minHeight: 480,
+    title: 'TeleDesk – Call',
+    backgroundColor: '#0f172a',
+    show: false,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      webSecurity: true,
+    },
+  });
+
+  callWindowReady = false;
+
+  if (isDev) {
+    callWindow.loadURL(`${VITE_DEV_SERVER_URL}/call-window?d=${encoded}`);
+  } else {
+    callWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/call-window', query: { d: JSON.stringify(initData) } });
+  }
+
+  callWindow.once('ready-to-show', () => {
+    callWindow?.show();
+    callWindow?.focus();
+  });
+
+  callWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(isDev ? VITE_DEV_SERVER_URL : 'file://')) {
+      event.preventDefault();
+    }
+  });
+
+  callWindow.on('closed', () => {
+    mainWindow?.webContents.send('call:window-event', 'closed', {});
+    callWindow = null;
+    callWindowReady = false;
+    pendingRelayEvents = [];
+  });
+};
+
+// ─── Call IPC Handlers ─────────────────────────────────────────────────────
+
+// Main window asks to open call window
+ipcMain.on('call:open-window', (_e, initData: object) => {
+  createCallWindow(initData);
+});
+
+// Incoming call — open directly as the merged call window (isOutgoing: false)
+ipcMain.on('incoming-call:open-window', (_e, initData: object) => {
+  createCallWindow(initData);
+});
+
+// Call window sends a custom event to the main window (e.g. incoming-accepted, incoming-rejected)
+ipcMain.on('call:send-window-event', (_e, event: string) => {
+  mainWindow?.webContents.send('call:window-event', event, {});
+});
+
+// Call window renderer is mounted and ready — flush buffered relay events
+ipcMain.on('call:window-ready', (event) => {
+  if (callWindow && !callWindow.isDestroyed() && event.sender === callWindow.webContents) {
+    callWindowReady = true;
+    // No longer send init-data (it's in URL params) — only flush buffered relay events
+    pendingRelayEvents.forEach(({ event: e, data: d }) => {
+      callWindow?.webContents.send('call:socket-event', e, d);
+    });
+    pendingRelayEvents = [];
+  }
+});
+
+// Main window relays a socket event to the call window
+ipcMain.on('call:relay-to-window', (_e, event: string, data: unknown) => {
+  if (callWindowReady && callWindow && !callWindow.isDestroyed()) {
+    callWindow.webContents.send('call:socket-event', event, data);
+  } else if (callWindow && !callWindow.isDestroyed()) {
+    pendingRelayEvents.push({ event, data });
+  }
+});
+
+// Call window sends a socket emit request → relay to main window renderer
+ipcMain.on('call:socket-emit', (_e, event: string, data: unknown) => {
+  mainWindow?.webContents.send('call:window-socket-emit', event, data);
+});
+
+// Call window signals hangup (user clicked end call or remote ended)
+ipcMain.on('call:hangup-from-window', () => {
+  if (callWindow && !callWindow.isDestroyed()) {
+    callWindow.close();
+  }
+  callWindow = null;
+  callWindowReady = false;
+  pendingRelayEvents = [];
+  mainWindow?.webContents.send('call:window-event', 'hangup', {});
+});
+
+// Main window forces call window closed silently (no hangup notification back)
+ipcMain.on('call:force-close', () => {
+  if (callWindow && !callWindow.isDestroyed()) {
+    callWindow.close();
+  }
+  callWindow = null;
+  callWindowReady = false;
+  pendingRelayEvents = [];
+});
+
+
 
 // ─── App Lifecycle ─────────────────────────────────────────────────────────
 app.whenReady().then(() => {

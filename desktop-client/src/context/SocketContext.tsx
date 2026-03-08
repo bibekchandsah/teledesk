@@ -129,6 +129,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         status: 'ringing',
       });
 
+      // In Electron: open a single merged call window for the incoming call
+      if (window.electronAPI?.openCallWindow) {
+        window.electronAPI.openCallWindow({
+          callId: data.callId,
+          callType: data.callType,
+          isOutgoing: false,
+          targetUserId: data.callerId,
+          targetName: data.callerName,
+          targetAvatar: data.callerAvatar,
+        });
+      }
+
       showNotification({
         title: `Incoming ${data.callType} call`,
         body: `${data.callerName} is calling...`,

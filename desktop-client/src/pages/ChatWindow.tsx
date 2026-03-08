@@ -15,7 +15,6 @@ import { sendMessage, sendTyping, sendLiveTyping, sendReadReceipt, joinChatRoom,
 import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../services/fileService';
 import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi } from '../services/apiService';
 import { Message } from '@shared/types';
-import { getLocalStream } from '../services/webrtcService';
 import { useCallContext } from '../context/CallContext';
 import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
@@ -729,13 +728,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   // ─── Start call ──────────────────────────────────────────────────────────
   const handleStartCall = async (type: 'video' | 'voice') => {
     if (!peer) return;
-    const stream = await getLocalStream(type).catch((err) => {
-      const detail = err?.message || err?.name || 'Please check that your camera/microphone is connected and that the app has permission to use it in Windows privacy settings.';
-      alert(`Cannot access ${type === 'video' ? 'camera/microphone' : 'microphone'}: ${detail}`);
-      return null;
-    });
-    if (!stream) return;
-    startCall(peer.uid, peer.profile?.name || 'User', type, stream, peer.profile?.avatar);
+    // In Electron mode the call window captures its own stream; no pre-capture needed.
+    // In non-Electron fallback the stream is captured inside startCall() itself.
+    startCall(peer.uid, peer.profile?.name || 'User', type, peer.profile?.avatar);
   };
 
   if (!activeChat || !chatId) {

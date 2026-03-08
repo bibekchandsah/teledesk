@@ -37,6 +37,8 @@ import CallScreen from './pages/CallScreen';
 import IncomingCallModal from './pages/IncomingCallModal';
 import CallHistoryPage from './pages/CallHistoryPage';
 import BookmarksPage from './pages/BookmarksPage';
+import CallWindowPage from './pages/CallWindowPage';
+import IncomingCallWindowPage from './pages/IncomingCallWindowPage';
 import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
 
@@ -50,9 +52,37 @@ const AppInner: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isPopupWindow = location.pathname.startsWith('/popup');
+  const isCallWindow = location.pathname.startsWith('/call-window');
+  const isIncomingCallWindow = location.pathname.startsWith('/incoming-call');
 
   // Apply theme immediately (before first paint)
   document.documentElement.setAttribute('data-theme', theme);
+
+  // ─── Standalone call window (bypass auth entirely) ───────────────────────
+  if (isCallWindow) {
+    return (
+      <SocketProvider>
+        <div style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+          <Routes>
+            <Route path="/call-window" element={<CallWindowPage />} />
+            <Route path="*" element={<CallWindowPage />} />
+          </Routes>
+        </div>
+      </SocketProvider>
+    );
+  }
+
+  // ─── Incoming call notification window (bypass auth entirely) ────────────
+  if (isIncomingCallWindow) {
+    return (
+      <div style={{ height: '100vh', overflow: 'hidden' }}>
+        <Routes>
+          <Route path="/incoming-call" element={<IncomingCallWindowPage />} />
+          <Route path="*" element={<IncomingCallWindowPage />} />
+        </Routes>
+      </div>
+    );
+  }
 
   // Failsafe: if still loading after 8s, unblock the UI
   useEffect(() => {
@@ -90,6 +120,30 @@ const AppInner: React.FC = () => {
       <Routes>
         <Route path="*" element={<LoginPage />} />
       </Routes>
+    );
+  }
+
+  // ─── Standalone call window ──────────────────────────────────────────────
+  if (isCallWindow) {
+    return (
+      <div style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+        <Routes>
+          <Route path="/call-window" element={<CallWindowPage />} />
+          <Route path="*" element={<CallWindowPage />} />
+        </Routes>
+      </div>
+    );
+  }
+
+  // ─── Incoming call notification window ───────────────────────────────────
+  if (isIncomingCallWindow) {
+    return (
+      <div style={{ height: '100vh', overflow: 'hidden' }}>
+        <Routes>
+          <Route path="/incoming-call" element={<IncomingCallWindowPage />} />
+          <Route path="*" element={<IncomingCallWindowPage />} />
+        </Routes>
+      </div>
     );
   }
 
@@ -203,9 +257,9 @@ const AppInner: React.FC = () => {
             </Routes>
           </div>
 
-          {/* Overlays */}
-          {activeCall && <CallScreen />}
-          {incomingCall && <IncomingCallModal />}
+          {/* Overlays — shown only as fallback when not running in Electron */}
+          {activeCall && !window.electronAPI?.openCallWindow && <CallScreen />}
+          {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal />}
         </div>
       </CallProvider>
     </SocketProvider>

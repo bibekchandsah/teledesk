@@ -188,22 +188,188 @@ chats with unread messages:
     Unread badge — stacked directly below the timestamp on the right side
 select messaages
 allow user to send message themself too: search, forward 
-add saved message page where user can forward messages to saved message page
+
+
+add saved message page where user can forward messages to saved message page:
+    Bookmark store: (src/store/bookmarkStore.ts) — Zustand store that persists bookmarks to localStorage. Supports addBookmark, removeBookmark, and isBookmarked.
+    Bookmarks page: (src/pages/BookmarksPage.tsx) — Full page showing all saved messages with:
+        Message preview (text, images, files, calls)
+        Source chat name and sender
+        "Saved on" date
+        Search/filter bar
+        Remove button per bookmark
+    Message context menu bookmark action: (src/components/MessageBubble.tsx) — Right-clicking any message shows:
+        "Save to bookmarks" — saves the message with a bookmark icon
+        "Remove bookmark" — shown in accent color if already bookmarked (using BookmarkCheck icon)
+    "Saved Messages" in forward modal (src/pages/ChatWindow.tsx) — When forwarding a message, "Saved Messages" appears as the first entry at the top of the chat list with a Bookmark icon. Selecting it and pressing Forward saves the message(s) directly to your bookmarks instead of sending to a chat.
+UI Features
+    Feature →	Details
+    Message bubbles →	Uses the same MessageBubble component as chat — your own notes appear on the right, forwarded/bookmarked messages on the left
+    Date separators →	Same "Today / Yesterday / Mon, Mar 7" pills between day groups
+    Source label →	Shows "from [Chat Name]" above bookmarked messages from other chats
+    Pinned messages banner →	Cycle through pinned saved messages, scroll-to-highlight on click
+    Search →	Full-text search with ↑↓ navigation, match counter, highlight
+    Scroll arrows →	Scroll-to-top / scroll-to-bottom buttons appear when needed
+    Auto-scroll →	Jumps to bottom when you add a new note
+Input & Sending
+    Feature →	Details
+    Text note input →	Auto-resizing textarea, Enter to send, Shift+Enter for newline
+    File/image attachment →	Full upload via Firebase Storage (same as regular chat)
+    Reply →	Reply to any saved message — shows quote bar and links quote in bubble
+Context Menu (right-click any message)
+    Feature →	Details
+    Reply →	Start a threaded reply to that message
+    Copy →	Copy text content
+    Forward →	Forward to any real chat (opens forward modal)
+    Pin / Unpin →	Pin within saved messages
+    Edit →	Edit notes you typed yourself (not bookmarked messages)
+    Remove bookmark / Delete →	Removes the entry from saved messages
+Selection Mode
+    Feature →	Details
+    Drag-to-select →	Click and drag across messages to select a range
+    Checkboxes →	Individual or bulk selection
+    Bulk delete →	Remove all selected entries
+    Bulk copy →	Copy all selected text to clipboard
+    Bulk forward →	Forward selected messages to a real chat
+    Bulk pin/unpin →	Toggle pins for all selected
+Data Persistence
+    All entries stored in localStorage under teledesk_saved_entries
+    Automatic migration from old bookmark format on first load
+    Notes you type, bookmarked messages from chats, and file attachments all stored in one unified chronological feed
+
+
 during call they can chat too in right sidebar
-allow user to increase sidebar width
-    State	Mobile behaviour
-    Sidebar open, no chat	Sidebar fills screen (CSS slide), placeholder hidden behind it ✓
-    Sidebar toggled off, no chat	.sidebar-hidden class overrides translateX(100%) → main area slides into view showing the placeholder ✓
-    Chat open (any)	Chat window fills screen via .has-chat CSS ✓
-call profile with center and preview 
+
+
+
+allow user to increase sidebar width in ongoing call window
+    Resizable sidebar — a 5px drag handle sits between the video area and the chat panel. Dragging it left/right resizes the panel between 280px and 700px. The handle turns indigo on hover to hint it's draggable.
+    
+allow user to resize left sidebar width of chat page
+    drag handler. A 5px invisible drag handle sits between the sidebar and the main chat area — hover turns it accent-colored, and dragging it resizes the sidebar between 200px and 600px.
+
+Disabled call buttons — ChatWindow now reads activeCall from useCallStore. When you're in a call, both the voice and video call header buttons get disabled, opacity: 0.35, cursor: not-allowed, and their title changes to "Already in a call".
+
+allow user to toggle chat window when user click chat icon in left nav icon
+    clicking it while already on /chats can be intercepted
+    If you're already on /chats: clicking toggles the chat sidebar open/closed
+    If you're on another page: navigates to /chats and ensures the sidebar opens
+    The button shows as active when on /chats AND the sidebar is open
+    ChatListPage:
+        The ChatSidebar and its resize handle are wrapped in {sidebarOpen && ...} — when toggled off, the sidebar fully collapses and the main chat area expands to fill the whole width
+
+select a chat to start messaging:
+    On mobile (≤768px) the "Select a chat to start messaging" placeholder now gets display: none via the .chat-no-chat-placeholder CSS class, so the sidebar fills the screen properly when no chat is open. On desktop it remains fully visible as before.
+    State →	Mobile behaviour
+    Sidebar open, no chat →	Sidebar fills screen (CSS slide), placeholder hidden behind it ✓
+    Sidebar toggled off, no chat →	.sidebar-hidden class overrides translateX(100%) → main area slides into view showing the placeholder ✓
+    Chat open (any)  →	Chat window fills screen via .has-chat CSS ✓
+
+redesign UI of editing text:
+    Right-clicking "Edit message" (or selecting a message → edit from the toolbar) sets editingMsg and pre-fills the input with the current text
+    An "Edit message" bar appears above the input with a pencil icon, the original text preview, and an ✕ to cancel — same pattern as the reply bar
+    Pressing Enter (or clicking Send) saves the edit; Escape cancels and clears the input
+    The inline textarea inside the message bubble is completely removed — the bubble always shows the plain message text
+
+the input box to auto-focus when editing or replying starts
+when a user selects a chat, the input box is auto-focus
+
+The Archive icon in the nav now only appears when archivedChatIds.length > 0. As soon as a user archives a chat the icon shows up; when they unarchive all chats it disappears automatically.
+    Header always shows "Chats" + new group/new chat buttons (no more mode-swap)
+    Search bar is always visible
+    Archived folder row appears at the top of the chat list (below search) — only when archived chats exist — showing an archive icon, "Archived" label, count, and a chevron arrow
+    Clicking it opens the archived view inline; a "← Archived Chats" back row at the top lets you return to the normal list
+    The Archive nav icon in the sidebar still works too (but is now hidden when no archived chats exist, per the previous change)
+Mobile (≤768px):
+    Search bar + Archived row start hidden (collapsed, invisible)
+    Pull down / scroll up → slides in with smooth transition (max-height + opacity)
+    Scroll down into the chat list → collapses back out of sight
+    Typing in search or switching views forces it visible again
+    The Archive icon is now hidden on mobile (≤768px) via
+Desktop (>768px):
+    The sidebar-topbar CSS only has overflow: hidden — the mobile collapse rules are inside the media query and don't apply, so the bar is always fully visible
+
+before receiving call profile with center and preview 
+    Avatar/profile picture increased to 90px and centered with two concentric pulsing rings around it (staggered animation) so it's visually prominent
+dafter receiving call
+    Center the avatar — add justifyContent: 'center' to the audio call placeholder
+    Add a sound/volume bar graph below the duration using the remoteStream's audio levels via AnalyserNode
+    Audio volume visualizer — Added a useEffect that:
+        Creates an AudioContext + AnalyserNode connected to remoteStream when the call connects
+        Runs a requestAnimationFrame loop sampling frequency data (fftSize 64) into 7 bars
+        Cleans up the AudioContext and animation frame on unmount / stream change
+    The 7 bars render below the duration text (only when status === 'active'). Each bar's height is proportional to that frequency bucket's volume (4px minimum so they're always visible), and they pulse indigo (#6366f1) when the peer is speaking, or slate (#475569) when silent.
+
+
 allow user to change camera & microphone during calling
+    Settings → Audio & Microphone section (new)
+        On open, it requests mic permission so device labels are populated, then lists all audioinput devices in a dropdown
+        Choosing a device saves its deviceId to localStorage and the store instantly
+    WebRTC — getLocalStream now reads selectedMicId from localStorage and passes it as { deviceId: { exact: id } } to getUserMedia, so the next call will use whichever mic you picked
+
+    Device picker chevrons on the call bar (like Telegram) — a small ▲ button appears in the bottom-right corner of the mic button (and camera button for video calls) whenever more than one device is available. Clicking it pops up a list of all detected microphones/cameras with a ✓ next to the currently active one. Clicking any device in the list switches it instantly.
+    Live track switching (switchMicrophone / switchCamera) — uses RTCPeerConnection.getSenders().replaceTrack() under the hood, so the other person hears/sees the new device immediately without the call dropping or renegotiating.
+    The Settings mic picker still works as before — it persists the preference to localStorage and the call picks it up on the next dial.
+
+    Camera chevron shows with 1 device — condition changed from camDevices.length > 1 to >= 1
+    Dropdown never clips at window edges — menu uses position: fixed with coordinates calculated from getBoundingClientRect(), clamped so it stays at least 8px inside the viewport on both sides
+    Long names truncated to 4 words + "..." — truncateLabel() splits on whitespace and trims, and each item also has a title={raw} tooltip showing the full name on hover
+
+    in microphone list also show the available speaker list and user can choose from their for sound output
+    Position computed at click time: getBoundingClientRect() is now called synchronously inside the chevron click handler (openMicMenu/openCamMenu) and stored in state — no render-time calculation, no flicker.
+    Speaker output section: The mic chevron dropdown now shows two sections:
+        Microphone — all audioinput devices
+        Speaker — all audiooutput devices (with a divider between them)
+    Selecting a speaker calls HTMLAudioElement.setSinkId(deviceId) on the hidden audio element and persists the choice to localStorage.
+
+
 screen share during call
+    webrtcService.ts
+        startScreenShare(onEnded?) — calls getDisplayMedia, replaces the video track sent to the remote peer, swaps the camera track in localStream for the screen track (so the local preview also shows the screen), and stores the original camera track for restoration. When the user clicks the browser's native "Stop sharing" button, onEnded is invoked so the UI state stays in sync.
+        stopScreenShare() — stops the screen tracks, restores the saved camera track (or re-acquires the camera if needed), and replaces the track in the peer connection.
+    CallControls.tsx
+        Added Monitor/MonitorOff icons from lucide-react.
+        New props: isScreenSharing? and onToggleScreenShare?.
+        A new button appears (video calls only, between GridToggle and Chat) — amber background when active (#f59e0b), dimmed when inactive.
+    CallScreen.tsx
+        Imports startScreenShare / stopScreenShare.
+        New isScreenSharing state.
+        handleToggleScreenShare — starts/stops screen share and keeps state updated, including when the user stops via the browser's native UI.
+        Passes isScreenSharing and onToggleScreenShare to <CallControls>.
+    electron/main.ts
+        Imported desktopCapturer from Electron
+        Added get-desktop-sources IPC handler — calls desktopCapturer.getSources() and returns serializable source objects (id, name, thumbnail dataURL, appIconURL)
+        Added setDisplayMediaRequestHandler as a fallback (auto-picks primary screen if the renderer somehow calls getDisplayMedia directly)
+        Added fetchWindowIcons: true to desktopCapturer.getSources(). This tells Electron to enumerate every individual window separately (instead of grouping tabs/pages under a single entry like "Visual Studio Code with 2 more pages"), and fetches each window's app icon.
+    electron/preload.ts
+        Exposed getDesktopSources(opts?) via contextBridge — calls ipcRenderer.invoke('get-desktop-sources', ...)
+        Added DesktopSource and updated ElectronAPI TypeScript interfaces
+    components/ScreenPickerModal.tsx (new)
+        Portal-based modal with tabs ("Entire Screen" / "Window")
+        Fetches sources via window.electronAPI.getDesktopSources() on mount
+        Thumbnail grid — click to select
+        Indigo highlight on hover, cancel button, loading state
+        Removed the overflow: hidden / textOverflow: ellipsis / whiteSpace: nowrap that was clipping names. The label now uses wordBreak: 'break-word' + whiteSpace: 'normal' + lineHeight: 1.4 so each window name wraps inside its own tile. The app icon is also aligned to flex-start so it stays at the top of the text when it wraps.
+        Auto-refresh every 2 seconds — a setInterval polls getDesktopSources silently while the modal is open. When you open or close a window, it appears/disappears within 2 seconds without any manual action. The interval is cleared when the modal unmounts.
+        Manual refresh button — a RefreshCw icon in the header lets you force an immediate refresh. It spins once while the fetch is in progress.
+        Live count badges on the tabs — shows how many screens/windows are currently detected, updates automatically with polling.
+    services/webrtcService.ts
+        startScreenShare(onEnded?, extStream?) — accepts a pre-acquired stream (for the Electron path) instead of always calling getDisplayMedia
+    pages/CallScreen.tsx
+        Added showScreenPicker state
+        handleToggleScreenShare now forks: Electron → show ScreenPickerModal; Browser → getDisplayMedia
+        handleScreenPickerSelect(sourceId) builds the stream with Chromium's chromeMediaSource: 'desktop' constraint and passes it to startScreenShare
+        Renders <ScreenPickerModal> when showScreenPicker is true
+    either in voice call or it's video call user can share their screen
+
+
+
 incoming call and outgoing call in separate window
-lock chat for specific user
 react messaages
+message info of user profile
+lock chat for specific user
 set app lock & if forgot enter registered email and verify it with link to get code
 show logged in devices
-message info of user profile
 
 
 when i open chat in new during call then it don't show call button disabled
@@ -212,6 +378,7 @@ user B receives message double tick
 
 
 calling logic
+while calling both user sees eachother profile
 if user a call user b and user b is online then show ringing
 if user a call user b and user b is offline then show calling
 if user a call user b and user b is offline but in 0-30 interval user b become online then show calling -> ringing (apply effect in realtime)
@@ -222,16 +389,91 @@ if user a call user b and user b has minimized the window then show the window o
    
 
 when user mouse is idle for 3 second then hide the call controls like microphone, camera, message, end call icon & duration in animated way and show again when cursor is moved
+    3-second idle timer — a useEffect attaches a mousemove listener to window. Every mouse move calls showAndReset() which immediately sets controlsVisible = true and restarts the 3-second setTimeout. When the timer fires, controlsVisible becomes false.
+    Animate out (hide) — controls slide down translateY(+20px) and fade to opacity: 0 over 400ms. The duration pill slides up translateY(-12px) and fades out.
+    Animate in (show) — the reverse plays immediately when the mouse moves.
+    pointerEvents: 'none' while hidden prevents invisible buttons from being accidentally clicked.
+
 switch you and caller camera to full screen
+    Conditionally swap which stream goes full-screen vs PiP, with a smooth CSS transition
+    Swap behaviour:
+        localIsMain state (default false = remote is full-screen, you are PiP — the normal view)
+        The full-screen slot and PiP slot read from the same two streams, just conditionally swapped
+        Clicking the PiP div toggles localIsMain, instantly swapping both views
+    Visual feedback on the PiP:
+        On hover: border turns indigo, box shadow glows indigo
+        A "Swap" label fades in at the center of the PiP chip on hover (CSS .pip-swap-hint)
+        cursor: pointer so it's clear the PiP is clickable
+        overflow: hidden keeps the video clipped to the rounded border
+    Stream props are correct after swap:
+        muted and mirror follow the local stream wherever it is (full-screen or PiP), so there's never echo feedback or a mirrored remote feed
+
 drag pip camera preview to anywhere on the screen
+    pipPos state — stores { top, left } once the user starts dragging; null means use the default bottom-right position
+    pipDragRef — records the mouse start position and original PiP position on mouseDown, so delta-dragging works correctly
+    pipMovedRef — a boolean set to true after the cursor moves more than 4px; the onClick handler only fires the swap when pipMovedRef.current === false, so a drag never triggers a swap
+    position: 'fixed' — uses top/left instead of bottom/right, works independently of any parent transform
+    Clamped to viewport — Math.max/min keeps the PiP fully on screen regardless of where it's dragged
+    cursor: 'grab' — gives clear visual feedback that the chip is draggable
+
 make you camera as circle, rectangle, hide to side with arrow showing
+    Three-dot handle (···)
+        Always visible at the bottom-center of the PiP (adjusts position for circle mode)
+        Semi-transparent dark pill background so it's subtle but always accessible
+        stopPropagation on mouseDown/click so it never triggers drag or swap
+    Menu (appears above the dots on hover)
+        Circle view / Rectangle view — whichever is active gets a ✓ checkmark and indigo color
+        A divider, then Hide view
+        Shape transition is animated with transition: border-radius 0.35s ease so the flip from rectangle → circle is a smooth morph
+    Circle mode
+        PiP outer container becomes 120×120, the inner video clip layer gets borderRadius: '50%' with overflow: hidden — the video is cleanly clipped to a circle
+        The border/shadow stay on the clip layer, so the circle border looks clean
+    Hide / Reveal
+        Hiding renders a slim › tab button at the same position (right edge tab style: border-radius: 0 8px 8px 0, no left border) so it's subtle but findable
+        Clicking it sets pipHidden = false and the PiP reappears at the same position
+        Computes pipCenterX = pos.left + PIP_W / 2 and checks if it's past the screen midpoint
+        Right side → tab sticks to right: 0, rounded on the left side (border-radius: 8px 0 0 8px), shows ‹ (points left, indicating the pip is off to the right)
+        Left side → tab sticks to left: 0, rounded on the right side (border-radius: 0 8px 8px 0), shows › (points right, indicating the pip is off to the left)
+        The top is still aligned to the vertical center of where the PiP was, so it naturally tracks the PiP's row even after dragging it up or down
+
 allow user to toggle to grid and nomal where sender and receiver are half half on screen
-in microphone list also show the available speaker list and user can choose from their for sound output
-allow user to switch to video call mode form voice call mode and from voice call mode to video call mode
-allow user to resize pip camera
+    Two full-height panels side by side filling the video area
+    gridSplit state (default 50%) controls left panel width; right takes flex: 1
+    Draggable divider — 6px wide, clamped to 20%–80%, glows indigo on hover. handleGridResizeMouseDown computes percentage from mouse position relative to the container rect
+    ⇄ swap button centered on the divider — clicking it toggles gridSwapped, exchanging which side shows local vs remote
+    Name label chips in top-left of each panel
+    muted/mirror props follow the local stream whichever side it's on
+    Switching back to PiP mode restores the previous pip+fullscreen layout exactly as it was
+
+    VideoStream now accepts objectFit?: 'cover' | 'contain' (default 'cover'), which is passed directly to the <video> element's CSS
+    Grid panels use objectFit="contain" — the browser CSS engine constrains the video to its native camera aspect ratio (typically 16:9 or 4:3) inside whatever panel size exists. If the panel is too wide or too narrow, neutral black letterbox/pillarbox bars fill the gaps. This is the same behaviour as Google Meet's tiled view
+    Full-screen and PiP views keep objectFit='cover' (unchanged) — they fill their container and crop, which is the right choice for those layouts
+    The panel div gets backgroundColor: '#000' so the letterbox areas are black, not the dark-blue call background
+
+    1. PiP aspect ratio on window resize
+    A useEffect listens for window.resize events and clamps pipPos to keep the PiP fully on-screen as the window size changes. The clamp uses the correct PIP_W/PIP_H for the current shape.
+    2. PiP rectangle is now true 16:9
+    Changed from 180×120 (3:2) to 192×108 (16:9), matching the standard camera stream aspect ratio. This means the video fills the PiP container correctly with no black bars or distortion.
+    3. Touch support for grid divider resize
+    handleGridResizeTouchStart mirrors the mouse handler but uses TouchEvent / ev.touches[0].clientX. The divider now has both onMouseDown and onTouchStart. touchmove is registered as passive: true for smooth scrolling performance on mobile.
+    4. Touch drag for PiP
+    handlePipTouchStart mirrors handlePipMouseDown for touch. The PiP div gets both onMouseDown and onTouchStart, so finger-dragging works the same as mouse-dragging, including the 4px threshold that distinguishes a tap (swap) from a drag
+
+allow user to resize pip camera from every corner respective to position by dragging border radius
+    Circle constrains to square — when resizing a circle PiP, width and height are locked equal so it stays perfectly round.
 maintain aspect ratio of full screen camera while resizing window
+    The full-screen camera now uses objectFit="contain" — the video will always show at its native aspect ratio (e.g. 16:9), letterboxing with a black background on the sides or top/bottom as the window is resized, rather than cropping to fill the container.
+
+allow user to switch to video call mode form voice call mode and from voice call mode to video call mode
+    Voice → Video (enable camera):
+        A camera icon button now appears in voice calls (previously hidden). Clicking it calls enableCallVideo(), which acquires the camera, adds a video track to the peer via addTrack + forceRenegotiation. User A immediately sees their own camera preview. isLocalVideoEnabled = true triggers effectiveIsVideo = true, switching A's layout to the full video mode (PiP, grid view, etc.).
+    The other side (B) auto-upgrades:
+        B receives the renegotiation offer and handles it via processRenegotiationOffer. The new video track is merged into firstRemoteStream by the existing _pc.ontrack listener. B's remoteHasVideo becomes true, so B's effectiveIsVideo = true, and B automatically switches to the video layout showing A's camera — no manual action required. B can also click the camera button to send their own video back.
+    Video → Voice (disable camera):
+        Clicking the camera button again calls disableCallVideo(), which stops the camera track, removes the video sender, and force-renegotiates. A's isLocalVideoEnabled = false. If B also has no camera, effectiveIsVideo = false for both and the layout reverts to voice mode (avatar + audio visualizer).
 
 
+logic example:
 still it don't fixed for example currently it's
 for first time: user A switch to video call mode then user B sees user A video
                 user b also switch to video call mode then user A sees user B video
@@ -245,3 +487,10 @@ we need to fix for third or n number of time issue
 
 user A switch to video call mode then user B sees user A video
 user b also switch to video call mode then user A can't sees user B video
+
+
+
+
+
+
+instead of creating new chat panal as we already has feature of "open chat in new window" can we show that in right side during call when chat is clicked so that it will include all features and no need to write same code multiple times
