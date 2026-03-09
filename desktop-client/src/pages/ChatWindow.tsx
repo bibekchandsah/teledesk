@@ -99,6 +99,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMsgs, setForwardingMsgs] = useState<Message[]>([]);
   const [forwardTargetIds, setForwardTargetIds] = useState<Set<string>>(new Set());
+  const [forwardSearch, setForwardSearch] = useState('');
   // ─── Highlighted message (scroll-to-source) ───────────────────────────────
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
   // ─── Pinned message carousel index ────────────────────────────────────────
@@ -162,6 +163,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
     setReplyingTo(null);
     setForwardingMsgs([]);
     setForwardTargetIds(new Set());
+    setForwardSearch('');
     setEditingNickname(false);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [chatId]);
@@ -520,6 +522,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
     }
     setForwardingMsgs([]);
     setForwardTargetIds(new Set());
+    setForwardSearch('');
   }, [forwardingMsgs, currentUser, addBookmark, getActiveChatName]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1775,7 +1778,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          onClick={(e) => { if (e.target === e.currentTarget) { setForwardingMsgs([]); setForwardTargetIds(new Set()); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setForwardingMsgs([]); setForwardTargetIds(new Set()); setForwardSearch(''); } }}
         >
           <div
             style={{
@@ -1795,7 +1798,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
               <span style={{ fontWeight: 600, fontSize: 15 }}>
                 Forward {forwardingMsgs.length > 1 ? `${forwardingMsgs.length} messages` : 'message'}
               </span>
-              <button onClick={() => { setForwardingMsgs([]); setForwardTargetIds(new Set()); }} style={iconBtnStyle} title="Close">
+              <button onClick={() => { setForwardingMsgs([]); setForwardTargetIds(new Set()); setForwardSearch(''); }} style={iconBtnStyle} title="Close">
                 <X size={16} />
               </button>
             </div>
@@ -1805,6 +1808,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
                 ? (forwardingMsgs[0].type !== 'text' && !forwardingMsgs[0].content ? `[${forwardingMsgs[0].type}]` : forwardingMsgs[0].content || `[${forwardingMsgs[0].type}]`)
                 : forwardingMsgs.map((m) => m.content || `[${m.type}]`).join(' · ')}
             </div>
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search chats..."
+              value={forwardSearch}
+              onChange={(e) => setForwardSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                fontSize: 13,
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
             {/* Target chat list with checkboxes */}
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
               {/* ─── Saved Messages (Bookmarks) entry ─── */}
@@ -1865,7 +1886,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
                 );
               })()}
               {chats
-                .filter((c) => c.chatId !== chatId)
+                .filter((c) => {
+                  if (c.chatId === chatId) return false;
+                  if (!forwardSearch.trim()) return true;
+                  const q = forwardSearch.toLowerCase();
+                  const isSelf = c.type === 'private' && c.members.every((m) => m === currentUid);
+                  const uid = c.type === 'private' ? (isSelf ? currentUid : c.members.find((m) => m !== currentUid)) : null;
+                  const p = uid ? userProfiles[uid] : null;
+                  const n = isSelf ? `${p?.name || 'you'} (you)` : (p?.name || c.chatId);
+                  return n.toLowerCase().includes(q);
+                })
                 .map((c) => {
                   const isSelfChat = c.type === 'private' && c.members.every((m) => m === currentUid);
                   const otherUid = c.type === 'private' ? (isSelfChat ? currentUid : c.members.find((m) => m !== currentUid)) : null;
