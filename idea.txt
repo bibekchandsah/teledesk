@@ -541,8 +541,21 @@ Use jurisdiction-specific endpoints for S3 clients: https://3ff0db8934ac81bc8cb6
 
 
 when i open chat in new during call then it don't show call button disabled
-user A send message single tick
-user B receives message double tick
+user A send message single tick & user B receives message double tick
+
+when user didn't receive message then show single tick and when user receive message then show double tick
+when user hasn't open the chat window then show single tick to user A and when user B open the chat window then show double tick to user A
+
+when user A start voice/video call then show calling status to user B and when user B receive the call then show ringing status to user A and when user B accept the call then show active status to both user and when user B reject then show call declined if ignore the call then show missed call status to user A
+
+when user closes the chat window during a call
+    If user A (caller) closes the call window:
+        User B (receiver) sees a "User A has left the call" message in the call status area, and the call ends for both users.
+        User A's client sends a "call ended" signal to the backend before closing, so the backend can notify User B immediately.
+    If user B (receiver) closes the call window:
+        User A sees a "User B has left the call" message in the call status area, and the call ends for both users.
+        User B's client sends a "call ended" signal to the backend before closing, so the backend can notify User A immediately.
+    In both cases, if the client fails to send the signal (e.g. crash or network loss), the backend detects the disconnection via WebSocket and notifies the other user accordingly.
 
 
 calling logic

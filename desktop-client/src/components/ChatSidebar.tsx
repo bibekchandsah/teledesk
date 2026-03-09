@@ -4,7 +4,7 @@ import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from './UserAvatar';
-import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon } from '../utils/formatters';
+import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon, getMessagePreviewColor } from '../utils/formatters';
 import { Chat } from '@shared/types';
 import { deleteChat as deleteChatApi } from '../services/apiService';
 import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff } from 'lucide-react';
@@ -348,8 +348,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 4 }}>
                       {chat.lastMessage ? (
                         <>
-                          <PreviewIcon msg={chat.lastMessage} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncate(getMessagePreview(chat.lastMessage), 40)}</span>
+                          <PreviewIcon msg={chat.lastMessage} color={getMessagePreviewColor(chat.lastMessage) ?? undefined} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: getMessagePreviewColor(chat.lastMessage) ?? undefined }}>{truncate(getMessagePreview(chat.lastMessage), 40)}</span>
                         </>
                       ) : 'No messages'}
                     </span>
@@ -445,7 +445,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                       gap: 4,
                       fontSize: 13,
                       fontWeight: unread > 0 ? 600 : 400,
-                      color: unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      color: chat.lastMessage ? (getMessagePreviewColor(chat.lastMessage) ?? (unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)')) : 'var(--text-secondary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',

@@ -89,6 +89,22 @@ export const getMessagePreview = (msg: {
 };
 
 /**
+ * Returns a CSS color override for the message preview, or null for default.
+ * Red for missed / declined / cancelled calls.
+ */
+export const getMessagePreviewColor = (msg: {
+  type: string;
+  callStatus?: string;
+}): string | null => {
+  if (msg.type === 'call' &&
+    (msg.callStatus === 'missed' || msg.callStatus === 'no_answer' ||
+     msg.callStatus === 'declined' || msg.callStatus === 'cancelled')) {
+    return '#ef4444';
+  }
+  return null;
+};
+
+/**
  * Returns a lucide icon key for the message type, or null for plain text.
  */
 export const getMessagePreviewIcon = (msg: {
