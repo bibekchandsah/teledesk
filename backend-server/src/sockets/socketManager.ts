@@ -277,6 +277,22 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       });
     });
 
+    socket.on(SOCKET_EVENTS.CALL_MUTE_CHANGED, (payload: { to: string; callId: string; isMuted: boolean }) => {
+      io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.CALL_MUTE_CHANGED, {
+        callId: payload.callId,
+        from: uid,
+        isMuted: payload.isMuted,
+      });
+    });
+
+    socket.on(SOCKET_EVENTS.CALL_VIDEO_CHANGED, (payload: { to: string; callId: string; isVideoOff: boolean }) => {
+      io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
+        callId: payload.callId,
+        from: uid,
+        isVideoOff: payload.isVideoOff,
+      });
+    });
+
     // ─── Active Status Visibility ──────────────────────────────────────────
     socket.on(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, async (payload: { showActiveStatus: boolean }) => {
       const newVal = payload.showActiveStatus === true;

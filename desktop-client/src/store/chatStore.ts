@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Chat, Message, User } from '@shared/types';
-import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi } from '../services/apiService';
+import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi, updateMyNicknames as updateMyNicknamesApi } from '../services/apiService';
 
 // ─── localStorage helpers for unread counts ────────────────────────────────
 const UNREAD_KEY = 'teledesk_unread_counts';
@@ -9,6 +9,16 @@ const loadUnreadCounts = (): Record<string, number> => {
 };
 const saveUnreadCounts = (counts: Record<string, number>) => {
   try { localStorage.setItem(UNREAD_KEY, JSON.stringify(counts)); } catch {}
+};
+
+// ─── localStorage helpers for nicknames ──────────────────────────────────────
+// Kept as a fast local cache; authoritative copy lives in Supabase.
+const NICKNAMES_KEY = 'teledesk_nicknames';
+const loadNicknames = (): Record<string, string> => {
+  try { return JSON.parse(localStorage.getItem(NICKNAMES_KEY) || '{}'); } catch { return {}; }
+};
+const saveNicknamesCache = (nicknames: Record<string, string>) => {
+  try { localStorage.setItem(NICKNAMES_KEY, JSON.stringify(nicknames)); } catch {}
 };
 
 interface ChatState {
@@ -44,6 +54,9 @@ interface ChatState {
   archivedChatIds: string[];
   toggleArchiveChat: (chatId: string) => void;
   setArchivedChatIds: (ids: string[]) => void;
+  nicknames: Record<string, string>;
+  setNicknames: (nicknames: Record<string, string>) => void;
+  setNickname: (uid: string, nickname: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -57,6 +70,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   unreadCounts: loadUnreadCounts(),
   pinnedChatIds: [],
   archivedChatIds: [],
+  nicknames: loadNicknames(),
 
   setChats: (chats) => set((state) => {
     // Seed unread from chat.unreadCount for chats not yet tracked in memory
@@ -238,4 +252,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('[archiveChat]', err);
     }
   },
+
+  setNicknames: (nicknames) => {
+    saveNicknamesCache(nicknames);
+    set({ nicknames });
+  },
+
+  setNickname: (uid, nickname) => {
+    const trimmed = nickname.trim();
+    const prev = get().nicknames;
+    const updated = { ...prev };
+    if (trimmed) {
+      updated[uid] = trimmed;
+    } else {
+      delete updated[uid];
+    }
+    set({ nicknames: updated });
+    saveNicknamesCache(updated);
+    updateMyNicknamesApi(updated).catch((err) => {
+      set({ nicknames: prev });
+      saveNicknamesCache(prev);
+      console.error('[setNickname]', err);
+    });
+  },
+
 }));

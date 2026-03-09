@@ -6,6 +6,7 @@ export const showNotification = (payload: {
   title: string;
   body: string;
   icon?: string;
+  chatId?: string;
 }): void => {
   // Electron context
   if (window.electronAPI?.showNotification) {

@@ -14,6 +14,7 @@ type UserRow = {
   show_active_status: boolean;
   pinned_chat_ids: string[];
   archived_chat_ids: string[];
+  nicknames: Record<string, string> | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -27,6 +28,7 @@ const rowToUser = (r: UserRow): User => ({
   showActiveStatus: r.show_active_status,
   pinnedChatIds: r.pinned_chat_ids ?? [],
   archivedChatIds: r.archived_chat_ids ?? [],
+  nicknames: r.nicknames ?? {},
 });
 
 export const upsertUser = async (uid: string, data: Partial<User>): Promise<User> => {
@@ -48,6 +50,7 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       show_active_status: true,
       pinned_chat_ids: [],
       archived_chat_ids: [],
+      nicknames: {},
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -102,6 +105,11 @@ export const updatePinnedChats = async (uid: string, pinnedChatIds: string[]): P
 export const updateArchivedChats = async (uid: string, archivedChatIds: string[]): Promise<string[]> => {
   await supabase.from('users').update({ archived_chat_ids: archivedChatIds }).eq('uid', uid);
   return archivedChatIds;
+};
+
+export const updateNicknames = async (uid: string, nicknames: Record<string, string>): Promise<Record<string, string>> => {
+  await supabase.from('users').update({ nicknames }).eq('uid', uid);
+  return nicknames;
 };
 
 export const updatePresence = async (uid: string, status: 'online' | 'offline'): Promise<void> => {

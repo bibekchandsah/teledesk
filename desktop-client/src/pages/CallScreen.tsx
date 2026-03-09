@@ -10,6 +10,8 @@ import UserAvatar from '../components/UserAvatar';
 import ScreenPickerModal from '../components/ScreenPickerModal';
 import { formatDuration } from '../utils/formatters';
 import { toggleAudio, toggleVideo, switchMicrophone, switchCamera, startScreenShare, stopScreenShare, enableCallVideo, disableCallVideo } from '../services/webrtcService';
+import { getSocket, sendCallMuteChanged, sendCallVideoChanged } from '../services/socketService';
+import { SOCKET_EVENTS } from '@shared/constants/events';
 
 const BORDER_ZONE = 12;
 
@@ -45,7 +47,7 @@ const CallScreen: React.FC = () => {
     useCallStore();
   const { endActiveCall } = useCallContext();
   const { currentUser } = useAuthStore();
-  const { chats } = useChatStore();
+  const { chats, nicknames } = useChatStore();
   const [showCallChat, setShowCallChat] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -63,6 +65,9 @@ const CallScreen: React.FC = () => {
   const [showScreenPicker, setShowScreenPicker] = useState(false);
   // Tracks whether the user has enabled their camera during a voice call (upgrade to video)
   const [isLocalVideoEnabled, setIsLocalVideoEnabled] = useState(false);
+  // Tracks remote peer's mute/video-off status (received via socket)
+  const [peerIsMuted, setPeerIsMuted] = useState(false);
+  const [peerIsVideoOff, setPeerIsVideoOff] = useState(false);
   const gridResizingRef = useRef(false);
 
   // Clamp pipPos when window is resized so PiP never goes off-screen
@@ -177,6 +182,32 @@ const CallScreen: React.FC = () => {
     };
   }, []);
 
+  // Listen for remote peer's mute / video-off status changes
+  useEffect(() => {
+    // Reset statuses whenever the call changes
+    setPeerIsMuted(false);
+    setPeerIsVideoOff(false);
+
+    const socket = getSocket();
+    if (!socket || !activeCall) return;
+
+    const handleMuteChanged = (data: { callId: string; from: string; isMuted: boolean }) => {
+      if (data.callId !== activeCall.callId) return;
+      setPeerIsMuted(data.isMuted);
+    };
+    const handleVideoChanged = (data: { callId: string; from: string; isVideoOff: boolean }) => {
+      if (data.callId !== activeCall.callId) return;
+      setPeerIsVideoOff(data.isVideoOff);
+    };
+
+    socket.on(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleMuteChanged);
+    socket.on(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleVideoChanged);
+    return () => {
+      socket.off(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleMuteChanged);
+      socket.off(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleVideoChanged);
+    };
+  }, [activeCall]);
+
   if (!activeCall) return null;
 
   const isVideo = activeCall.type === 'video';
@@ -196,10 +227,11 @@ const CallScreen: React.FC = () => {
   const effectiveIsVideo = localHasVideo || remoteHasVideo;
   const currentUid = currentUser?.uid ?? '';
   const peerUid = activeCall.callerId === currentUid ? activeCall.receiverId : activeCall.callerId;
-  const peerName =
+  const peerRawName =
     activeCall.callerId === currentUid
       ? (activeCall.receiverName || activeCall.receiverId)
       : activeCall.callerName;
+  const peerName = nicknames[peerUid] || peerRawName;
   const peerAvatar =
     activeCall.callerId === currentUid
       ? activeCall.receiverAvatar
@@ -217,6 +249,9 @@ const CallScreen: React.FC = () => {
     const newMuted = !isMuted;
     setMuted(newMuted);
     toggleAudio(!newMuted);
+    if (activeCall.status === 'active') {
+      sendCallMuteChanged(peerUid, activeCall.callId, newMuted);
+    }
   };
 
   const handleToggleVideo = async () => {
@@ -225,17 +260,22 @@ const CallScreen: React.FC = () => {
       const newOff = !isVideoOff;
       setVideoOff(newOff);
       try { await toggleVideo(!newOff); } catch (e) { console.error('[Call] toggleVideo', e); }
+      if (activeCall.status === 'active') {
+        sendCallVideoChanged(peerUid, activeCall.callId, newOff);
+      }
     } else {
       // Voice call: upgrade/downgrade to video
       if (isLocalVideoEnabled) {
         try {
           await disableCallVideo();
           setIsLocalVideoEnabled(false);
+          if (activeCall.status === 'active') sendCallVideoChanged(peerUid, activeCall.callId, true);
         } catch (e) { console.error('[Call] disableCallVideo', e); }
       } else {
         try {
           await enableCallVideo();
           setIsLocalVideoEnabled(true);
+          if (activeCall.status === 'active') sendCallVideoChanged(peerUid, activeCall.callId, false);
         } catch (e) { console.error('[Call] enableCallVideo', e); }
       }
     }
@@ -753,10 +793,40 @@ const CallScreen: React.FC = () => {
               ))}
             </div>
           )}
+          {/* Local mute status */}
+          {isMuted && activeCall.status === 'active' && (
+            <div style={{ fontSize: 13, color: '#f87171', background: 'rgba(239,68,68,0.15)', padding: '4px 12px', borderRadius: 20, marginTop: 2 }}>
+              You are muted
+            </div>
+          )}
+          {/* Remote mute status */}
+          {peerIsMuted && activeCall.status === 'active' && (
+            <div style={{ fontSize: 13, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '4px 12px', borderRadius: 20, marginTop: 2 }}>
+              {peerName} is muted
+            </div>
+          )}
         </div>
       )}
 
       {/* Local Video (PiP) is now rendered inside the isVideo branch above */}
+      {/* Peer info overlay (video mode) */}
+      {effectiveIsVideo && (
+        <div style={{
+          position: 'absolute', top: 16, left: 16,
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'rgba(0,0,0,0.5)',
+          borderRadius: 30,
+          padding: '4px 12px 4px 4px',
+          opacity: controlsVisible ? 1 : 0,
+          transform: controlsVisible ? 'translateY(0)' : 'translateY(-12px)',
+          transition: 'opacity 0.4s ease, transform 0.4s ease',
+          pointerEvents: 'none',
+          zIndex: 10,
+        }}>
+          <UserAvatar name={peerName} avatar={peerAvatar} size={30} />
+          <span style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 600 }}>{peerName}</span>
+        </div>
+      )}
       {/* Duration (video calls) */}
       {effectiveIsVideo && activeCall.status === 'active' && (
         <div
@@ -776,6 +846,43 @@ const CallScreen: React.FC = () => {
           }}
         >
           {formatDuration(callDuration)}
+        </div>
+      )}
+
+      {/* Mute / video-off status badges (video mode, active call) */}
+      {effectiveIsVideo && activeCall.status === 'active' && (isMuted || peerIsMuted || !localHasVideo || !remoteHasVideo) && (
+        <div style={{
+          position: 'absolute',
+          top: 56,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          zIndex: 12,
+          pointerEvents: 'none',
+        }}>
+          {isMuted && (
+            <div style={{ fontSize: 12, color: '#f87171', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+              You are muted
+            </div>
+          )}
+          {peerIsMuted && (
+            <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+              {peerName} is muted
+            </div>
+          )}
+          {!localHasVideo && (
+            <div style={{ fontSize: 12, color: '#f87171', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+              Your camera is off
+            </div>
+          )}
+          {!remoteHasVideo && (
+            <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+              {peerName}'s camera is off
+            </div>
+          )}
         </div>
       )}
 

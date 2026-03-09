@@ -32,6 +32,8 @@ export const SOCKET_EVENTS = {
   END_CALL: 'end_call',
   CALL_ENDED: 'call_ended',
   CALL_REJECTED: 'call_rejected',
+  CALL_MUTE_CHANGED: 'call_mute_changed',
+  CALL_VIDEO_CHANGED: 'call_video_changed',
   ACTIVE_STATUS_CHANGED: 'active_status_changed',
 
   // Connection

@@ -4,6 +4,7 @@ import {
   ipcMain,
   Notification,
   nativeImage,
+  net,
   shell,
   Menu,
   Tray,
@@ -11,6 +12,7 @@ import {
   desktopCapturer,
 } from 'electron';
 import path from 'path';
+import { execFileSync } from 'child_process';
 
 // ─── Keep reference to prevent garbage collection ─────────────────────────
 let mainWindow: BrowserWindow | null = null;
@@ -23,6 +25,27 @@ let pendingRelayEvents: Array<{ event: string; data: unknown }> = [];
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_DEV_SERVER_URL = 'http://localhost:5173';
+
+// Required on Windows for Toast notifications
+if (process.platform === 'win32') {
+  app.setName('TeleDesk');
+  app.setAppUserModelId('com.teledesk.app');
+}
+
+// Register our AUMID in the Windows registry so notifications show
+// the correct app name ("TeleDesk") and icon instead of the raw AUMID string.
+const registerWindowsAUMID = () => {
+  if (process.platform !== 'win32') return;
+  try {
+    const aumid = 'com.teledesk.app';
+    const iconPath = path.join(__dirname, '../assets/icon.png');
+    const regKey = `HKCU\\Software\\Classes\\AppUserModelId\\${aumid}`;
+    execFileSync('reg', ['add', regKey, '/v', 'DisplayName', '/t', 'REG_SZ', '/d', 'TeleDesk', '/f'], { stdio: 'ignore' });
+    execFileSync('reg', ['add', regKey, '/v', 'IconUri',     '/t', 'REG_SZ', '/d', iconPath,   '/f'], { stdio: 'ignore' });
+  } catch (e) {
+    console.error('[AUMID] Registry registration failed:', e);
+  }
+};
 
 // ─── Create Main Window ────────────────────────────────────────────────────
 const createWindow = () => {
@@ -127,18 +150,55 @@ const createTray = () => {
 // Desktop Notifications
 ipcMain.on(
   'show-notification',
-  (_event, payload: { title: string; body: string; icon?: string }) => {
-    if (Notification.isSupported()) {
-      const notification = new Notification({
-        title: payload.title,
-        body: payload.body,
-        silent: false,
-      });
-      notification.on('click', () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      });
-      notification.show();
+  async (_event, payload: { title: string; body: string; icon?: string; chatId?: string }) => {
+    if (!Notification.isSupported()) return;
+
+    // Fetch icon with a timeout so a slow/failed fetch never blocks the notification
+    const iconImage = await fetchAvatarAsNativeImage(payload.icon);
+
+    const showBasic = () => {
+      try {
+        const n = new Notification({
+          title: payload.title,
+          body: payload.body,
+          silent: false,
+          ...(iconImage ? { icon: iconImage } : {}),
+        });
+        n.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+        n.show();
+      } catch (e) {
+        console.error('[Notification] Failed to show:', e);
+      }
+    };
+
+    try {
+      if (process.platform === 'darwin' && payload.chatId) {
+        // macOS: native inline reply
+        const notification = new Notification({
+          title: payload.title,
+          body: payload.body,
+          silent: false,
+          hasReply: true,
+          replyPlaceholder: 'Reply...',
+          ...(iconImage ? { icon: iconImage } : {}),
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (notification as any).on('reply', (_e: unknown, reply: string) => {
+          if (reply.trim() && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('notification:reply', payload.chatId, reply.trim());
+          }
+        });
+        notification.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+        notification.show();
+      } else {
+        // Windows / Linux: standard notification with avatar as icon
+        // (toastXml requires the AUMID to be registered in the Windows registry,
+        //  which only happens in packaged builds — use regular Notification in dev)
+        showBasic();
+      }
+    } catch (e) {
+      console.error('[Notification] Platform notification failed, falling back:', e);
+      showBasic();
     }
   },
 );
@@ -210,8 +270,34 @@ ipcMain.on('open-chat-window', (_event, chatId: string) => {
   });
 });
 
+// ─── Avatar fetch helper ─────────────────────────────────────────────────
+const fetchAvatarAsNativeImage = async (url?: string): Promise<import('electron').NativeImage | null> => {
+  if (!url || !url.startsWith('http')) return null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await net.fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const img = nativeImage.createFromBuffer(buf);
+    return img.isEmpty() ? null : img;
+  } catch {
+    return null;
+  }
+};
+
 // ─── Call Window ──────────────────────────────────────────────────────────
-const createCallWindow = (initData: object) => {
+interface CallInitData {
+  callId: string;
+  callType: 'video' | 'voice';
+  isOutgoing: boolean;
+  targetUserId: string;
+  targetName?: string;
+  targetAvatar?: string;
+}
+
+const createCallWindow = (initData: CallInitData) => {
   if (callWindow && !callWindow.isDestroyed()) {
     callWindow.focus();
     return;
@@ -220,12 +306,15 @@ const createCallWindow = (initData: object) => {
 
   const encoded = encodeURIComponent(JSON.stringify(initData));
 
+  const peerName = initData.targetName || 'Call';
+  const callLabel = initData.callType === 'video' ? 'Video Call' : 'Voice Call';
+
   callWindow = new BrowserWindow({
     width: 960,
     height: 680,
     minWidth: 640,
     minHeight: 480,
-    title: 'TeleDesk – Call',
+    title: `${peerName} – ${callLabel}`,
     backgroundColor: '#0f172a',
     show: false,
     alwaysOnTop: true,
@@ -246,10 +335,25 @@ const createCallWindow = (initData: object) => {
     callWindow.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/call-window', query: { d: JSON.stringify(initData) } });
   }
 
+  // Prevent the loaded HTML page's <title> from overriding the window title
+  callWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
   callWindow.once('ready-to-show', () => {
     callWindow?.show();
     callWindow?.focus();
   });
+
+  // Set peer avatar as window icon asynchronously
+  if (initData.targetAvatar) {
+    const winRef = callWindow;
+    fetchAvatarAsNativeImage(initData.targetAvatar).then((img) => {
+      if (img && winRef && !winRef.isDestroyed()) {
+        try { winRef.setIcon(img); } catch { /* unsupported on some platforms */ }
+      }
+    });
+  }
 
   callWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(isDev ? VITE_DEV_SERVER_URL : 'file://')) {
@@ -268,12 +372,12 @@ const createCallWindow = (initData: object) => {
 // ─── Call IPC Handlers ─────────────────────────────────────────────────────
 
 // Main window asks to open call window
-ipcMain.on('call:open-window', (_e, initData: object) => {
+ipcMain.on('call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
 
 // Incoming call — open directly as the merged call window (isOutgoing: false)
-ipcMain.on('incoming-call:open-window', (_e, initData: object) => {
+ipcMain.on('incoming-call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
 
@@ -333,6 +437,8 @@ ipcMain.on('call:force-close', () => {
 
 // ─── App Lifecycle ─────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  registerWindowsAUMID();
+
   // Grant camera & microphone permissions for the renderer
   const allowedPermissions = [
     'media', 'mediaKeySystem', 'camera', 'microphone',

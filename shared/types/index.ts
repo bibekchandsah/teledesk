@@ -13,6 +13,7 @@ export interface User {
   showActiveStatus?: boolean; // if false, hides online dot from others (mutual: both must enable to see each other)
   pinnedChatIds?: string[]; // chats pinned by this user (synced across devices)
   archivedChatIds?: string[]; // chats archived by this user (synced across devices)
+  nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
 }
 
 export interface Message {

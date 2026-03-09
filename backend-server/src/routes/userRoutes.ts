@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler } from '../controllers/userController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
 
@@ -54,6 +54,13 @@ router.patch(
   '/me/archived-chats',
   [body('archivedChatIds').isArray(), handleValidationErrors],
   updateArchivedChatsHandler,
+);
+
+// PATCH /api/users/me/nicknames
+router.patch(
+  '/me/nicknames',
+  [body('nicknames').isObject(), handleValidationErrors],
+  updateNicknamesHandler,
 );
 
 // GET /api/users/search?q=...

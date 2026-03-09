@@ -34,7 +34,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   const navigateRouter = useNavigate();
   // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
   const navigate = chatIdProp ? () => {} : navigateRouter;
-  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat } =
+  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname } =
     useChatStore();
   const { currentUser } = useAuthStore();
   const { startCall } = useCallContext();
@@ -60,6 +60,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showProfileMore, setShowProfileMore] = useState(false);
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
 
@@ -160,6 +162,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
     setReplyingTo(null);
     setForwardingMsgs([]);
     setForwardTargetIds(new Set());
+    setEditingNickname(false);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [chatId]);
 
@@ -827,7 +830,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
               <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {peer.isSelf
                   ? (peer.profile?.name || currentUser?.name || 'You')
-                  : (peer.profile?.name || 'User')}
+                  : (nicknames[peer.uid] || peer.profile?.name || 'User')}
                 {peer.isSelf && (
                   <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)' }}>(You)</span>
                 )}
@@ -1563,10 +1566,74 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
               online={peer.online}
             />
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', marginBottom: 4 }}>
-                {peer.isSelf ? (peer.profile?.name || currentUser?.name || 'You') : (peer.profile?.name || 'User')}
-                {peer.isSelf && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', marginLeft: 6 }}>(You)</span>}
-              </div>
+              {/* Nickname inline edit (only for non-self private chats) */}
+              {!peer.isSelf && editingNickname ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', marginBottom: 4 }}>
+                  <input
+                    autoFocus
+                    value={nicknameInput}
+                    onChange={(e) => setNicknameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setNickname(peer.uid, nicknameInput);
+                        setEditingNickname(false);
+                      } else if (e.key === 'Escape') {
+                        setEditingNickname(false);
+                      }
+                    }}
+                    placeholder={peer.profile?.name || 'Nickname'}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      fontSize: 16,
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      outline: 'none',
+                      width: 160,
+                      textAlign: 'center',
+                    }}
+                  />
+                  <button
+                    onClick={() => { setNickname(peer.uid, nicknameInput); setEditingNickname(false); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 2, display: 'flex', alignItems: 'center' }}
+                    title="Save"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </button>
+                  <button
+                    onClick={() => setEditingNickname(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 2, display: 'flex', alignItems: 'center' }}
+                    title="Cancel"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <span>
+                    {peer.isSelf
+                      ? (peer.profile?.name || currentUser?.name || 'You')
+                      : (nicknames[peer.uid] || peer.profile?.name || 'User')}
+                  </span>
+                  {peer.isSelf && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', marginLeft: 6 }}>(You)</span>}
+                  {!peer.isSelf && (
+                    <button
+                      onClick={() => { setNicknameInput(nicknames[peer.uid] || ''); setEditingNickname(true); }}
+                      title="Edit nickname"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 2, display: 'flex', alignItems: 'center', opacity: 0.6 }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                  )}
+                  {!peer.isSelf && nicknames[peer.uid] && (
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 400 }}>({peer.profile?.name})</span>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 13, color: peer.online ? '#22c55e' : 'var(--text-secondary)', fontWeight: 500 }}>
                 {peer.isSelf
                   ? 'Your saved messages'
@@ -1638,13 +1705,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
                 <div
                   style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 100, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', overflow: 'hidden', minWidth: 190 }}
                 >
-                  <button
-                    onClick={() => { setShowProfileMore(false); navigate(`/profile/${peer.uid}`); }}
-                    style={headerCtxItemStyle}
-                  >
-                    <UserRound size={14} style={{ marginRight: 8 }} />Open full profile
-                  </button>
-                  <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
                   {activeChat && (
                     <>
                       <button
@@ -1807,9 +1867,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
               {chats
                 .filter((c) => c.chatId !== chatId)
                 .map((c) => {
-                  const otherUid = c.type === 'private' ? c.members.find((m) => m !== currentUid) : null;
+                  const isSelfChat = c.type === 'private' && c.members.every((m) => m === currentUid);
+                  const otherUid = c.type === 'private' ? (isSelfChat ? currentUid : c.members.find((m) => m !== currentUid)) : null;
                   const profile = otherUid ? userProfiles[otherUid] : null;
-                  const name = profile?.name || c.chatId;
+                  const name = isSelfChat ? `${profile?.name || 'You'} (You)` : (profile?.name || c.chatId);
                   const checked = forwardTargetIds.has(c.chatId);
                   return (
                     <button

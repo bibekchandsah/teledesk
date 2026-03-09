@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCallStore } from '../store/callStore';
 import { useCallContext } from '../context/CallContext';
+import { useChatStore } from '../store/chatStore';
 import UserAvatar from '../components/UserAvatar';
 import { getLocalStream } from '../services/webrtcService';
 import { Phone } from 'lucide-react';
@@ -8,8 +9,11 @@ import { Phone } from 'lucide-react';
 const IncomingCallModal: React.FC = () => {
   const { incomingCall } = useCallStore();
   const { acceptIncomingCall, rejectIncomingCall } = useCallContext();
+  const { nicknames } = useChatStore();
 
   if (!incomingCall) return null;
+
+  const displayName = nicknames[incomingCall.callerId] || incomingCall.callerName;
 
   const handleAccept = async () => {
     const stream = await getLocalStream(incomingCall.type).catch(() => new MediaStream());
@@ -68,13 +72,13 @@ const IncomingCallModal: React.FC = () => {
             transform: 'translate(-50%, -50%)',
           }} />
           <UserAvatar
-            name={incomingCall.callerName}
+            name={displayName}
             avatar={incomingCall.callerAvatar}
             size={90}
           />
         </div>
         <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 20 }}>
-          {incomingCall.callerName}
+          {displayName}
         </h3>
         <p style={{ margin: '0 0 28px', color: 'var(--text-secondary)', fontSize: 14 }}>
           Incoming {incomingCall.type} call...

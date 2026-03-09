@@ -5,7 +5,7 @@ import ChatSidebar from '../components/ChatSidebar';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { listenToUserChats, getOrCreatePrivateChatDirect } from '../services/firebaseService';
-import { getUserById, searchUsers, createPrivateChat } from '../services/apiService';
+import { getUserById, searchUsers, createPrivateChat, getChats } from '../services/apiService';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
 import { User } from '@shared/types';
@@ -105,6 +105,10 @@ const ChatListPage: React.FC = () => {
       const chat = await getOrCreatePrivateChatDirect(currentUser.uid, user.uid);
       chatId = chat.chatId;
     }
+    // Immediately refresh Chat list so the new chat appears in the sidebar
+    // without waiting for the Supabase realtime event.
+    const refreshed = await getChats();
+    if (refreshed.success && refreshed.data) setChats(refreshed.data);
     setShowNewChat(false);
     setSearchQuery('');
     setSearchResults([]);

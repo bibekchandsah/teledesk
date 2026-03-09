@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSocket } from '../services/socketService';
+import { getSocket, sendMessage } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import { useChatStore } from '../store/chatStore';
 import { useCallStore } from '../store/callStore';
@@ -16,7 +16,7 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, activeChat } =
+  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, activeChat, nicknames } =
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
@@ -64,12 +64,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (differentChat || windowHidden) {
         incrementUnread(message.chatId);
         showNotification({
-          title: message.senderName || 'New Message',
+          title: nicknames[message.senderId] || message.senderName || 'New Message',
           body:
             message.type === 'text'
               ? (message.content || '').slice(0, 100)
               : `Sent a ${message.type}`,
           icon: message.senderAvatar,
+          chatId: message.chatId,
         });
       }
     };
@@ -136,14 +137,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           callType: data.callType,
           isOutgoing: false,
           targetUserId: data.callerId,
-          targetName: data.callerName,
+          targetName: nicknames[data.callerId] || data.callerName,
           targetAvatar: data.callerAvatar,
         });
       }
 
       showNotification({
         title: `Incoming ${data.callType} call`,
-        body: `${data.callerName} is calling...`,
+        body: `${nicknames[data.callerId] || data.callerName} is calling...`,
         icon: data.callerAvatar,
       });
     };
@@ -196,6 +197,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, setIncomingCall, navigate]);
+
+  // ─── Notification reply (Electron only) ──────────────────────────────────
+  useEffect(() => {
+    if (!window.electronAPI?.onNotificationReply) return;
+    return window.electronAPI.onNotificationReply((chatId, text) => {
+      if (!currentUser || !text.trim()) return;
+      sendMessage({
+        chatId,
+        content: text.trim(),
+        type: 'text',
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar ?? undefined,
+      });
+    });
+  }, [currentUser]);
 
   return (
     <SocketContext.Provider value={{ isConnected: isConnectedRef.current }}>

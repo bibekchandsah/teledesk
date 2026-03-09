@@ -172,15 +172,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         label = `${typeName} call cancelled`;
       }
 
+      const isFailed = viewerStatus === 'missed' || viewerStatus === 'cancelled' || viewerStatus === 'declined' || viewerStatus === 'no_answer';
+      const callColor = isFailed ? '#f87171' : undefined;
+
       return (
         <div
           style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: onCall ? 'pointer' : 'default' }}
           onClick={() => onCall?.(message.callType ?? 'voice')}
           title={onCall ? `Call back (${message.callType ?? 'voice'})` : undefined}
         >
-          <span style={{ display: 'flex', alignItems: 'center' }}>{iconEl}</span>
+          <span style={{ display: 'flex', alignItems: 'center', color: callColor }}>{iconEl}</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>{label}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: callColor }}>{label}</div>
             {viewerStatus === 'completed' && dur > 0 && (
               <div style={{ fontSize: 12, opacity: 0.7 }}>{dStr}</div>
             )}

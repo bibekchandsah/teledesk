@@ -56,6 +56,12 @@ export const updateMyArchivedChats = (archivedChatIds: string[]) =>
     body: JSON.stringify({ archivedChatIds }),
   });
 
+export const updateMyNicknames = (nicknames: Record<string, string>) =>
+  authFetch<{ nicknames: Record<string, string> }>('/api/users/me/nicknames', {
+    method: 'PATCH',
+    body: JSON.stringify({ nicknames }),
+  });
+
 export const uploadAvatar = async (file: File): Promise<ApiResponse<{ url: string }>> => {
   const token = await getIdToken();
   const formData = new FormData();

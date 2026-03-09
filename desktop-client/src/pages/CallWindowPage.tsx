@@ -101,9 +101,13 @@ const CallWindowPage: React.FC = () => {
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [showCallChat, setShowCallChat] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
+  // Remote peer's mute/video status (received via relayed socket events)
+  const [peerIsMuted, setPeerIsMuted] = useState(false);
+  const [peerIsVideoOff, setPeerIsVideoOff] = useState(false);
 
   const { currentUser } = useAuthStore();
-  const { chats, setChats, setUserProfile } = useChatStore();
+  const { chats, setChats, setUserProfile, nicknames } = useChatStore();
+  const displayName = (callData && nicknames[callData.targetUserId]) || callData?.targetName || '';
 
   const chatResizingRef = useRef(false);
   const peerRef = useRef<SimplePeerInstance | null>(null);
@@ -426,6 +430,18 @@ const CallWindowPage: React.FC = () => {
         setTimeout(() => window.electronAPI?.hangupCallWindow?.(), 200);
         return;
       }
+
+      if (event === SOCKET_EVENTS.CALL_MUTE_CHANGED) {
+        const d = data as { callId: string; isMuted: boolean };
+        if (cd && d.callId === cd.callId) setPeerIsMuted(d.isMuted);
+        return;
+      }
+
+      if (event === SOCKET_EVENTS.CALL_VIDEO_CHANGED) {
+        const d = data as { callId: string; isVideoOff: boolean };
+        if (cd && d.callId === cd.callId) setPeerIsVideoOff(d.isVideoOff);
+        return;
+      }
     },
     [createInitiatorPeer, createReceiverPeer, sendSocketEvent, cleanup],
   );
@@ -564,6 +580,14 @@ const CallWindowPage: React.FC = () => {
     localStreamRef.current?.getAudioTracks().forEach((t) => {
       t.enabled = !newMuted;
     });
+    const cd = callDataRef.current;
+    if (cd && callStatus === 'active') {
+      sendSocketEvent(SOCKET_EVENTS.CALL_MUTE_CHANGED, {
+        to: cd.targetUserId,
+        callId: cd.callId,
+        isMuted: newMuted,
+      });
+    }
   };
 
   const handleToggleVideo = async () => {
@@ -589,6 +613,13 @@ const CallWindowPage: React.FC = () => {
           ? transceiver.sender.replaceTrack(null)
           : transceiver.sender.replaceTrack(tracks[0] ?? null)
         ).catch((err) => console.error('[CallWindow] toggleVideo replaceTrack failed:', err));
+      }
+      if (callStatus === 'active' && cd) {
+        sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
+          to: cd.targetUserId,
+          callId: cd.callId,
+          isVideoOff: newOff,
+        });
       }
     } else {
       // ── Voice call: upgrade to video / downgrade back ─────────────────────
@@ -626,6 +657,13 @@ const CallWindowPage: React.FC = () => {
         }
         await sendRenego();
         setIsLocalVideoEnabled(false);
+        if (callStatus === 'active' && cd) {
+          sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
+            to: cd.targetUserId,
+            callId: cd.callId,
+            isVideoOff: true,
+          });
+        }
       } else {
         // ── Enable camera ────────────────────────────────────────────────────
         try {
@@ -674,6 +712,13 @@ const CallWindowPage: React.FC = () => {
             }
           }
           setIsLocalVideoEnabled(true);
+          if (callStatus === 'active' && cd) {
+            sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
+              to: cd.targetUserId,
+              callId: cd.callId,
+              isVideoOff: false,
+            });
+          }
         } catch (e) {
           console.error('[CallWindow] enableCallVideo:', e);
         }
@@ -954,13 +999,13 @@ const CallWindowPage: React.FC = () => {
             animation: 'callPulse 1.5s ease-out infinite 0.4s',
             top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           }} />
-          <UserAvatar name={callData.targetName} avatar={callData.targetAvatar} size={100} />
+          <UserAvatar name={displayName} avatar={callData.targetAvatar} size={100} />
         </div>
 
         {/* Caller info */}
         <div style={{ textAlign: 'center' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>
-            {callData.targetName}
+            {displayName}
           </h2>
           <p style={{ margin: 0, fontSize: 14, color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             {callData.callType === 'video' ? <Video size={14} /> : <Phone size={14} />}
@@ -1042,8 +1087,8 @@ const CallWindowPage: React.FC = () => {
             {(() => {
               const leftStream  = gridSwapped ? localStream  : remoteStream;
               const rightStream = gridSwapped ? remoteStream : localStream;
-              const leftLabel   = gridSwapped ? 'You'        : callData.targetName;
-              const rightLabel  = gridSwapped ? callData.targetName : 'You';
+              const leftLabel   = gridSwapped ? 'You'        : displayName;
+              const rightLabel  = gridSwapped ? displayName : 'You';
               return (
                 <>
                   <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
@@ -1077,7 +1122,7 @@ const CallWindowPage: React.FC = () => {
           <>
             <VideoStream
               stream={localIsMain ? localStream : remoteStream}
-              label={localIsMain ? 'You' : callData.targetName}
+              label={localIsMain ? 'You' : displayName}
               muted={localIsMain}
               mirror={localIsMain}
               objectFit="contain"
@@ -1167,7 +1212,7 @@ const CallWindowPage: React.FC = () => {
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream stream={localIsMain ? remoteStream : localStream} muted={!localIsMain} mirror={!localIsMain}
-                      label={localIsMain ? callData.targetName : 'You'} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
+                      label={localIsMain ? displayName : 'You'} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
                   </div>
                   <div onMouseEnter={() => setShowPipMenu(true)} onMouseLeave={() => setShowPipMenu(false)}
                     onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
@@ -1213,10 +1258,10 @@ const CallWindowPage: React.FC = () => {
                   <div style={{ position: 'absolute', width: 155, height: 155, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.2, animation: 'callPulse 1.5s ease-out infinite 0.4s', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
                 </>
               )}
-              <UserAvatar name={callData.targetName} avatar={callData.targetAvatar} size={110} />
+              <UserAvatar name={displayName} avatar={callData.targetAvatar} size={110} />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>{callData.targetName}</h2>
+              <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>{displayName}</h2>
               <p style={{ margin: 0, color: '#94a3b8', fontSize: 16 }}>
                 {callStatus === 'active' ? formatDuration(callDuration) : callData.isOutgoing ? 'Calling…' : 'Connecting…'}
               </p>
@@ -1228,9 +1273,39 @@ const CallWindowPage: React.FC = () => {
                 ))}
               </div>
             )}
+            {/* Local mute status */}
+            {isMuted && callStatus === 'active' && (
+              <div style={{ fontSize: 13, color: '#f87171', background: 'rgba(239,68,68,0.15)', padding: '4px 12px', borderRadius: 20 }}>
+                You are muted
+              </div>
+            )}
+            {/* Remote mute status */}
+            {peerIsMuted && callStatus === 'active' && (
+              <div style={{ fontSize: 13, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '4px 12px', borderRadius: 20 }}>
+                {displayName} is muted
+              </div>
+            )}
           </div>
         )}
 
+        {/* Peer info overlay (video mode) */}
+        {effectiveIsVideo && (
+          <div style={{
+            position: 'absolute', top: 16, left: 16,
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(0,0,0,0.5)',
+            borderRadius: 30,
+            padding: '4px 12px 4px 4px',
+            opacity: controlsVisible ? 1 : 0,
+            transform: controlsVisible ? 'translateY(0)' : 'translateY(-12px)',
+            transition: 'opacity 0.4s ease, transform 0.4s ease',
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}>
+            <UserAvatar name={displayName} avatar={callData.targetAvatar} size={30} />
+            <span style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 600 }}>{displayName}</span>
+          </div>
+        )}
         {/* Duration badge (video calls, active) */}
         {effectiveIsVideo && callStatus === 'active' && (
           <div style={{
@@ -1242,6 +1317,37 @@ const CallWindowPage: React.FC = () => {
             pointerEvents: controlsVisible ? 'auto' : 'none', zIndex: 10,
           }}>
             {formatDuration(callDuration)}
+          </div>
+        )}
+
+        {/* Mute / video-off status badges (video mode, active call) */}
+        {effectiveIsVideo && callStatus === 'active' && (isMuted || peerIsMuted || !localHasVideo || !remoteHasVideo) && (
+          <div style={{
+            position: 'absolute', top: 56, left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            zIndex: 12, pointerEvents: 'none',
+          }}>
+            {isMuted && (
+              <div style={{ fontSize: 12, color: '#f87171', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                You are muted
+              </div>
+            )}
+            {peerIsMuted && (
+              <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                {displayName} is muted
+              </div>
+            )}
+            {!localHasVideo && (
+              <div style={{ fontSize: 12, color: '#f87171', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                Your camera is off
+              </div>
+            )}
+            {!remoteHasVideo && (
+              <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(0,0,0,0.6)', padding: '3px 12px', borderRadius: 20, whiteSpace: 'nowrap' }}>
+                {displayName}'s camera is off
+              </div>
+            )}
           </div>
         )}
 

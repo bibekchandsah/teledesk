@@ -88,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setCurrentUser(userProfile);
               useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
               useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
+              useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
             }
           } catch (err) {
             console.error('[Auth] Background sync failed:', err);

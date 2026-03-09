@@ -6,8 +6,8 @@ cd desktop-client; npm run electron:dev
 
 Rebuild the Electron main process and restart:
 cd "d:\programming exercise\social media\desktop-client"
-npx tsc -p tsconfig.electron.json && npm run electron:dev
-npx tsc -p tsconfig.electron.json; npm run electron:dev
+npx tsc -p tsconfig.electron.json && npm run electron:dev (terminal)
+npx tsc -p tsconfig.electron.json; npm run electron:dev (powershell)
 
 
 http://localhost:5173/
@@ -60,6 +60,61 @@ Go to Firebase Console → your project → Firestore Database → Create databa
 Reload the Electron window (Ctrl+R) — you'll now see the main chat UI even before Firestore is ready
 
 
+
+Migration Complete
+    Firestore → Supabase PostgreSQL (all message/chat/user/group data)
+    Firebase Storage → Cloudflare R2 (avatar + chat file uploads)
+    Firebase Auth kept as-is (no quota issue; needed for Electron OAuth popups)
+Files changed 
+    File  →	Change
+    firebaseService.ts  →	Removed all Firestore/Storage code; keeps Firebase Auth only + Supabase Realtime subscriptions
+    fileService.ts  →	Updated comment (API-compatible, no functional change needed)
+    package.json  →	Added @supabase/supabase-js, @aws-sdk/client-s3
+    package.json  →	Added @supabase/supabase-js
+    .env.example  →	Added SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, R2 vars; removed Firebase Storage bucket
+    .env.example  →	Added VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY; removed Firebase Storage bucket
+    .env.local  →	Added empty Supabase vars as placeholders
+    chatService.ts  →	Removed leftover duplicate Firestore getOrCreatePrivateChat
+
+Setup steps to run the app:
+Supabase: Create a project at supabase.com, run backend-server/supabase-migration.sql in the SQL editor, then copy the project URL + service role key (backend) and anon key (frontend) into your .env files
+    Run the Supabase migration first (one-time setup)
+    Go to supabase.com → your project → SQL Editor → paste and run the contents of backend-server/supabase-migration.sql.
+    paste this in new file and run:
+        alter publication supabase_realtime add table public.chats;
+        alter publication supabase_realtime add table public.messages;
+    Also enable Realtime: in Supabase dashboard → Database → Publication (shows 2 tables) → enable chats and messages tables.
+    Steps:
+        In the left sidebar (Database section), click Publications
+        Click on supabase_realtime publication
+        Toggle ON the chats and messages tables
+        Click Save
+Cloudflare R2: Create a bucket, enable public access, generate API tokens — fill in the R2_* vars in backend .env
+    For R2 file uploads from a backend server, create an Account API Token
+    Why: Account API tokens have R2-specific permission scopes (Object Read & Write, Object Read) that you can restrict to a specific bucket. User API tokens are tied to your personal Cloudflare login and are not recommended for programmatic/server use.
+    Steps:
+        Cloudflare Dashboard → R2 → Manage R2 API Tokens → Create API Token
+        Set permissions: Object Read & Write (for uploads/deletes)
+        Optionally restrict to your specific bucket (recommended)
+        Copy the Access Key ID and Secret Access Key → put them in R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY in your backend .env
+    The endpoint (R2_ENDPOINT) will be shown on the token creation page as https://<account_id>.r2.cloudflarestorage.com.
+
+
+
+How to verify each piece is working:
+    Start the backend (Terminal 1): cd backend-server; npm run dev
+    Start the Electron desktop app (Terminal 2): cd desktop-app; npx tsc -p tsconfig.electron.json; npm run electron:dev
+    --------------------------------------
+    What  → 	How to check
+    Backend starts  → 	No errors in terminal, see Server running on port 3001
+    Supabase connected  → 	Sign in → your user appears in Supabase Table Editor → users table
+    Firebase Auth  → 	Login with Google/GitHub works, no auth errors
+    Supabase messages  → 	Send a message → it appears in Table Editor → messages
+    Cloudflare R2  → 	Send an image/file → check your R2 bucket in Cloudflare dashboard for the uploaded file
+    Realtime  → 	Open two windows, send a message → it appears instantly in the other window
+If the backend crashes on startup, the error will tell you which env var is missing or wrong.
+
+
 user1
 bibeksha48@gmail.com
 google_password
@@ -84,6 +139,13 @@ A's setting	B's setting	What happens
 OFF	anything	A sends no live text → B sees nothing
 ON	OFF	B ignores received live events → B sees only ... dots (or nothing)
 ON	ON	B sees A's text in real-time as A types, and vice versa
+
+video call logic:
+    A calls B → emits CALL_USER, waits
+    B accepts → emits ACCEPT_CALL + registers OFFER listener
+    A receives ACCEPT_CALL → now creates peer → peer sends offer
+    B receives offer → creates receiver peer → sends answer
+    ICE exchange → both streams flow
 
 Search icon (🔍) in the chat header — clicking it toggles a search bar below the header.
 Search bar in ChatWindow.tsx:
@@ -365,14 +427,94 @@ screen share during call
 
 
 incoming call and outgoing call in separate window
-react messaages
 message info of user profile
+window icon & receiver name during call
+    A peer info overlay (avatar pill + name) appears in the top-left corner during ongoing video calls — both in CallScreen.tsx (in-app) and CallWindowPage.tsx (Electron window). It:
+        Shows the peer's profile picture (UserAvatar with their avatar URL + name initials fallback)
+        Shows their nickname (or real name if no nickname set)
+        Fades in/out with the rest of the controls (3-second idle hide)
+        Is non-interactive (pointerEvents: none) so it doesn't block video clicks
+    Incoming call windows (both the in-app modal and the Electron window) already showed the profile icon + name with pulsing rings — no changes needed
+    electron/main.ts:
+        net imported from Electron (available since Electron 21, we're on 31).
+        fetchAvatarAsNativeImage(url) — async helper that uses net.fetch to download the avatar image and returns a NativeImage, or null if it fails.
+        Window title is now "<peerName> – Voice Call" / "<peerName> – Video Call" — shown in the title bar and taskbar.
+        Window icon — after the window is created, the avatar is fetched asynchronously and set via setIcon(). Works on Windows & Linux; the try/catch silently handles macOS where setIcon isn't supported on normal windows.
+    Outgoing call (CallContext.tsx): nicknames[targetUserId] || targetName
+    Incoming call (SocketContext.tsx): nicknames[data.callerId] || data.callerName
+    The nickname (if set) is now passed as targetName to the Electron main process, so the window title shows the nickname instead of the real username.
+
+Window notification:
+    Incoming call notification — body shows "<nickname> is calling..."
+    New message notification — title shows the nickname instead of the sender's real name
+    The notification handler in electron/main.ts now calls fetchAvatarAsNativeImage(payload.icon) (the same helper used for the call window icon) to download the avatar, then passes it as the icon to new Notification(...). If the fetch fails or no avatar URL is provided, the notification shows without an icon as before.
+------------------------------------------------
+|    app icon   app name                        |
+|                        user name              |
+|    user profile icon                          |
+|                        message content        |
+------------------------------------------------
+
+react messaages
+    when user hovers over a message bubble, show a "React" button (smiley face icon) in the top-right corner of the bubble
+    Clicking it opens a small emoji picker (you can use a library like emoji-mart)
+    When the user selects an emoji, it adds that reaction to the message in the backend and updates the UI to show the reaction count below the message (e.g. "😀 3")
+    ❤️👍😊😂🥲👏🔥🙏🤔👌
+
 lock chat for specific user
 set app lock & if forgot enter registered email and verify it with link to get code
-show logged in devices
-window icon & receiver name during call
+show logged in devices and allow user to logout from specific device
+allow multiple account to login and switch between them without logout
+check network connection status (
+    online → show "You are back online" toast (only when connection is lost and restored not on every page load)
+    offline → show "You are offline" toast
+    )
+user should be able to send message themslef too: search, forward
+
 show mute & unmute status of user during call
+    user A mutes themselves → show "You are muted" in the call status area for A, and "User A is muted" for B  
+    user A unmutes themselves → remove the mute status messages for both A and B
 show video on/off status of user during call
+    user A turns off their video → show "Your video is off" in the call status area for A, and "User A's video is off" for B
+    user A turns on their video → remove the video off status messages for both A and B
+Scenario  → 	localHasVideo  → 	remoteHasVideo  → 	What shows
+User A opens camera, User B hasn't yet  → 	true (A) / false (B)  → 	false (A) / true (B)  → 	A sees "B's camera is off"; B sees "Your camera is off"
+Both cameras on  → 	true  → 	true  → 	No camera badge (only mute badge if applicable)
+Both cameras off  → 	false  → 	false  → 	effectiveIsVideo = false → voice avatar mode, no badge shown
+
+
+send message & started voice/video call are in right side and show them in real time to user when they are in call
+received message & received voice/video call are in left side and show them in real time to user when they are in call
+received message & received voice/video call notification to user when they are offline and show them when they come online
+send message & started voice/video call notification to user when they are offline and show them when they come online
+    Scenario  →	Before  →	After
+    Caller hangs up  →	Caller sends ✓  →	Caller sends ✓
+    Receiver hangs up  →	Receiver sends ✗ (shows LEFT)  →	Caller sends via handleCallEnded ✓ (shows RIGHT)
+    Call window closed via OS X  →	Both send ✗  →	Only caller sends ✓
+    Non-Electron endActiveCall  →	Both send ✗  →	Only caller sends ✓
+
+The view profile panel avatar already doesn't have onClick, so it was good. The key fix was already applied — UserAvatar now uses cursor: 'inherit' instead of cursor: 'default'.
+    Left side chat list (ChatSidebar): avatars inside the cursor: pointer row div now inherit pointer ✓
+    Chat window header (ChatWindow): avatars inside the <button style={{ cursor: 'pointer' }}> now inherit pointer ✓
+    View profile panel: no parent pointer cursor → avatar correctly stays default ✓
+
+allow friends to edit username preview from view profile username which is below the profile icon and it will reflect in all chat in his account only
+    chatStore.ts — Added nicknames: Record<string, string> persisted to localStorage under teledesk_nicknames, and a setNickname(uid, name) action (empty string removes the nickname).
+    ChatSidebar.tsx — getChatDisplayInfo now uses nicknames[otherUid] as the display name when set, so the chat list on the left reflects the nickname.
+    ChatWindow.tsx —
+        Header now shows nickname (falls back to real name)
+        In the view profile panel, the name row has a small pencil icon next to it. Clicking it opens an inline input pre-filled with the current nickname. Press Enter or click ✓ to save, Escape or ✗ to cancel.
+        When a nickname is active, the real name is shown in parentheses below it for reference.
+    CallScreen.tsx — inlined call window (the call screen opened within the main app) now uses nicknames[peerUid] as the display name for the peer's label, avatar name, and all video stream labels.
+    CallWindowPage.tsx — the separate Electron call window (opened in a new window) now uses displayName = nicknames[targetUserId] || targetName throughout — incoming call screen, voice avatar view, PiP labels, and grid view labels.
+    CallHistoryPage.tsx — now pulls nicknames from the store and uses nicknames[peerUid] || peer?.name for each call entry's display name.
+    IncomingCallWindowPage.tsx — since this is an isolated Electron window with no Zustand store, it reads nicknames directly from localStorage (same key teledesk_nicknames) via a getNickname() helper, and uses it for the avatar name and <h2> label.
+
+    Backend — New PATCH /api/users/me/nicknames endpoint that saves the nicknames object to the nicknames JSONB column. The GET /api/users/me response now includes nicknames too.
+    Frontend flow:
+    On login, AuthContext loads the user profile from backend and calls setNicknames(userProfile.nicknames ?? {}) to hydrate the store from the cloud.
+    When you set/remove a nickname, setNickname() optimistically updates the store + localStorage cache, then calls PATCH /api/users/me/nicknames with the full updated map. If the API fails, it rolls back.
+    localStorage is kept as a fast local cache so nicknames are available instantly on app start before the backend response arrives — the cloud copy overwrites it on login.
 
 superbase
 project url: https://ebirgnwqjfxeqdpxjper.supabase.co
@@ -380,6 +522,8 @@ Publishable Key: sb_publishable_8iCBrVYZvjln9i_zRIoGiA_nJLJdZZb
 Direct connection string: postgresql://postgres:[YOUR-PASSWORD]@db.ebirgnwqjfxeqdpxjper.supabase.co:5432/postgres
 Anon Key (Legacy): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViaXJnbndxamZ4ZXFkcHhqcGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjM1NzksImV4cCI6MjA4ODU5OTU3OX0.mou_uf9P62zz-ha6ACMr4YpE_83tfLwzeybbK10gqHQ
 service_role secretKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViaXJnbndxamZ4ZXFkcHhqcGVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzAyMzU3OSwiZXhwIjoyMDg4NTk5NTc5fQ.sq2kSpbclydrjg9AXTu_afgZsL9_LQwOWOAjGemx9oU
+
+#table schemas: https://supabase.com/dashboard/project/ebirgnwqjfxeqdpxjper/sql/c22660e9-f88f-4a4d-844e-057e3418638b
 
 
 vite:
@@ -518,3 +662,10 @@ user b also switch to video call mode then user A can't sees user B video
 
 
 instead of creating new chat panal as we already has feature of "open chat in new window" can we show that in right side during call when chat is clicked so that it will include all features and no need to write same code multiple times
+
+
+
+
+
+
+

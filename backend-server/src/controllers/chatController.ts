@@ -40,10 +40,6 @@ export const createOrGetPrivateChat = async (req: Request, res: Response): Promi
       res.status(400).json({ success: false, error: 'targetUid is required' });
       return;
     }
-    if (targetUid === req.user!.uid) {
-      res.status(400).json({ success: false, error: 'Cannot create chat with yourself' });
-      return;
-    }
     const chat = await getOrCreatePrivateChat(req.user!.uid, targetUid);
     res.json({ success: true, data: chat });
   } catch (error) {

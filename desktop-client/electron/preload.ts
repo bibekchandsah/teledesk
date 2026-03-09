@@ -3,8 +3,13 @@ import { contextBridge, ipcRenderer } from 'electron';
 // ─── Expose safe APIs to the renderer process ─────────────────────────────
 contextBridge.exposeInMainWorld('electronAPI', {
   // Notifications
-  showNotification: (payload: { title: string; body: string; icon?: string }) => {
+  showNotification: (payload: { title: string; body: string; icon?: string; chatId?: string }) => {
     ipcRenderer.send('show-notification', payload);
+  },
+  onNotificationReply: (cb: (chatId: string, text: string) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, chatId: string, text: string) => cb(chatId, text);
+    ipcRenderer.on('notification:reply', handler);
+    return () => ipcRenderer.off('notification:reply', handler);
   },
 
   // Window controls
@@ -128,7 +133,8 @@ export interface IncomingCallData {
 }
 
 export interface ElectronAPI {
-  showNotification: (payload: { title: string; body: string; icon?: string }) => void;
+  showNotification: (payload: { title: string; body: string; icon?: string; chatId?: string }) => void;
+  onNotificationReply: (cb: (chatId: string, text: string) => void) => () => void;
   minimizeWindow: () => void;
   maximizeWindow: () => void;
   closeWindow: () => void;

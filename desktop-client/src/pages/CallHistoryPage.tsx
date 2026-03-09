@@ -32,7 +32,7 @@ const formatCallTime = (date: Date): string =>
   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const CallHistoryPage: React.FC = () => {
-  const { messages, userProfiles, chats } = useChatStore();
+  const { messages, userProfiles, chats, nicknames } = useChatStore();
   const { currentUser } = useAuthStore();
   const navigate = useNavigate();
 
@@ -46,7 +46,7 @@ const CallHistoryPage: React.FC = () => {
 
       const peerUid = chat.members.find((m) => m !== currentUser.uid) ?? '';
       const peer = userProfiles[peerUid];
-      const peerName = peer?.name ?? 'Unknown';
+      const peerName = nicknames[peerUid] || peer?.name || 'Unknown';
       const peerAvatar = peer?.avatar ?? '';
 
       for (const msg of msgs) {
@@ -65,7 +65,7 @@ const CallHistoryPage: React.FC = () => {
 
     // Sort newest first
     return entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [messages, userProfiles, chats, currentUser]);
+  }, [messages, userProfiles, chats, currentUser, nicknames]);
 
   // Group by day label
   const grouped = useMemo(() => {

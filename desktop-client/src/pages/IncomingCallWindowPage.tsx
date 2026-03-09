@@ -21,6 +21,17 @@ function parseIncomingCallData(): IncomingCallData | null {
   }
 }
 
+function getNickname(uid: string): string | null {
+  try {
+    const stored = localStorage.getItem('teledesk_nicknames');
+    if (!stored) return null;
+    const map = JSON.parse(stored) as Record<string, string>;
+    return map[uid] || null;
+  } catch {
+    return null;
+  }
+}
+
 // WebkitAppRegion is an Electron-specific vendor CSS property not in React's types
 const dragRegion = { WebkitAppRegion: 'drag' } as unknown as React.CSSProperties;
 const noDragRegion = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSProperties;
@@ -28,6 +39,7 @@ const noDragRegion = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSPrope
 const IncomingCallWindowPage: React.FC = () => {
   // callData is available synchronously from URL params — no IPC wait, no loading state
   const [callData] = useState<IncomingCallData | null>(() => parseIncomingCallData());
+  const displayName = callData ? (getNickname(callData.callerId) || callData.callerName) : '';
 
   const handleAccept = () => {
     window.electronAPI?.acceptIncomingCallFromWindow?.();
@@ -100,7 +112,7 @@ const IncomingCallWindowPage: React.FC = () => {
           }}
         />
         <UserAvatar
-          name={callData.callerName}
+          name={displayName}
           avatar={callData.callerAvatar}
           size={96}
         />
@@ -115,7 +127,7 @@ const IncomingCallWindowPage: React.FC = () => {
           textAlign: 'center',
         }}
       >
-        {callData.callerName}
+        {displayName}
       </h2>
 
       <p

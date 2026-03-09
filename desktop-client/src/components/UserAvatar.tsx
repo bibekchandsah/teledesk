@@ -22,7 +22,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
   return (
     <div
       className="user-avatar"
-      style={{ width: size, height: size, position: 'relative', cursor: onClick ? 'pointer' : 'default' }}
+      style={{ width: size, height: size, position: 'relative', cursor: onClick ? 'pointer' : 'inherit' }}
       onClick={onClick}
       title={name}
     >

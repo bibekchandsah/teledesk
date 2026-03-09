@@ -113,6 +113,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     }
   };
 
+  const { nicknames } = useChatStore();
+
   const getChatDisplayInfo = useCallback(
     (chat: Chat) => {
       if (chat.type === 'private') {
@@ -123,10 +125,14 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         const profile = otherUid ? userProfiles[otherUid] : null;
         const isPeerVisible = profile?.showActiveStatus !== false;
         const isSelfVisible = currentUser?.showActiveStatus !== false;
+        const baseName = isSelfChat
+          ? `${profile?.name || currentUser?.name || 'Unknown'} (You)`
+          : profile?.name || 'Unknown';
+        const displayName = (!isSelfChat && otherUid && nicknames[otherUid])
+          ? nicknames[otherUid]
+          : baseName;
         return {
-          name: isSelfChat
-            ? `${profile?.name || currentUser?.name || 'Unknown'} (You)`
-            : profile?.name || 'Unknown',
+          name: displayName,
           avatar: profile?.avatar,
           online: !isSelfChat && otherUid
             ? onlineUsers.has(otherUid) && isPeerVisible && isSelfVisible
@@ -139,7 +145,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         online: false,
       };
     },
-    [currentUser, userProfiles, onlineUsers],
+    [currentUser, userProfiles, onlineUsers, nicknames],
   );
 
   const filteredChats = useMemo(() => {

@@ -17,7 +17,8 @@ create table if not exists public.users (
   online_status       text        not null default 'offline',   -- 'online' | 'offline' | 'away'
   show_active_status  boolean     not null default true,
   pinned_chat_ids     text[]      not null default '{}',
-  archived_chat_ids   text[]      not null default '{}'
+  archived_chat_ids   text[]      not null default '{}',
+  nicknames           jsonb       not null default '{}'
 );
 
 -- ─── chats ────────────────────────────────────────────────────────────────
@@ -80,3 +81,6 @@ create table if not exists public.groups (
 -- alter table public.chats   enable row level security;
 -- alter table public.messages enable row level security;
 -- alter table public.groups  enable row level security;
+
+-- ─── Migrations (run if table already exists without these columns) ─────────
+alter table public.users add column if not exists nicknames jsonb not null default '{}';

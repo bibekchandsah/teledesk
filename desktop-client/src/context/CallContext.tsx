@@ -49,12 +49,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     callDuration,
   } = useCallStore();
   const { currentUser } = useAuthStore();
-  const { activeChat } = useChatStore();
+  const { activeChat, chats, nicknames } = useChatStore();
 
   // Refs so timer callbacks always read the current value (no stale closures)
   const activeCallRef = useRef(activeCall);
   const incomingCallRef = useRef(incomingCall);
   const activeChatRef = useRef(activeChat);
+  const chatsRef = useRef(chats);
   const currentUserRef = useRef(currentUser);
   const ringingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -64,6 +65,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
   useEffect(() => { activeChatRef.current = activeChat; }, [activeChat]);
+  useEffect(() => { chatsRef.current = chats; }, [chats]);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
   useEffect(() => { callDurationRef.current = callDuration; }, [callDuration]);
 
@@ -82,10 +84,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     receiverStatus?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined',
   ) => {
     const user = currentUserRef.current;
-    const chat = activeChatRef.current;
     if (!user) return;
     const otherId = call.callerId === user.uid ? call.receiverId : call.callerId;
-    const chatId = chat?.members.includes(otherId) ? chat.chatId : null;
+
+    // Prefer the currently-open chat, but fall back to searching all known chats.
+    // This handles the case where the caller starts the call from outside the chat window.
+    const activeC = activeChatRef.current;
+    const chat =
+      activeC?.members.includes(otherId)
+        ? activeC
+        : chatsRef.current.find(
+            (c) => c.type === 'private' && c.members.includes(user.uid) && c.members.includes(otherId),
+          ) ?? null;
+    const chatId = chat?.chatId ?? null;
     if (!chatId) return;
 
     const typeName = call.type === 'video' ? 'Video' : 'Voice';
@@ -186,6 +197,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
       const wasActive = ac?.status === 'active';
       clearRingingTimer();
+      // The other side hung up. Only the caller sends the call summary so it
+      // always appears on the right side (outgoing) in both views.
+      if (ac && ac.callerId === currentUserRef.current?.uid) {
+        const dur = wasActive ? callDurationRef.current : 0;
+        const status = wasActive ? 'completed' : 'cancelled';
+        sendCallSummary(ac, status, dur, status);
+      }
       if (isElectron()) {
         // Relay to call window so it can clean up WebRTC, then force-close
         relayToCallWindow(SOCKET_EVENTS.CALL_ENDED, data);
@@ -231,6 +249,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
     socket.on(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
 
+    const handleCallMuteChanged = (data: { callId: string; from: string; isMuted: boolean }) => {
+      if (activeCallRef.current?.callId !== data.callId) return;
+      if (isElectron()) relayToCallWindow(SOCKET_EVENTS.CALL_MUTE_CHANGED, data);
+    };
+    const handleCallVideoChanged = (data: { callId: string; from: string; isVideoOff: boolean }) => {
+      if (activeCallRef.current?.callId !== data.callId) return;
+      if (isElectron()) relayToCallWindow(SOCKET_EVENTS.CALL_VIDEO_CHANGED, data);
+    };
+    socket.on(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleCallMuteChanged);
+    socket.on(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleCallVideoChanged);
+
     return () => {
       socket.off(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
       socket.off(SOCKET_EVENTS.ANSWER, handleAnswer);
@@ -238,6 +267,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off(SOCKET_EVENTS.CALL_ENDED, handleCallEnded);
       socket.off(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
       socket.off(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
+      socket.off(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleCallMuteChanged);
+      socket.off(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleCallVideoChanged);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
@@ -256,8 +287,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubWindowEvent = window.electronAPI.onCallWindowEvent?.((event) => {
       if (event === 'hangup') {
         // Call window user clicked end call (already sent END_CALL socket via emitSocket)
+        // Only the caller sends the summary so the message always appears on the
+        // right side (outgoing). The receiver's side is handled by handleCallEnded.
         const call = activeCallRef.current;
-        if (call) {
+        if (call && call.callerId === currentUserRef.current?.uid) {
           const dur = call.status === 'active' ? callDurationRef.current : 0;
           const status = call.status === 'active' ? 'completed' : 'cancelled';
           sendCallSummary(call, status, dur, status);
@@ -274,9 +307,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ? call.receiverId
             : call.callerId;
           socket?.emit(SOCKET_EVENTS.END_CALL, { to: targetId, callId: call.callId });
-          const dur = call.status === 'active' ? callDurationRef.current : 0;
-          const status = call.status === 'active' ? 'completed' : 'cancelled';
-          sendCallSummary(call, status, dur, status);
+          // Only caller sends the summary
+          if (call.callerId === currentUserRef.current?.uid) {
+            const dur = call.status === 'active' ? callDurationRef.current : 0;
+            const status = call.status === 'active' ? 'completed' : 'cancelled';
+            sendCallSummary(call, status, dur, status);
+          }
         }
         clearRingingTimer();
         stopCallTimer();
@@ -343,7 +379,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callType,
         isOutgoing: true,
         targetUserId,
-        targetName,
+        targetName: nicknames[targetUserId] || targetName,
         targetAvatar,
       });
     } else {
@@ -440,7 +476,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearRingingTimer();
     const dur = activeCall.status === 'active' ? callDuration : 0;
     const status = activeCall.status === 'active' ? 'completed' : 'cancelled';
-    sendCallSummary(activeCall, status, dur, status);
+    // Only caller sends the summary; if receiver ends the call here the caller
+    // will send the summary from handleCallEnded when it receives CALL_ENDED.
+    if (activeCall.callerId === currentUser?.uid) {
+      sendCallSummary(activeCall, status, dur, status);
+    }
 
     const socket = getSocket();
     socket?.emit(SOCKET_EVENTS.END_CALL, { to: targetId, callId: activeCall.callId });

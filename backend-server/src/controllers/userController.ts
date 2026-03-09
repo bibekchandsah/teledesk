@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats } from '../services/userService';
+import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames } from '../services/userService';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2';
 import logger from '../utils/logger';
@@ -164,5 +164,22 @@ export const updateArchivedChatsHandler = async (req: Request, res: Response): P
   } catch (error) {
     logger.error(`updateArchivedChats error: ${(error as Error).message}`);
     res.status(500).json({ success: false, error: 'Failed to update archived chats' });
+  }
+};
+
+// PATCH /api/users/me/nicknames
+export const updateNicknamesHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { nicknames } = req.body as { nicknames: Record<string, string> };
+    if (!nicknames || typeof nicknames !== 'object' || Array.isArray(nicknames)) {
+      res.status(400).json({ success: false, error: 'nicknames must be an object' });
+      return;
+    }
+    const result = await updateNicknames(uid, nicknames);
+    res.json({ success: true, data: { nicknames: result } });
+  } catch (error) {
+    logger.error(`updateNicknames error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to update nicknames' });
   }
 };

@@ -139,6 +139,14 @@ export const endCall = (to: string, callId: string): void => {
   socket?.emit(SOCKET_EVENTS.END_CALL, { to, callId });
 };
 
+export const sendCallMuteChanged = (to: string, callId: string, isMuted: boolean): void => {
+  socket?.emit(SOCKET_EVENTS.CALL_MUTE_CHANGED, { to, callId, isMuted });
+};
+
+export const sendCallVideoChanged = (to: string, callId: string, isVideoOff: boolean): void => {
+  socket?.emit(SOCKET_EVENTS.CALL_VIDEO_CHANGED, { to, callId, isVideoOff });
+};
+
 /** Broadcast active-status visibility change to peers in real-time */
 export const emitActiveStatusChange = (showActiveStatus: boolean): void => {
   socket?.emit(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, { showActiveStatus });
