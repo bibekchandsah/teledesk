@@ -1,0 +1,25 @@
+app = "teledesk-backend"
+primary_region = "sin"  # Singapore — change to nearest: iad (US East), lax (US West), lhr (London), nrt (Tokyo)
+
+[build]
+  dockerfile = "backend-server/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = false   # keep alive — no cold starts for WebSocket connections
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 500
+    soft_limit = 400
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
