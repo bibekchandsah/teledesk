@@ -48,6 +48,7 @@ type MessageRow = {
   call_duration: number | null;
   call_status: string | null;
   call_status_receiver: string | null;
+  delivered_to: string[];
 };
 
 const rowToMessage = (r: MessageRow): Message => ({
@@ -60,6 +61,7 @@ const rowToMessage = (r: MessageRow): Message => ({
   type: r.type as Message['type'],
   timestamp: r.timestamp,
   readBy: r.read_by ?? [],
+  deliveredTo: r.delivered_to ?? [],
   ...(r.file_url !== null && { fileUrl: r.file_url }),
   ...(r.file_name !== null && { fileName: r.file_name }),
   ...(r.file_size !== null && { fileSize: r.file_size }),
@@ -130,13 +132,34 @@ export const getUserChats = async (uid: string): Promise<Chat[]> => {
 
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as ChatRow[])
+  const chats = ((data ?? []) as ChatRow[])
     .map(rowToChat)
     .sort((a, b) => {
       const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
       return bt - at;
     });
+
+  if (chats.length === 0) return chats;
+
+  // Count unread messages per chat for this user (not sent by them, not in read_by)
+  const chatIds = chats.map((c) => c.chatId);
+  const { data: unreadRows } = await supabase
+    .from('messages')
+    .select('chat_id')
+    .in('chat_id', chatIds)
+    .neq('sender_id', uid)
+    .filter('read_by', 'not.cs', `{"${uid}"}`);
+
+  const unreadCounts: Record<string, number> = {};
+  for (const row of (unreadRows ?? []) as { chat_id: string }[]) {
+    unreadCounts[row.chat_id] = (unreadCounts[row.chat_id] || 0) + 1;
+  }
+
+  return chats.map((c) => ({
+    ...c,
+    unreadCount: unreadCounts[c.chatId] ?? 0,
+  }));
 };
 
 export const saveMessage = async (message: Message): Promise<Message> => {
@@ -150,6 +173,7 @@ export const saveMessage = async (message: Message): Promise<Message> => {
     type: message.type,
     timestamp: message.timestamp,
     read_by: message.readBy,
+    delivered_to: message.deliveredTo ?? [],
     file_url: message.fileUrl ?? null,
     file_name: message.fileName ?? null,
     file_size: message.fileSize ?? null,
@@ -192,6 +216,56 @@ export const getMessages = async (
   if (error) throw new Error(error.message);
 
   return ((data ?? []) as MessageRow[]).map(rowToMessage).reverse();
+};
+
+export const markMessageDelivered = async (messageId: string, userId: string): Promise<void> => {
+  const { data } = await supabase
+    .from('messages')
+    .select('delivered_to')
+    .eq('message_id', messageId)
+    .single();
+  if (!data) return;
+  const current: string[] = data.delivered_to ?? [];
+  if (current.includes(userId)) return;
+  await supabase
+    .from('messages')
+    .update({ delivered_to: [...current, userId] })
+    .eq('message_id', messageId);
+};
+
+/**
+ * Returns messages sent to the user while they were offline (not yet in delivered_to).
+ * Used on socket reconnect to backfill delivery status.
+ */
+export const getUndeliveredMessagesForUser = async (uid: string): Promise<Message[]> => {
+  // Get all chat IDs where this user is a member
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('chat_id')
+    .filter('members', 'cs', JSON.stringify([uid]));
+
+  const chatIds = (chatData ?? []).map((r: { chat_id: string }) => r.chat_id);
+  if (chatIds.length === 0) return [];
+
+  // Only look back 7 days to keep the query scoped
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .in('chat_id', chatIds)
+    .neq('sender_id', uid)
+    .filter('delivered_to', 'not.cs', JSON.stringify([uid]))
+    .gte('timestamp', since)
+    .order('timestamp', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    logger.error(`getUndeliveredMessagesForUser error: ${error.message}`);
+    return [];
+  }
+
+  return ((data ?? []) as MessageRow[]).map(rowToMessage);
 };
 
 export const markMessagesRead = async (chatId: string, userId: string): Promise<void> => {

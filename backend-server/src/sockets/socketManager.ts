@@ -2,7 +2,7 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { authenticateSocket } from '../middleware/authMiddleware';
 import { updatePresence, getUserById, updateActiveStatusSetting } from '../services/userService';
-import { saveMessage, getChatById } from '../services/chatService';
+import { saveMessage, getChatById, markMessageDelivered, getUndeliveredMessagesForUser } from '../services/chatService';
 import { Message } from '../../../shared/types';
 import { generateId, now, sanitizeString } from '../utils/helpers';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
@@ -12,6 +12,10 @@ import logger from '../utils/logger';
 const onlineUsers = new Map<string, string>();
 // Cache of userId -> showActiveStatus so late-joining users get accurate state
 const userShowStatus = new Map<string, boolean>();
+// Active calls: callId -> { callerId, receiverId, status }
+const activeCalls = new Map<string, { callerId: string; receiverId: string; status: 'ringing' | 'active' }>();
+// Reverse lookup: userId -> callId
+const userActiveCall = new Map<string, string>();
 
 export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   const io = new SocketServer(httpServer, {
@@ -72,6 +76,27 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     // ─── Join personal room ────────────────────────────────────────────────
     socket.join(`user:${uid}`);
 
+    // ─── Backfill delivery for messages sent while offline ────────────────
+    // Find messages this user never received a delivery ack for (e.g. window
+    // was closed when the message arrived) and notify each online sender so
+    // their UI can flip from single tick → double tick immediately.
+    getUndeliveredMessagesForUser(uid)
+      .then(async (undelivered) => {
+        if (undelivered.length === 0) return;
+        // Mark delivered in DB first, then notify senders
+        await Promise.all(undelivered.map((msg) => markMessageDelivered(msg.messageId, uid)));
+        for (const msg of undelivered) {
+          if (onlineUsers.has(msg.senderId)) {
+            io.to(`user:${msg.senderId}`).emit(SOCKET_EVENTS.MESSAGE_DELIVERED, {
+              chatId: msg.chatId,
+              messageId: msg.messageId,
+              userId: uid,
+            });
+          }
+        }
+      })
+      .catch((err) => logger.error(`deliver-on-connect error: ${(err as Error).message}`));
+
     // ─── Messaging ────────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.JOIN_ROOM, (chatId: string) => {
       if (typeof chatId === 'string') {
@@ -112,6 +137,16 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
             return;
           }
 
+          // Determine which non-sender members are already online so we can
+          // pre-populate deliveredTo before the DB INSERT.  This eliminates the
+          // race condition where the Supabase realtime INSERT event fires and
+          // fetches the message from the DB before the separate
+          // markMessageDelivered() call has completed, causing the delivered
+          // state to be wiped out by the incoming setMessages() call.
+          const onlineRecipients = chat.members.filter(
+            (m) => m !== uid && onlineUsers.has(m),
+          );
+
           const message: Message = {
             // Honor client-provided messageId for optimistic UI (must be valid UUID format)
             messageId: (payload.messageId && /^[0-9a-f-]{36}$/.test(payload.messageId))
@@ -123,6 +158,9 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
             type: payload.type || 'text',
             timestamp: now(),
             readBy: [uid],
+            // Pre-populate so every subsequent DB read (realtime, pagination, reload)
+            // already reflects the delivered state without a separate UPDATE.
+            deliveredTo: onlineRecipients,
             ...(payload.senderName !== undefined && { senderName: sanitizeString(payload.senderName) }),
             ...(payload.senderAvatar !== undefined && { senderAvatar: payload.senderAvatar }),
             ...(payload.fileUrl !== undefined && { fileUrl: payload.fileUrl }),
@@ -148,6 +186,15 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           for (const memberId of chat.members) {
             if (memberId !== uid) {
               io.to(`user:${memberId}`).emit(SOCKET_EVENTS.NEW_MESSAGE, message);
+              // Notify the sender's socket immediately so the optimistic message
+              // gets its deliveredTo patched before the Supabase realtime fires.
+              if (onlineUsers.has(memberId)) {
+                io.to(`user:${uid}`).emit(SOCKET_EVENTS.MESSAGE_DELIVERED, {
+                  chatId: payload.chatId,
+                  messageId: message.messageId,
+                  userId: memberId,
+                });
+              }
             }
           }
 
@@ -155,6 +202,27 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         } catch (err) {
           logger.error(`send_message error: ${(err as Error).message}`);
           socket.emit(SOCKET_EVENTS.ERROR, { error: 'Failed to send message' });
+        }
+      },
+    );
+
+    // ─── Delivery ACK (recipient → server → sender) ──────────────────────
+    // Fired by the recipient's client as soon as it receives NEW_MESSAGE.
+    // More reliable than the server-side onlineUsers map check at send time.
+    socket.on(
+      SOCKET_EVENTS.DELIVER_ACK,
+      async (payload: { chatId: string; messageId: string; senderId: string }) => {
+        try {
+          await markMessageDelivered(payload.messageId, uid);
+          if (onlineUsers.has(payload.senderId)) {
+            io.to(`user:${payload.senderId}`).emit(SOCKET_EVENTS.MESSAGE_DELIVERED, {
+              chatId: payload.chatId,
+              messageId: payload.messageId,
+              userId: uid,
+            });
+          }
+        } catch (err) {
+          logger.error(`deliver_ack error: ${(err as Error).message}`);
         }
       },
     );
@@ -200,12 +268,19 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       }
     });
     // ─── Read Receipts ────────────────────────────────────────────────────
-    socket.on(SOCKET_EVENTS.MESSAGE_READ, (payload: { chatId: string; messageId: string }) => {
-      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, {
-        chatId: payload.chatId,
-        messageId: payload.messageId,
-        userId: uid,
-      });
+    socket.on(SOCKET_EVENTS.MESSAGE_READ, async (payload: { chatId: string; messageId: string }) => {
+      const receipt = { chatId: payload.chatId, userId: uid };
+      // Notify everyone currently in the chat room
+      socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, receipt);
+      // Also notify every member via their personal room (handles users not in the room)
+      const chat = await getChatById(payload.chatId, uid).catch(() => null);
+      if (chat) {
+        for (const memberId of chat.members) {
+          if (memberId !== uid) {
+            io.to(`user:${memberId}`).emit(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, receipt);
+          }
+        }
+      }
     });
 
     // ─── WebRTC Call Signaling ─────────────────────────────────────────────
@@ -213,6 +288,11 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       SOCKET_EVENTS.CALL_USER,
       (payload: { targetUserId: string; callType: 'video' | 'voice'; callId: string; callerName: string; callerAvatar?: string }) => {
         logger.info(`Call initiated from ${uid} to ${payload.targetUserId}`);
+        // Track this call
+        activeCalls.set(payload.callId, { callerId: uid, receiverId: payload.targetUserId, status: 'ringing' });
+        userActiveCall.set(uid, payload.callId);
+        userActiveCall.set(payload.targetUserId, payload.callId);
+        // Deliver call to receiver
         io.to(`user:${payload.targetUserId}`).emit(SOCKET_EVENTS.INCOMING_CALL, {
           callId: payload.callId,
           callerId: uid,
@@ -220,10 +300,16 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           callerAvatar: payload.callerAvatar,
           callType: payload.callType,
         });
+        // If receiver is online, immediately notify caller their phone is ringing
+        if (onlineUsers.has(payload.targetUserId)) {
+          io.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_RINGING, { callId: payload.callId });
+        }
       },
     );
 
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, (payload: { callId: string; callerId: string }) => {
+      const call = activeCalls.get(payload.callId);
+      if (call) activeCalls.set(payload.callId, { ...call, status: 'active' });
       io.to(`user:${payload.callerId}`).emit(SOCKET_EVENTS.ACCEPT_CALL, {
         callId: payload.callId,
         acceptorId: uid,
@@ -231,6 +317,9 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     });
 
     socket.on(SOCKET_EVENTS.REJECT_CALL, (payload: { callId: string; callerId: string }) => {
+      activeCalls.delete(payload.callId);
+      userActiveCall.delete(uid);
+      userActiveCall.delete(payload.callerId);
       io.to(`user:${payload.callerId}`).emit(SOCKET_EVENTS.CALL_REJECTED, {
         callId: payload.callId,
         rejectedBy: uid,
@@ -271,6 +360,9 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     );
 
     socket.on(SOCKET_EVENTS.END_CALL, (payload: { to: string; callId: string }) => {
+      activeCalls.delete(payload.callId);
+      userActiveCall.delete(uid);
+      userActiveCall.delete(payload.to);
       io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.CALL_ENDED, {
         callId: payload.callId,
         endedBy: uid,
@@ -312,7 +404,22 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       logger.info(`Socket disconnected: ${socket.id} (user: ${uid})`);
       onlineUsers.delete(uid);
       userShowStatus.delete(uid);
-
+      // If this user was in an active call, notify the other party
+      const activeCallId = userActiveCall.get(uid);
+      if (activeCallId) {
+        const call = activeCalls.get(activeCallId);
+        if (call) {
+          const otherId = call.callerId === uid ? call.receiverId : call.callerId;
+          io.to(`user:${otherId}`).emit(SOCKET_EVENTS.CALL_ENDED, {
+            callId: activeCallId,
+            endedBy: uid,
+            byDisconnect: true,
+          });
+          activeCalls.delete(activeCallId);
+          userActiveCall.delete(otherId);
+        }
+        userActiveCall.delete(uid);
+      }
       await updatePresence(uid, 'offline').catch(() => {});
       socket.broadcast.emit(SOCKET_EVENTS.USER_OFFLINE, {
         userId: uid,

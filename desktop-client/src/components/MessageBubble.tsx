@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 
 interface MessageBubbleProps {
@@ -365,9 +365,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             {message.isEdited && !message.deleted && (
               <span style={{ fontSize: 10, opacity: 0.65, fontStyle: 'italic' }}>edited</span>
             )}
-            {isOwn && (
-              <span title={message.readBy.length > 1 ? 'Read' : 'Delivered'}>
-                {message.readBy.length > 1 ? '✓✓' : '✓'}
+            {isOwn && !message.deleted && (
+              <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
+                {message.readBy.length > 1
+                  ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
+                  : (message.deliveredTo ?? []).length > 0
+                    ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
+                    : <Check size={13} style={{ opacity: 0.65 }} />}
               </span>
             )}
           </div>

@@ -36,6 +36,8 @@ interface ChatState {
   setMessages: (chatId: string, messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
+  markChatMessagesRead: (chatId: string, readerUid: string) => void;
+  markMessageDelivered: (chatId: string, messageId: string, userId: string) => void;
   setTyping: (chatId: string, userId: string, userName: string, isTyping: boolean) => void;
   setLiveTypingText: (chatId: string, userId: string, userName: string, text: string) => void;
   setUserOnline: (userId: string, online: boolean, showActiveStatus?: boolean) => void;
@@ -73,11 +75,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   nicknames: loadNicknames(),
 
   setChats: (chats) => set((state) => {
-    // Seed unread from chat.unreadCount for chats not yet tracked in memory
+    // Always use the higher of localStorage vs server-computed unread count.
+    // This ensures messages received while offline are reflected on next login.
     const seeded = { ...state.unreadCounts };
     for (const chat of chats) {
-      if (!(chat.chatId in seeded) && chat.unreadCount) {
-        seeded[chat.chatId] = chat.unreadCount;
+      if (chat.unreadCount !== undefined) {
+        seeded[chat.chatId] = Math.max(seeded[chat.chatId] || 0, chat.unreadCount);
       }
     }
     saveUnreadCounts(seeded);
@@ -92,8 +95,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addMessage: (message) =>
     set((state) => {
       const existing = state.messages[message.chatId] || [];
-      // Prevent duplicate messages
-      if (existing.some((m) => m.messageId === message.messageId)) return state;
+      const idx = existing.findIndex((m) => m.messageId === message.messageId);
+      if (idx !== -1) {
+        // Message already exists (e.g. optimistic). Merge deliveredTo / readBy
+        // from the server version so the tick state is never lost.
+        const prev = existing[idx];
+        const mergedDelivered = Array.from(new Set([...(prev.deliveredTo ?? []), ...(message.deliveredTo ?? [])]));
+        const mergedRead = Array.from(new Set([...(prev.readBy ?? []), ...(message.readBy ?? [])]));
+        if (
+          mergedDelivered.length === (prev.deliveredTo ?? []).length &&
+          mergedRead.length === (prev.readBy ?? []).length
+        ) {
+          return state; // nothing new, avoid re-render
+        }
+        const updated = [...existing];
+        updated[idx] = { ...prev, deliveredTo: mergedDelivered, readBy: mergedRead };
+        return { messages: { ...state.messages, [message.chatId]: updated } };
+      }
       return {
         messages: {
           ...state.messages,
@@ -111,6 +129,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
       }
       return { messages: newMessages };
+    }),
+
+  markMessageDelivered: (chatId: string, messageId: string, userId: string) =>
+    set((state) => {
+      const existing = state.messages[chatId];
+      if (!existing) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: existing.map((m) =>
+            m.messageId === messageId && !(m.deliveredTo ?? []).includes(userId)
+              ? { ...m, deliveredTo: [...(m.deliveredTo ?? []), userId] }
+              : m,
+          ),
+        },
+      };
+    }),
+
+  // Called when MESSAGE_READ_RECEIPT is received — add reader to readBy for all
+  // messages in the chat not already marked as read by that user.
+  markChatMessagesRead: (chatId: string, readerUid: string) =>
+    set((state) => {
+      const existing = state.messages[chatId];
+      if (!existing) return state;
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: existing.map((m) =>
+            m.readBy.includes(readerUid) ? m : { ...m, readBy: [...m.readBy, readerUid] },
+          ),
+        },
+      };
     }),
 
   setTyping: (chatId, userId, userName, isTyping) =>

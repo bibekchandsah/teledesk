@@ -10,11 +10,14 @@ export const SOCKET_EVENTS = {
   JOIN_ROOM: 'join_room',
   LEAVE_ROOM: 'leave_room',
 
+  // Client → Server (delivery ack: recipient notifies server when message received)
+  DELIVER_ACK: 'deliver_ack',
+
   // Server → Client
   NEW_MESSAGE: 'new_message',
   USER_TYPING: 'user_typing',
   MESSAGE_DELIVERED: 'message_delivered',
-  MESSAGE_READ_RECEIPT: 'message_read',
+  MESSAGE_READ_RECEIPT: 'message_read_receipt',
 
   // Presence
   USER_ONLINE: 'user_online',
@@ -34,6 +37,7 @@ export const SOCKET_EVENTS = {
   CALL_REJECTED: 'call_rejected',
   CALL_MUTE_CHANGED: 'call_mute_changed',
   CALL_VIDEO_CHANGED: 'call_video_changed',
+  CALL_RINGING: 'call_ringing',
   ACTIVE_STATUS_CHANGED: 'active_status_changed',
 
   // Connection

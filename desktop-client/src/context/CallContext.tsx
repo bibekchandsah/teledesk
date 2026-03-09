@@ -191,7 +191,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // â”€â”€â”€ Call Ended (remote side ended the call) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const handleCallEnded = (data: { callId: string }) => {
+    const handleCallEnded = (data: { callId: string; byDisconnect?: boolean }) => {
       const ac = activeCallRef.current;
       const ic = incomingCallRef.current;
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
@@ -199,10 +199,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearRingingTimer();
       // The other side hung up. Only the caller sends the call summary so it
       // always appears on the right side (outgoing) in both views.
-      if (ac && ac.callerId === currentUserRef.current?.uid) {
+      // Exception: if the caller disconnected (byDisconnect), the receiver sends it.
+      const isCallerSide = ac && ac.callerId === currentUserRef.current?.uid;
+      const isReceiverSideAndCallerDisconnected = ac && !isCallerSide && data.byDisconnect;
+      if (isCallerSide || isReceiverSideAndCallerDisconnected) {
         const dur = wasActive ? callDurationRef.current : 0;
         const status = wasActive ? 'completed' : 'cancelled';
-        sendCallSummary(ac, status, dur, status);
+        sendCallSummary(ac!, status, dur, status);
       }
       if (isElectron()) {
         // Relay to call window so it can clean up WebRTC, then force-close
@@ -242,12 +245,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
+    // ─── Receiver's phone is ringing (server confirmed delivery to callee) ───
+    const handleCallRinging = (data: { callId: string }) => {
+      if (activeCallRef.current?.callId !== data.callId) return;
+      setActiveCall({ ...activeCallRef.current!, status: 'ringing' });
+      if (isElectron()) {
+        relayToCallWindow(SOCKET_EVENTS.CALL_RINGING, data);
+      }
+    };
+
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
     socket.on(SOCKET_EVENTS.ANSWER, handleAnswer);
     socket.on(SOCKET_EVENTS.ICE_CANDIDATE, handleIceCandidate);
     socket.on(SOCKET_EVENTS.CALL_ENDED, handleCallEnded);
     socket.on(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
     socket.on(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
+    socket.on(SOCKET_EVENTS.CALL_RINGING, handleCallRinging);
 
     const handleCallMuteChanged = (data: { callId: string; from: string; isMuted: boolean }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
@@ -269,6 +282,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
       socket.off(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleCallMuteChanged);
       socket.off(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleCallVideoChanged);
+      socket.off(SOCKET_EVENTS.CALL_RINGING, handleCallRinging);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);

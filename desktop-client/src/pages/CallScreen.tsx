@@ -409,7 +409,7 @@ const CallScreen: React.FC = () => {
         }}
       >
       {/* ── GRID VIEW ─────────────────────────────────────────────── */}
-      {effectiveIsVideo && gridView ? (
+      {effectiveIsVideo && gridView && activeCall.status !== 'ringing' ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'row' }}>
           {/* Left panel */}
           {(() => {
@@ -481,7 +481,7 @@ const CallScreen: React.FC = () => {
             );
           })()}
         </div>
-      ) : effectiveIsVideo ? (
+      ) : effectiveIsVideo && activeCall.status !== 'ringing' ? (
         <>
           {/* Full-screen stream */}
           <VideoStream

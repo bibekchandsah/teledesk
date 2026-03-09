@@ -84,3 +84,4 @@ create table if not exists public.groups (
 
 -- ─── Migrations (run if table already exists without these columns) ─────────
 alter table public.users add column if not exists nicknames jsonb not null default '{}';
+alter table public.messages add column if not exists delivered_to text[] not null default '{}';

@@ -26,6 +26,7 @@ export interface Message {
   type: 'text' | 'file' | 'image' | 'video' | 'audio' | 'call';
   timestamp: string;
   readBy: string[];
+  deliveredTo?: string[];  // UIDs whose device has received the message
   fileUrl?: string;
   fileName?: string;
   fileSize?: number;

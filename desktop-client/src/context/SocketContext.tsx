@@ -16,7 +16,7 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, activeChat, nicknames } =
+  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
@@ -55,6 +55,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       addMessage(message);
       updateChatLastMessage(message);
 
+      // Acknowledge delivery back to server so the sender sees double tick
+      // immediately, regardless of whether the server's onlineUsers map had
+      // this client registered at the moment the message was sent.
+      if (message.senderId !== currentUser.uid) {
+        socket.emit(SOCKET_EVENTS.DELIVER_ACK, {
+          chatId: message.chatId,
+          messageId: message.messageId,
+          senderId: message.senderId,
+        });
+      }
+
       if (message.senderId === currentUser.uid) return;
 
       // Window is minimized/hidden or the message is for a different chat
@@ -73,6 +84,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           chatId: message.chatId,
         });
       }
+    };
+
+    // ─── Read Receipt (sender learns recipient opened the chat) ────────────
+    const handleReadReceipt = (data: { chatId: string; userId: string }) => {
+      markChatMessagesRead(data.chatId, data.userId);
+    };
+
+    // ─── Delivery Receipt (sender learns recipient's device received the msg) ─
+    const handleDelivered = (data: { chatId: string; messageId: string; userId: string }) => {
+      markMessageDelivered(data.chatId, data.messageId, data.userId);
     };
 
     // ─── Typing Events ───────────────────────────────────────────────────
@@ -170,6 +191,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       updateChatPins(chatId, pinnedMessageIds);
     };
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
+    socket.on(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
+    socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
     socket.on(SOCKET_EVENTS.USER_TYPING, handleTyping);
     socket.on(SOCKET_EVENTS.LIVE_TYPING_UPDATE, handleLiveTyping);
     socket.on(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
@@ -185,6 +208,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     return () => {
       socket.off(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
+      socket.off(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
+      socket.off(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
       socket.off(SOCKET_EVENTS.USER_TYPING, handleTyping);
       socket.off(SOCKET_EVENTS.LIVE_TYPING_UPDATE, handleLiveTyping);
       socket.off(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
@@ -196,7 +221,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
     };
-  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, setIncomingCall, navigate]);
+  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
 
   // ─── Notification reply (Electron only) ──────────────────────────────────
   useEffect(() => {

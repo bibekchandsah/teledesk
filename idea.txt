@@ -147,6 +147,39 @@ video call logic:
     B receives offer → creates receiver peer → sends answer
     ICE exchange → both streams flow
 
+chat scrolling:
+    Instant bottom — use useLayoutEffect + scrollTop = scrollHeight (no animation) on initial load
+    Smart scroll — only smooth-scroll when user is already near the bottom (new messages while viewing)
+    Scroll-up pagination — load older messages via the HTTP API when user scrolls near the top, preserve scroll position so there's no jump
+    Separate older messages from live Firestore messages in local state so the real-time listener doesn't wipe paginated data
+Instant bottom (no scroll animation):
+    Replaced useEffect + scrollIntoView({ behavior: 'smooth' }) with useLayoutEffect — this fires synchronously before the browser paints, so the user never sees the scroll happen
+    On initial chat load: el.scrollTop = el.scrollHeight (instant jump)
+    On new messages while already near the bottom (< 200px from bottom): instant jump to bottom
+    If user scrolled up to read history, new messages arrive silently without dragging them back down
+    When chatId changes, the effect now always fires (it's in deps), immediately detects it's a new chat, and scrolls to bottom regardless of message count
+    Even if two chats happen to have the same number of messages, the chatId dep change guarantees the effect runs and the lastScrolledChatRef !== chatId check triggers the instant scroll
+
+Scroll-up pagination (lazy loading):
+    Added olderMessages local state — kept separate from the Zustand store so the real-time Firestore listener doesn't wipe paginated data when it fires
+    Final rendered list = deduplicated merge of older (paginated) + live (Firestore) messages
+    handleScroll detects when scrollTop < 120px and triggers loadOlderMessages()
+    loadOlderMessages() calls getChatMessages(chatId, 30, oldestTimestamp) with a before cursor
+    After prepending older messages, scrollTop is adjusted by the height difference so the view doesn't jump
+    A isFetchingRef prevents double-fetches on rapid scroll events without re-renders
+    Shows "Loading older messages..." spinner at top and "— Beginning of conversation —" when exhausted
+    Firestore listener reduced from 50 → 30 messages (only needs the latest page for real-time updates)
+
+show date separator pills in the center of the chat when a new day starts
+    getDateKey(timestamp) — returns a "YYYY-M-D" string used to detect day boundaries between consecutive messages
+    formatDateLabel(timestamp) — formats the pill label smartly:
+        Same day → Today
+        Previous day → Yesterday
+        This year → Mon, Mar 7
+        Older → Mar 7, 2024
+    Pill rendering — each message checks if it's the first of the day (or the very first message). If so, a centered pill is inserted above it with a frosted-glass-style look: var(--bg-secondary) background, var(--border) outline, rounded 20px, small bold text — matches both dark and light themes automatically.
+
+
 Search icon (🔍) in the chat header — clicking it toggles a search bar below the header.
 Search bar in ChatWindow.tsx:
     Text input with live filtering — matches are computed as you type
@@ -167,21 +200,36 @@ message right click option: (shown inside chat window)
     Copy message — for any non-deleted message with text content
     Delete for me — always available
     Delete for everyone — for non-deleted messages
-    Pin message - max 50 message (test overflow) (chatwindow.tsx, chatservice.ts)
+    Pin message - max 50 message (test overflow) (chatwindow.tsx, chatservice.ts) (show pin icon in it)
     close chat
     select messages
     react messages
+show right click option inside the container
 double click any message to reply it
 The reply quote div now has a subtle background and pointer cursor to make it feel clickable and scroll back to that message
-scroll up / down in chat
+scroll up / down in chat inteligently 
+    if it's already on top = don't show up arow
+    if it's already in bottom = don't show bottom arrow
+    if it's not in top & bottom then show both icon
 
-Bottom action bar (replaces input while in selection mode):
-    Cancel + selected count on the left
-    Copy — copies all selected messages' text to clipboard, then exits
-    Forward — opens the forward modal for the all selected message, then exits
-    Pin — pins/unpins all selected messages, then exits
-    Delete for me (trash icon)
-    Delete for everyone (red trash + "All" label)
+three dot icon menu
+    Open in new window
+    Pin / Unpin chat
+    Archive / Unarchive chat
+    Close chat
+    Delete for me (executes immediately)
+    Delete for everyone (shows a confirm modal first)
+    ------------------------------------------------------
+    Header row: ✕ Cancel + "N selected" count
+    Edit message — only enabled when exactly 1 message is selected and it's your own non-deleted text message; triggers inline edit directly in the bubble
+    Reply message — only enabled when exactly 1 message is selected; sets it as the reply target and exits selection mode
+    Forward message — enabled when 1+ selected
+    Copy message — enabled when 1+ selected
+    Pin messages — enabled when 1+ selected
+    (divider)
+    Delete selected for me
+    Delete selected for everyone (in red)
+Edit and Reply show as dimmed (opacity 35%) when not applicable so the user can still see them but knows they're unavailable.
 
 
 Escape to cancel — a global keydown listener calls exitSelectionMode() when Escape is pressed, regardless of which element has focus.
@@ -224,6 +272,11 @@ Clicking the Chats icon resets back to the normal chat list.
 
 
 show deleted message preview instantly for delete for me/everyone
+     The chatMessages memo now also depends on deletedCount (the number of messages with deleted: true). When you delete a message for everyone, markMessageDeleted sets deleted: true on that message — deletedCount changes from N to N+1 — the memo recomputes and the UI reflects the deletion instantly, without waiting for a new message or reload.Added deletedCount to the chatMessages memo dependency array in ChatWindow.tsx so that when a message is deleted for everyone, the UI updates instantly without needing a new message or reload.
+
+search messages of individual chat:
+
+
 show edited message instantly to both user
 starting date in pills
 click in voice/video call message to trigger call icon
@@ -539,9 +592,14 @@ Secret Access Key: e7e7236b3f02bcc857068bb0864c3d1f8e26e347cd56b17a10bfe910ca239
 Use jurisdiction-specific endpoints for S3 clients: https://3ff0db8934ac81bc8cb6990fafcb457b.r2.cloudflarestorage.com
 
 
+it don't update in realtime
+and it don't double tick when user B receive message
+user isn't able to do video call though electron desktop-client but they can do voice call
+
+
 
 when i open chat in new during call then it don't show call button disabled
-user A send message single tick & user B receives message double tick
+user A send message single tick & user B receives message double tick and user B read message blue tick
 
 when user didn't receive message then show single tick and when user receive message then show double tick
 when user hasn't open the chat window then show single tick to user A and when user B open the chat window then show double tick to user A
@@ -669,6 +727,17 @@ we need to fix for third or n number of time issue
 user A switch to video call mode then user B sees user A video
 user b also switch to video call mode then user A can't sees user B video
 
+
+responsive:
+Tablet (≤ 1024px): chat sidebar narrows to 260px
+Mobile (≤ 768px):
+Navigation sidebar moves from left column to bottom tab bar (56px, horizontal layout)
+    Chat layout becomes sliding panels — sidebar slides in from left; when a chat is open, sidebar slides out and chat window slides in (with smooth 0.28s transitions)
+    Scrollbars hidden on touch devices
+    Touch targets enforced (min 36px)
+    Video call PiP shrinks to 120×80px
+    All modals/cards use full available width
+Small mobile (≤ 480px): additional size reductions
 
 
 

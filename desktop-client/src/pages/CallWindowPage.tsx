@@ -79,6 +79,7 @@ const CallWindowPage: React.FC = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [callStatus, setCallStatus] = useState<CallStatus>('ringing');
+  const [isRinging, setIsRinging] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isLocalVideoEnabled, setIsLocalVideoEnabled] = useState(false);
@@ -187,16 +188,23 @@ const CallWindowPage: React.FC = () => {
     const audioConstraint: MediaTrackConstraints = savedMicId
       ? { deviceId: { ideal: savedMicId } }
       : {};
-    const videoConstraint: MediaTrackConstraints | boolean =
-      callType === 'video'
-        ? savedCamId
-          ? { deviceId: { ideal: savedCamId }, width: 1280, height: 720 }
-          : { width: 1280, height: 720 }
-        : false;
-    return navigator.mediaDevices.getUserMedia({
-      audio: audioConstraint || true,
-      video: videoConstraint,
-    });
+
+    if (callType !== 'video') {
+      return navigator.mediaDevices.getUserMedia({ audio: audioConstraint || true, video: false });
+    }
+
+    // For video: try preferred settings first, fall back progressively if the
+    // camera source is busy or the constraints are rejected by the device.
+    const videoWithPrefs: MediaTrackConstraints = savedCamId
+      ? { deviceId: { ideal: savedCamId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      : { width: { ideal: 1280 }, height: { ideal: 720 } };
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: audioConstraint || true, video: videoWithPrefs });
+    } catch {
+      // Last resort: drop all video constraints and let the browser/OS pick any camera.
+      return navigator.mediaDevices.getUserMedia({ audio: audioConstraint || true, video: true });
+    }
   };
 
   // ─── Start call timer ─────────────────────────────────────────────────────
@@ -428,6 +436,12 @@ const CallWindowPage: React.FC = () => {
         cleanup();
         // Delay slightly to let cleanup() settle before IPC
         setTimeout(() => window.electronAPI?.hangupCallWindow?.(), 200);
+        return;
+      }
+
+      if (event === SOCKET_EVENTS.CALL_RINGING) {
+        // Server confirmed the callee's device is ringing
+        setIsRinging(true);
         return;
       }
 
@@ -1082,7 +1096,7 @@ const CallWindowPage: React.FC = () => {
         }}
       >
         {/* ── GRID VIEW ─────────────────────────────────────────────── */}
-        {effectiveIsVideo && gridView ? (
+        {effectiveIsVideo && gridView && callStatus !== 'ringing' ? (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'row' }}>
             {(() => {
               const leftStream  = gridSwapped ? localStream  : remoteStream;
@@ -1117,7 +1131,7 @@ const CallWindowPage: React.FC = () => {
             })()}
           </div>
 
-        ) : effectiveIsVideo ? (
+        ) : effectiveIsVideo && callStatus !== 'ringing' ? (
           /* ── PiP VIEW ────────────────────────────────────────────── */
           <>
             <VideoStream
@@ -1263,7 +1277,7 @@ const CallWindowPage: React.FC = () => {
             <div style={{ textAlign: 'center' }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>{displayName}</h2>
               <p style={{ margin: 0, color: '#94a3b8', fontSize: 16 }}>
-                {callStatus === 'active' ? formatDuration(callDuration) : callData.isOutgoing ? 'Calling…' : 'Connecting…'}
+                {callStatus === 'active' ? formatDuration(callDuration) : callData.isOutgoing ? (isRinging ? 'Ringing…' : 'Calling…') : 'Connecting…'}
               </p>
             </div>
             {callStatus === 'active' && (

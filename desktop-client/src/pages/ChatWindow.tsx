@@ -134,13 +134,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   const deletedCount = liveMsgs.filter((m) => m.deleted).length;
   // Changes whenever any edited message's content changes (handles first edit + re-edits)
   const editedSignature = liveMsgs.reduce((s, m) => m.isEdited ? s + (m.content?.length ?? 0) : s, 0);
+  // Changes whenever any message's readBy or deliveredTo array grows (drives real-time tick updates)
+  const readBySignature = liveMsgs.reduce((s, m) => s + (m.readBy?.length ?? 0) + (m.deliveredTo?.length ?? 0), 0);
   const chatMessages = useMemo(() => {
     const olderFiltered = olderMessages.filter(
       (o) => !liveMsgs.some((l) => l.messageId === o.messageId),
     );
     return [...olderFiltered, ...liveMsgs];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [olderMessages, liveMsgs.length, deletedCount, editedSignature, chatId]);
+  }, [olderMessages, liveMsgs.length, deletedCount, editedSignature, readBySignature, chatId]);
 
   const typingList = typingUsers[chatId!] || [];
   const liveTexts = liveTypingTexts?.[chatId!] || [];
@@ -210,12 +212,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
     joinChatRoom(chatId);
     clearUnread(chatId);
     markChatRead(chatId).catch(console.error);
+    // Notify sender(s) in real-time that this user has read the chat
+    sendReadReceipt(chatId, '');
 
     // When the window is restored/focused while this chat is open, clear unread
     const handleVisible = () => {
-      if (!document.hidden) clearUnread(chatId);
+      if (!document.hidden) {
+        clearUnread(chatId);
+        markChatRead(chatId).catch(console.error);
+        sendReadReceipt(chatId, '');
+      }
     };
-    const handleFocus = () => clearUnread(chatId);
+    const handleFocus = () => {
+      clearUnread(chatId);
+      sendReadReceipt(chatId, '');
+    };
     document.addEventListener('visibilitychange', handleVisible);
     window.addEventListener('focus', handleFocus);
 
