@@ -9,6 +9,9 @@ cd "d:\programming exercise\social media\desktop-client"
 npx tsc -p tsconfig.electron.json && npm run electron:dev (terminal)
 npx tsc -p tsconfig.electron.json; npm run electron:dev (powershell)
 
+npm run build:client
+npx electron-builder --win --x64
+
 
 http://localhost:5173/
 

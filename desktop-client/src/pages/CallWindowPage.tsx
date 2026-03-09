@@ -1131,6 +1131,38 @@ const CallWindowPage: React.FC = () => {
             })()}
           </div>
 
+        ) : effectiveIsVideo && callStatus === 'ringing' ? (
+          /* ── VIDEO RINGING: dim local camera behind callee avatar ─── */
+          <>
+            {localStream && (
+              <VideoStream
+                stream={localStream}
+                muted
+                mirror
+                objectFit="cover"
+                style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0, filter: 'brightness(0.45)' }}
+              />
+            )}
+            {/* Callee avatar + name centered */}
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 14,
+            }}>
+              <div style={{ position: 'relative' }}>
+                <div style={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.5, animation: 'callPulse 1.5s ease-out infinite', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+                <div style={{ position: 'absolute', width: 158, height: 158, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.25, animation: 'callPulse 1.5s ease-out infinite 0.45s', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+                <UserAvatar name={displayName} avatar={callData.targetAvatar} size={110} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>{displayName}</h2>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: 16, textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>
+                  {callData.isOutgoing ? (isRinging ? 'Ringing\u2026' : 'Calling\u2026') : 'Connecting\u2026'}
+                </p>
+              </div>
+            </div>
+          </>
+
         ) : effectiveIsVideo && callStatus !== 'ringing' ? (
           /* ── PiP VIEW ────────────────────────────────────────────── */
           <>
@@ -1302,8 +1334,8 @@ const CallWindowPage: React.FC = () => {
           </div>
         )}
 
-        {/* Peer info overlay (video mode) */}
-        {effectiveIsVideo && (
+        {/* Peer info overlay (video mode, active call only) */}
+        {effectiveIsVideo && callStatus !== 'ringing' && (
           <div style={{
             position: 'absolute', top: 16, left: 16,
             display: 'flex', alignItems: 'center', gap: 8,
