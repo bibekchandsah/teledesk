@@ -8,6 +8,7 @@ interface CallState {
   remoteStream: MediaStream | null;
   isMuted: boolean;
   isVideoOff: boolean;
+  isCalleeRinging: boolean; // true once server confirms callee's device is ringing
   callDuration: number; // seconds
   callTimer: ReturnType<typeof setInterval> | null;
 
@@ -17,6 +18,7 @@ interface CallState {
   setRemoteStream: (stream: MediaStream | null) => void;
   setMuted: (muted: boolean) => void;
   setVideoOff: (off: boolean) => void;
+  setIsCalleeRinging: (ringing: boolean) => void;
   startCallTimer: () => void;
   stopCallTimer: () => void;
   endCallCleanup: () => void;
@@ -29,6 +31,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   remoteStream: null,
   isMuted: false,
   isVideoOff: false,
+  isCalleeRinging: false,
   callDuration: 0,
   callTimer: null,
 
@@ -38,6 +41,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   setRemoteStream: (stream) => set({ remoteStream: stream }),
   setMuted: (muted) => set({ isMuted: muted }),
   setVideoOff: (off) => set({ isVideoOff: off }),
+  setIsCalleeRinging: (ringing) => set({ isCalleeRinging: ringing }),
 
   startCallTimer: () => {
     const timer = setInterval(() => {
@@ -63,6 +67,7 @@ export const useCallStore = create<CallState>((set, get) => ({
       remoteStream: null,
       isMuted: false,
       isVideoOff: false,
+      isCalleeRinging: false,
       callTimer: null,
       callDuration: 0,
     });

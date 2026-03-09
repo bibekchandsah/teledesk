@@ -47,6 +47,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     stopCallTimer,
     endCallCleanup,
     callDuration,
+    setIsCalleeRinging,
   } = useCallStore();
   const { currentUser } = useAuthStore();
   const { activeChat, chats, nicknames } = useChatStore();
@@ -249,6 +250,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleCallRinging = (data: { callId: string }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
       setActiveCall({ ...activeCallRef.current!, status: 'ringing' });
+      setIsCalleeRinging(true);
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.CALL_RINGING, data);
       }

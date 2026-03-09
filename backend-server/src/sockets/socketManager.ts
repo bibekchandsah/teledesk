@@ -12,8 +12,15 @@ import logger from '../utils/logger';
 const onlineUsers = new Map<string, string>();
 // Cache of userId -> showActiveStatus so late-joining users get accurate state
 const userShowStatus = new Map<string, boolean>();
-// Active calls: callId -> { callerId, receiverId, status }
-const activeCalls = new Map<string, { callerId: string; receiverId: string; status: 'ringing' | 'active' }>();
+// Active calls: callId -> full call data needed for re-delivery
+const activeCalls = new Map<string, {
+  callerId: string;
+  receiverId: string;
+  status: 'ringing' | 'active';
+  callerName: string;
+  callerAvatar?: string;
+  callType: 'video' | 'voice';
+}>();
 // Reverse lookup: userId -> callId
 const userActiveCall = new Map<string, string>();
 
@@ -96,6 +103,30 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         }
       })
       .catch((err) => logger.error(`deliver-on-connect error: ${(err as Error).message}`));
+
+    // ─── Re-deliver pending incoming call if receiver was offline ─────────
+    // When user B was offline at the time user A called, they missed INCOMING_CALL.
+    // As soon as they reconnect within the 30-second ringing window, deliver it now
+    // and notify user A that user B's device is now ringing.
+    const pendingCallId = userActiveCall.get(uid);
+    if (pendingCallId) {
+      const pendingCall = activeCalls.get(pendingCallId);
+      if (pendingCall && pendingCall.status === 'ringing' && pendingCall.receiverId === uid) {
+        // Deliver the incoming call to the receiver who just came online
+        socket.emit(SOCKET_EVENTS.INCOMING_CALL, {
+          callId: pendingCallId,
+          callerId: pendingCall.callerId,
+          callerName: pendingCall.callerName,
+          callerAvatar: pendingCall.callerAvatar,
+          callType: pendingCall.callType,
+        });
+        // Notify the caller that the callee's device is now ringing
+        if (onlineUsers.has(pendingCall.callerId)) {
+          io.to(`user:${pendingCall.callerId}`).emit(SOCKET_EVENTS.CALL_RINGING, { callId: pendingCallId });
+        }
+        logger.info(`Re-delivered pending call ${pendingCallId} to ${uid} after reconnect`);
+      }
+    }
 
     // ─── Messaging ────────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.JOIN_ROOM, (chatId: string) => {
@@ -289,7 +320,14 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       (payload: { targetUserId: string; callType: 'video' | 'voice'; callId: string; callerName: string; callerAvatar?: string }) => {
         logger.info(`Call initiated from ${uid} to ${payload.targetUserId}`);
         // Track this call
-        activeCalls.set(payload.callId, { callerId: uid, receiverId: payload.targetUserId, status: 'ringing' });
+        activeCalls.set(payload.callId, {
+          callerId: uid,
+          receiverId: payload.targetUserId,
+          status: 'ringing',
+          callerName: payload.callerName,
+          callerAvatar: payload.callerAvatar,
+          callType: payload.callType,
+        });
         userActiveCall.set(uid, payload.callId);
         userActiveCall.set(payload.targetUserId, payload.callId);
         // Deliver call to receiver

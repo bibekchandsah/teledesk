@@ -43,7 +43,7 @@ function getPipResizeCursor(edges: { left: boolean; right: boolean; top: boolean
 }
 
 const CallScreen: React.FC = () => {
-  const { activeCall, localStream, remoteStream, isMuted, isVideoOff, callDuration, setMuted, setVideoOff } =
+  const { activeCall, localStream, remoteStream, isMuted, isVideoOff, callDuration, isCalleeRinging, setMuted, setVideoOff } =
     useCallStore();
   const { endActiveCall } = useCallContext();
   const { currentUser } = useAuthStore();
@@ -775,7 +775,9 @@ const CallScreen: React.FC = () => {
           <UserAvatar name={peerName} avatar={peerAvatar} size={110} />
           <h2 style={{ margin: 0, fontSize: 24 }}>{peerName}</h2>
           <p style={{ color: '#94a3b8', fontSize: 16, margin: 0 }}>
-            {activeCall.status === 'ringing' ? 'Calling...' : formatDuration(callDuration)}
+            {activeCall.status === 'ringing'
+              ? (isCalleeRinging ? 'Ringing...' : 'Calling...')
+              : formatDuration(callDuration)}
           </p>
           {activeCall.status === 'active' && (
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 32, marginTop: 4 }}>

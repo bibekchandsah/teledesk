@@ -193,6 +193,15 @@ Highlight in MessageBubble.tsx:
     The currently active match gets an accent-colored outline around the whole bubble
 
 
+Call History page (src/pages/CallHistoryPage.tsx) layout:
+    Sticky day separators (Today / Yesterday / weekday / date)
+    Each row: avatar | name + direction+type+status | time on the right
+    Status icons: PhoneIncoming (green), PhoneOutgoing (accent), PhoneMissed (red), PhoneOff (grey)
+    Shows call duration (mm:ss) for completed calls, "Missed" / "No answer" / "Declined" for others
+    Clicking a row navigates to that chat
+    Empty state with a faded phone icon when no calls exist
+
+
 message right click option: (shown inside chat window)
     Reply message -  "Reply" context menu item (CornerUpLeft icon), and a quoted reply block shown at the top of the bubble when message.replyTo is set
     Forward message -
