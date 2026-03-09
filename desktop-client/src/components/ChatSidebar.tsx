@@ -4,10 +4,20 @@ import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from './UserAvatar';
-import { formatTime, truncate } from '../utils/formatters';
+import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon } from '../utils/formatters';
 import { Chat } from '@shared/types';
 import { deleteChat as deleteChatApi } from '../services/apiService';
-import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink } from 'lucide-react';
+import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff } from 'lucide-react';
+
+const PREVIEW_ICON_MAP = { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff } as const;
+type PreviewIconKey = keyof typeof PREVIEW_ICON_MAP;
+
+const PreviewIcon: React.FC<{ msg: Parameters<typeof getMessagePreviewIcon>[0]; color?: string }> = ({ msg, color }) => {
+  const key = getMessagePreviewIcon(msg) as PreviewIconKey | null;
+  if (!key) return null;
+  const Icon = PREVIEW_ICON_MAP[key];
+  return <Icon size={12} style={{ flexShrink: 0, color: color ?? 'inherit' }} />;
+};
 
 interface ChatSidebarProps {
   onNewChat: () => void;
@@ -335,8 +345,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                         </span>
                       )}
                     </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
-                      {chat.lastMessage ? truncate(chat.lastMessage.type === 'text' ? chat.lastMessage.content : `[${chat.lastMessage.type}]`, 40) : 'No messages'}
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {chat.lastMessage ? (
+                        <>
+                          <PreviewIcon msg={chat.lastMessage} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncate(getMessagePreview(chat.lastMessage), 40)}</span>
+                        </>
+                      ) : 'No messages'}
                     </span>
                   </div>
                 </div>
@@ -425,7 +440,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                   </span>
                   <span
                     style={{
-                      display: 'block',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
                       fontSize: 13,
                       fontWeight: unread > 0 ? 600 : 400,
                       color: unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -435,14 +452,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                       marginTop: 2,
                     }}
                   >
-                    {chat.lastMessage
-                      ? truncate(
-                          chat.lastMessage.type === 'text'
-                            ? chat.lastMessage.content
-                            : `${chat.lastMessage.type}`,
-                          50,
-                        )
-                      : 'Start a conversation'}
+                    {chat.lastMessage ? (
+                      <>
+                        <PreviewIcon msg={chat.lastMessage} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncate(getMessagePreview(chat.lastMessage), 50)}</span>
+                      </>
+                    ) : 'Start a conversation'}
                   </span>
                 </div>
                 {/* Right: time on top, unread badge below */}
