@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import userRoutes from './routes/userRoutes';
 import chatRoutes from './routes/chatRoutes';
 import groupRoutes from './routes/groupRoutes';
+import fileRoutes from './routes/fileRoutes';
 import { initializeSocket } from './sockets/socketManager';
 import { setIo } from './controllers/chatController';
 import logger from './utils/logger';
@@ -17,7 +18,6 @@ import fs from 'fs';
 
 // ─── Ensure log directory exists ───────────────────────────────────────────
 if (!fs.existsSync('logs')) fs.mkdirSync('logs');
-if (!fs.existsSync('uploads/avatars')) fs.mkdirSync('uploads/avatars', { recursive: true });
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -39,12 +39,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Static Uploads ───────────────────────────────────────────────────────
-// Must set Cross-Origin-Resource-Policy: cross-origin so browsers on a
-// different origin (e.g. localhost:5173) can render the images.
-app.use('/uploads', (_req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static('uploads'));
+// Files are now served from Cloudflare R2; no local static middleware needed.
 
 // ─── Health Check ──────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
@@ -55,6 +50,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/users', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/files', fileRoutes);
 
 // ─── 404 & Error Handlers ──────────────────────────────────────────────────
 app.use(notFoundHandler);

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats } from '../services/userService';
-import fs from 'fs';
-import path from 'path';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2';
 import logger from '../utils/logger';
 
 /**
@@ -50,7 +50,7 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
 
 /**
  * POST /api/users/avatar
- * Upload a profile picture; returns the public download URL.
+ * Upload a profile picture to Cloudflare R2; returns the public download URL.
  */
 export const uploadAvatar = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -60,13 +60,20 @@ export const uploadAvatar = async (req: Request, res: Response): Promise<void> =
     }
     const uid = req.user!.uid;
     const ext = (req.file.mimetype.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg');
-    const filename = `${uid}.${ext}`;
-    const uploadsDir = path.resolve('uploads/avatars');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    const destPath = path.join(uploadsDir, filename);
-    fs.writeFileSync(destPath, req.file.buffer);
-    const host = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
-    const downloadURL = `${host}/uploads/avatars/${filename}`;
+    const key = `avatars/${uid}.${ext}`;
+
+    await r2Client.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+        // Cache avatar for 7 days; CloudFlare CDN will serve it
+        CacheControl: 'public, max-age=604800',
+      }),
+    );
+
+    const downloadURL = `${R2_PUBLIC_URL}/${key}`;
     res.json({ success: true, data: { url: downloadURL } });
   } catch (error) {
     logger.error(`uploadAvatar error: ${(error as Error).message}`);

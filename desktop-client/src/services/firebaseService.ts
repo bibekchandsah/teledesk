@@ -1,3 +1,6 @@
+// Firebase is now used ONLY for authentication (Google / GitHub / email).
+// Messages and user data are stored in Supabase PostgreSQL.
+// File uploads go through the backend API → Cloudflare R2.
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import {
   getAuth,
@@ -11,27 +14,34 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, query, where, limit, orderBy, onSnapshot, updateDoc, Unsubscribe } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL, UploadTask } from 'firebase/storage';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Message, Chat } from '@shared/types';
 
-// ─── Firebase Configuration ────────────────────────────────────────────────
+// ─── Firebase Auth Configuration ──────────────────────────────────────────
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// ─── Initialize Firebase ───────────────────────────────────────────────────
 const app: FirebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-
 export const firebaseAuth = getAuth(app);
-export const firestoreDb = getFirestore(app);
-export const firebaseStorage = getStorage(app);
 
+// ─── Supabase Realtime Client (anon key – read-only subscriptions) ─────────
+// The anon key is safe to expose; actual writes always go through the backend
+// (service-role key). Configure RLS so users can only read their own rows.
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+let _supabase: SupabaseClient | null = null;
+const getSupabase = (): SupabaseClient => {
+  if (!_supabase) _supabase = createClient(supabaseUrl, supabaseAnonKey);
+  return _supabase;
+};
+
+// ─── OAuth Providers ───────────────────────────────────────────────────────
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
@@ -41,7 +51,6 @@ githubProvider.addScope('read:user');
 githubProvider.addScope('user:email');
 
 // ─── Auth Functions ────────────────────────────────────────────────────────
-
 export const signInWithGoogle = async (): Promise<FirebaseUser> => {
   const result = await signInWithPopup(firebaseAuth, googleProvider);
   return result.user;
@@ -73,7 +82,7 @@ export const signOutUser = async (): Promise<void> => {
 
 export const onAuthChange = (
   callback: (user: FirebaseUser | null) => void,
-): Unsubscribe => {
+): (() => void) => {
   return onAuthStateChanged(firebaseAuth, callback);
 };
 
@@ -83,201 +92,206 @@ export const getIdToken = async (): Promise<string | null> => {
   return user.getIdToken();
 };
 
-// ─── Firebase Storage Upload ───────────────────────────────────────────────
-
-export const uploadAvatarFile = (
-  file: File,
-  uid: string,
-  onProgress?: (percent: number) => void,
-): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const ext = (file.type.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg');
-    const storageRef = ref(firebaseStorage, `avatars/${uid}.${ext}`);
-    const task = uploadBytesResumable(storageRef, file, { contentType: file.type });
-    task.on(
-      'state_changed',
-      (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
-      reject,
-      async () => resolve(await getDownloadURL(task.snapshot.ref)),
-    );
-  });
-};
-
-// ─── Firestore User Functions ──────────────────────────────────────────────
-
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-  const docRef = doc(firestoreDb, 'users', uid);
-  const snap = await getDoc(docRef);
-  return snap.exists() ? (snap.data() as User) : null;
-};
-
-// Write user profile directly to Firestore from client (used as fallback when backend is unavailable)
-export const upsertUserProfile = async (fbUser: FirebaseUser): Promise<User> => {
-  const now = new Date().toISOString();
-  const userRef = doc(firestoreDb, 'users', fbUser.uid);
-  const existing = await getDoc(userRef);
-
-  if (!existing.exists()) {
-    const newUser: User = {
-      uid: fbUser.uid,
-      name: fbUser.displayName || 'User',
-      email: fbUser.email || '',
-      avatar: fbUser.photoURL || '',
-      createdAt: now,
-      lastSeen: now,
-      onlineStatus: 'online',
-    };
-    await setDoc(userRef, newUser);
-    return newUser;
-  }
-
-  await updateDoc(userRef, { lastSeen: now, onlineStatus: 'online' });
-  return (await getDoc(userRef)).data() as User;
-};
-
-export const listenToUserProfile = (
-  uid: string,
-  callback: (user: User) => void,
-): Unsubscribe => {
-  return onSnapshot(doc(firestoreDb, 'users', uid), (snap) => {
-    if (snap.exists()) callback(snap.data() as User);
-  });
-};
-
-// ─── Firestore Chat Functions ──────────────────────────────────────────────
-
-// Generate a random 20-char ID (same algo as the backend)
-const genId = () => Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
-
-export const getOrCreatePrivateChatDirect = async (
-  myUid: string,
-  targetUid: string,
-): Promise<Chat> => {
-  // Check if a private chat already exists between these two users
-  const existing = await getDocs(
-    query(
-      collection(firestoreDb, 'chats'),
-      where('type', '==', 'private'),
-      where('members', 'array-contains', myUid),
-    ),
-  );
-
-  if (myUid === targetUid) {
-    // Self-chat: find chat where every member is own uid
-    for (const d of existing.docs) {
-      const c = d.data() as Chat;
-      if (c.members.every((m) => m === myUid)) return c;
-    }
-    const chatId = genId();
-    const chat: Chat = {
-      chatId,
-      type: 'private',
-      members: [myUid, myUid],
-      createdAt: new Date().toISOString(),
-    };
-    await setDoc(doc(firestoreDb, 'chats', chatId), chat);
-    return chat;
-  }
-
-  for (const d of existing.docs) {
-    const c = d.data() as Chat;
-    if (c.members.includes(targetUid)) return c;
-  }
-  // Create a new one
-  const chatId = genId();
-  const chat: Chat = {
-    chatId,
-    type: 'private',
-    members: [myUid, targetUid],
-    createdAt: new Date().toISOString(),
-  };
-  await setDoc(doc(firestoreDb, 'chats', chatId), chat);
-  return chat;
-};
-
+// ─── Supabase Realtime – Chat list ─────────────────────────────────────────
+// Fetches the initial list via backend HTTP, then pushes incremental updates
+// from Supabase Realtime postgres changes so the UI stays live.
 export const listenToUserChats = (
   uid: string,
   callback: (chats: Chat[]) => void,
-): Unsubscribe => {
-  const q = query(
-    collection(firestoreDb, 'chats'),
-    where('members', 'array-contains', uid),
-    limit(100),
-  );
+): (() => void) => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  let currentChats: Chat[] = [];
 
-  return onSnapshot(q, (snapshot) => {
-    const chats = snapshot.docs
-      .map((d) => d.data() as Chat)
-      .sort((a, b) => {
-        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-        return bTime - aTime;
+  const fetchAndNotify = async () => {
+    const token = await getIdToken();
+    try {
+      const res = await fetch(`${BASE_URL}/api/chats`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-    callback(chats);
-  });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        currentChats = data.data as Chat[];
+        callback(currentChats);
+      }
+    } catch {
+      // Network error – keep last known state
+    }
+  };
+
+  // Initial load
+  fetchAndNotify();
+
+  // Realtime subscription – re-fetch on any change in chats table
+  const sb = getSupabase();
+  const channel: RealtimeChannel = sb
+    .channel(`user-chats:${uid}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'chats' },
+      () => { fetchAndNotify(); },
+    )
+    .subscribe();
+
+  return () => { sb.removeChannel(channel); };
 };
 
+// ─── Supabase Realtime – Messages ──────────────────────────────────────────
 export const listenToMessages = (
   chatId: string,
   callback: (messages: Message[]) => void,
   onError?: () => void,
   limitCount = 30,
-): Unsubscribe => {
-  const q = query(
-    collection(firestoreDb, 'messages'),
-    where('chatId', '==', chatId),
-    orderBy('timestamp', 'desc'),
-    limit(limitCount),
-  );
+): (() => void) => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const messages = snapshot.docs
-        .map((d) => d.data() as Message)
-        // Firestore returned newest-first; reverse for chronological display
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-      callback(messages);
-    },
-    (err) => {
-      console.warn('[Firestore] onSnapshot error (falling back to HTTP):', err.message);
+  const fetchAndNotify = async () => {
+    const token = await getIdToken();
+    try {
+      const res = await fetch(
+        `${BASE_URL}/api/chats/${chatId}/messages?limit=${limitCount}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        callback(data.data as Message[]);
+      } else {
+        onError?.();
+      }
+    } catch {
       onError?.();
-    },
-  );
+    }
+  };
+
+  fetchAndNotify();
+
+  const sb = getSupabase();
+  const channel: RealtimeChannel = sb
+    .channel(`chat-messages:${chatId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
+      () => { fetchAndNotify(); },
+    )
+    .subscribe();
+
+  return () => { sb.removeChannel(channel); };
 };
 
-// ─── File Upload ───────────────────────────────────────────────────────────
+// ─── User Profile (via backend API — no direct DB writes from client) ──────
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const token = await getIdToken();
+  try {
+    const res = await fetch(`${BASE_URL}/api/users/${uid}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await res.json();
+    return data.success ? (data.data as User) : null;
+  } catch {
+    return null;
+  }
+};
 
+// Retained as a best-effort fallback for AuthContext when backend is unavailable.
+// Uses /api/users/sync which upserts the user in Supabase.
+export const upsertUserProfile = async (fbUser: FirebaseUser): Promise<User> => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const token = await getIdToken();
+  const now = new Date().toISOString();
+  if (token) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/users/sync`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: fbUser.displayName || 'User',
+          email: fbUser.email || '',
+          avatar: fbUser.photoURL || '',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) return data.data as User;
+    } catch {
+      // Fall through to local profile
+    }
+  }
+  return {
+    uid: fbUser.uid,
+    name: fbUser.displayName || 'User',
+    email: fbUser.email || '',
+    avatar: fbUser.photoURL || '',
+    createdAt: now,
+    lastSeen: now,
+    onlineStatus: 'online',
+  };
+};
+
+// getOrCreatePrivateChatDirect now goes through the backend API
+export const getOrCreatePrivateChatDirect = async (
+  myUid: string,
+  targetUid: string,
+): Promise<Chat> => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const token = await getIdToken();
+  const res = await fetch(`${BASE_URL}/api/chats/private`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ targetUid: myUid === targetUid ? myUid : targetUid }),
+  });
+  const data = await res.json();
+  if (data.success && data.data) return data.data as Chat;
+  throw new Error(data.error || 'Failed to create chat');
+};
+
+// ─── Upload Progress type (kept for fileService.ts compatibility) ──────────
 export interface UploadProgress {
   progress: number;
   downloadURL?: string;
   error?: Error;
 }
 
+// uploadFile now proxies to the backend /api/files/upload → Cloudflare R2
 export const uploadFile = (
   file: File,
-  path: string,
+  storagePath: string,
   onProgress: (progress: UploadProgress) => void,
-): UploadTask => {
-  const storageRef = ref(firebaseStorage, path);
-  const uploadTask = uploadBytesResumable(storageRef, file);
+): { cancel: () => void } => {
+  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const controller = new AbortController();
 
-  uploadTask.on(
-    'state_changed',
-    (snapshot) => {
-      const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-      onProgress({ progress });
-    },
-    (error) => {
-      onProgress({ progress: 0, error });
-    },
-    async () => {
-      const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-      onProgress({ progress: 100, downloadURL });
-    },
-  );
+  const chatId = storagePath.split('/')[1] ?? 'misc';
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('chatId', chatId);
 
-  return uploadTask;
+  (async () => {
+    onProgress({ progress: 10 });
+    const token = await getIdToken();
+    try {
+      onProgress({ progress: 50 });
+      const res = await fetch(`${BASE_URL}/api/files/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (data.success && data.data?.url) {
+        onProgress({ progress: 100, downloadURL: data.data.url });
+      } else {
+        onProgress({ progress: 0, error: new Error(data.error || 'Upload failed') });
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        onProgress({ progress: 0, error: err as Error });
+      }
+    }
+  })();
+
+  return { cancel: () => controller.abort() };
 };
 
-export { getDownloadURL };
+

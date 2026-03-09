@@ -34,7 +34,7 @@ export const validateFile = (file: File): { valid: boolean; error?: string } => 
 };
 
 /**
- * Upload a file to Firebase Storage and return metadata
+ * Upload a file to Cloudflare R2 via backend API and return metadata
  */
 export const uploadChatFile = (
   file: File,

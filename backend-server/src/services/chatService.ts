@@ -1,317 +1,375 @@
-import { db } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import { Chat, Message } from '../../../shared/types';
 import { generateId, now } from '../utils/helpers';
 import logger from '../utils/logger';
 
-/**
- * Find or create a private chat between two users
- */
+// ─── Helper: map DB row → Chat ─────────────────────────────────────────────
+type ChatRow = {
+  chat_id: string;
+  type: string;
+  members: string[];
+  created_at: string;
+  last_message: Message | null;
+  last_message_at: string | null;
+  pinned_message_ids: string[];
+};
+
+const rowToChat = (r: ChatRow): Chat => ({
+  chatId: r.chat_id,
+  type: r.type as 'private' | 'group',
+  members: r.members,
+  createdAt: r.created_at,
+  ...(r.last_message && { lastMessage: r.last_message }),
+  ...(r.last_message_at && { lastMessageAt: r.last_message_at }),
+  pinnedMessageIds: r.pinned_message_ids ?? [],
+});
+
+// ─── Helper: map DB row → Message ─────────────────────────────────────────
+type MessageRow = {
+  message_id: string;
+  chat_id: string;
+  sender_id: string;
+  sender_name: string | null;
+  sender_avatar: string | null;
+  content: string;
+  type: string;
+  timestamp: string;
+  read_by: string[];
+  file_url: string | null;
+  file_name: string | null;
+  file_size: number | null;
+  encrypted: boolean | null;
+  deleted: boolean | null;
+  deleted_for: string[];
+  is_edited: boolean | null;
+  forwarded: boolean | null;
+  reply_to: Message['replyTo'] | null;
+  call_type: string | null;
+  call_duration: number | null;
+  call_status: string | null;
+  call_status_receiver: string | null;
+};
+
+const rowToMessage = (r: MessageRow): Message => ({
+  messageId: r.message_id,
+  chatId: r.chat_id,
+  senderId: r.sender_id,
+  ...(r.sender_name !== null && { senderName: r.sender_name }),
+  ...(r.sender_avatar !== null && { senderAvatar: r.sender_avatar }),
+  content: r.content,
+  type: r.type as Message['type'],
+  timestamp: r.timestamp,
+  readBy: r.read_by ?? [],
+  ...(r.file_url !== null && { fileUrl: r.file_url }),
+  ...(r.file_name !== null && { fileName: r.file_name }),
+  ...(r.file_size !== null && { fileSize: r.file_size }),
+  ...(r.encrypted !== null && { encrypted: r.encrypted }),
+  ...(r.deleted !== null && { deleted: r.deleted }),
+  ...(r.deleted_for?.length && { deletedFor: r.deleted_for }),
+  ...(r.is_edited !== null && { isEdited: r.is_edited }),
+  ...(r.forwarded !== null && { forwarded: r.forwarded }),
+  ...(r.reply_to !== null && { replyTo: r.reply_to }),
+  ...(r.call_type !== null && { callType: r.call_type as Message['callType'] }),
+  ...(r.call_duration !== null && { callDuration: r.call_duration }),
+  ...(r.call_status !== null && { callStatus: r.call_status as Message['callStatus'] }),
+  ...(r.call_status_receiver !== null && { callStatusReceiver: r.call_status_receiver as Message['callStatusReceiver'] }),
+});
+
+
+// ─── Find or create a private chat ────────────────────────────────────────
+
 export const getOrCreatePrivateChat = async (
   userA: string,
   userB: string,
 ): Promise<Chat> => {
-  const snapshot = await db
-    .collection('chats')
-    .where('type', '==', 'private')
-    .where('members', 'array-contains', userA)
-    .get();
+  const { data: rows } = await supabase
+    .from('chats')
+    .select('*')
+    .eq('type', 'private')
+    .contains('members', [userA]);
+
+  const existing = (rows ?? []) as ChatRow[];
 
   if (userA === userB) {
-    // Self-chat: find chat where every member is the same uid
-    for (const doc of snapshot.docs) {
-      const chat = doc.data() as Chat;
-      if (chat.members.every((m) => m === userA)) return chat;
-    }
+    const selfChat = existing.find((c) => c.members.every((m) => m === userA));
+    if (selfChat) return rowToChat(selfChat);
+
     const chatId = generateId();
-    const chat: Chat = {
-      chatId,
+    const chat: Chat = { chatId, type: 'private', members: [userA, userA], createdAt: now() };
+    await supabase.from('chats').insert({
+      chat_id: chatId,
       type: 'private',
       members: [userA, userA],
-      createdAt: now(),
-    };
-    await db.collection('chats').doc(chatId).set(chat);
+      created_at: chat.createdAt,
+    });
     logger.info(`Self-chat created: ${chatId}`);
     return chat;
   }
 
-  for (const doc of snapshot.docs) {
-    const chat = doc.data() as Chat;
-    if (chat.members.includes(userB)) return chat;
-  }
+  const found = existing.find((c) => c.members.includes(userB));
+  if (found) return rowToChat(found);
 
-  // Create new private chat
   const chatId = generateId();
-  const chat: Chat = {
-    chatId,
+  const chat: Chat = { chatId, type: 'private', members: [userA, userB], createdAt: now() };
+  await supabase.from('chats').insert({
+    chat_id: chatId,
     type: 'private',
     members: [userA, userB],
-    createdAt: now(),
-  };
-  await db.collection('chats').doc(chatId).set(chat);
+    created_at: chat.createdAt,
+  });
   logger.info(`Private chat created: ${chatId}`);
   return chat;
 };
 
-/**
- * Get all chats for a user with last message
- */
 export const getUserChats = async (uid: string): Promise<Chat[]> => {
-  const snapshot = await db
-    .collection('chats')
-    .where('members', 'array-contains', uid)
-    .limit(100)
-    .get();
+  const { data, error } = await supabase
+    .from('chats')
+    .select('*')
+    .contains('members', [uid])
+    .limit(100);
 
-  return snapshot.docs
-    .map((doc) => doc.data() as Chat)
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as ChatRow[])
+    .map(rowToChat)
     .sort((a, b) => {
-      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-      return bTime - aTime;
+      const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return bt - at;
     });
 };
 
-/**
- * Save a message to Firestore
- */
 export const saveMessage = async (message: Message): Promise<Message> => {
-  await db.collection('messages').doc(message.messageId).set(message);
-
-  // Update chat's last message reference
-  await db.collection('chats').doc(message.chatId).update({
-    lastMessage: message,
-    lastMessageAt: message.timestamp,
+  const { error: msgErr } = await supabase.from('messages').upsert({
+    message_id: message.messageId,
+    chat_id: message.chatId,
+    sender_id: message.senderId,
+    sender_name: message.senderName ?? null,
+    sender_avatar: message.senderAvatar ?? null,
+    content: message.content,
+    type: message.type,
+    timestamp: message.timestamp,
+    read_by: message.readBy,
+    file_url: message.fileUrl ?? null,
+    file_name: message.fileName ?? null,
+    file_size: message.fileSize ?? null,
+    encrypted: message.encrypted ?? null,
+    deleted: message.deleted ?? false,
+    deleted_for: message.deletedFor ?? [],
+    is_edited: message.isEdited ?? false,
+    forwarded: message.forwarded ?? false,
+    reply_to: message.replyTo ?? null,
+    call_type: message.callType ?? null,
+    call_duration: message.callDuration ?? null,
+    call_status: message.callStatus ?? null,
+    call_status_receiver: message.callStatusReceiver ?? null,
   });
+  if (msgErr) throw new Error(msgErr.message);
+
+  await supabase
+    .from('chats')
+    .update({ last_message: message, last_message_at: message.timestamp })
+    .eq('chat_id', message.chatId);
 
   return message;
 };
 
-/**
- * Get paginated messages for a chat
- */
 export const getMessages = async (
   chatId: string,
   limit = 50,
   before?: string,
 ): Promise<Message[]> => {
-  const snapshot = await db
-    .collection('messages')
-    .where('chatId', '==', chatId)
-    .get();
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .eq('chat_id', chatId)
+    .order('timestamp', { ascending: false })
+    .limit(limit);
 
-  let msgs = snapshot.docs.map((doc) => doc.data() as Message);
+  if (before) query = query.lt('timestamp', before);
 
-  // Sort descending by timestamp
-  msgs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
 
-  // Apply 'before' cursor (messages older than this timestamp)
-  if (before) {
-    msgs = msgs.filter((m) => m.timestamp < before);
+  return ((data ?? []) as MessageRow[]).map(rowToMessage).reverse();
+};
+
+export const markMessagesRead = async (chatId: string, userId: string): Promise<void> => {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('message_id, read_by')
+    .eq('chat_id', chatId)
+    .neq('sender_id', userId);
+
+  if (error) throw new Error(error.message);
+
+  const toUpdate = (data ?? []).filter(
+    (m: { message_id: string; read_by: string[] }) => !m.read_by.includes(userId),
+  );
+
+  for (const m of toUpdate) {
+    await supabase
+      .from('messages')
+      .update({ read_by: [...m.read_by, userId] })
+      .eq('message_id', m.message_id);
   }
-
-  return msgs.slice(0, limit).reverse();
 };
 
-/**
- * Mark messages as read by a user
- */
-export const markMessagesRead = async (
-  chatId: string,
-  userId: string,
-): Promise<void> => {
-  const snapshot = await db
-    .collection('messages')
-    .where('chatId', '==', chatId)
-    .get();
+export const getChatById = async (chatId: string, uid: string): Promise<Chat | null> => {
+  const { data } = await supabase
+    .from('chats')
+    .select('*')
+    .eq('chat_id', chatId)
+    .single();
 
-  const batch = db.batch();
-  snapshot.docs.forEach((doc) => {
-    const msg = doc.data() as Message;
-    if (msg.senderId !== userId && !msg.readBy.includes(userId)) {
-      batch.update(doc.ref, { readBy: [...msg.readBy, userId] });
-    }
-  });
-  await batch.commit();
-};
-
-/**
- * Get a single chat by ID, verifying user membership
- */
-export const getChatById = async (
-  chatId: string,
-  uid: string,
-): Promise<Chat | null> => {
-  const doc = await db.collection('chats').doc(chatId).get();
-  if (!doc.exists) return null;
-  const chat = doc.data() as Chat;
+  if (!data) return null;
+  const chat = rowToChat(data as ChatRow);
   if (!chat.members.includes(uid)) return null;
   return chat;
 };
 
-/**
- * Delete chat for one user only: remove them from members.
- * If no members remain, the entire chat is deleted.
- */
 export const deleteChatForUser = async (chatId: string, uid: string): Promise<void> => {
-  const ref = db.collection('chats').doc(chatId);
-  const snap = await ref.get();
-  if (!snap.exists) return;
-  const chat = snap.data() as Chat;
+  const { data } = await supabase.from('chats').select('*').eq('chat_id', chatId).single();
+  if (!data) return;
+  const chat = rowToChat(data as ChatRow);
   if (!chat.members.includes(uid)) return;
 
   const remaining = chat.members.filter((m) => m !== uid);
   if (remaining.length === 0) {
-    // Last member — clean up everything
     await deleteChatForAll(chatId, uid);
   } else {
-    await ref.update({ members: remaining });
+    await supabase.from('chats').update({ members: remaining }).eq('chat_id', chatId);
   }
 };
 
-/**
- * Delete chat for all users: remove chat doc and all messages.
- * Returns the list of member UIDs so the caller can notify them.
- */
 export const deleteChatForAll = async (chatId: string, uid: string): Promise<string[]> => {
-  const ref = db.collection('chats').doc(chatId);
-  const snap = await ref.get();
-  if (!snap.exists) return [];
-  const chat = snap.data() as Chat;
+  const { data } = await supabase.from('chats').select('*').eq('chat_id', chatId).single();
+  if (!data) return [];
+  const chat = rowToChat(data as ChatRow);
   if (!chat.members.includes(uid)) return [];
 
   const members = [...chat.members];
-
-  // Delete all messages in batches of 400
-  const msgs = await db.collection('messages').where('chatId', '==', chatId).get();
-  const batchSize = 400;
-  for (let i = 0; i < msgs.docs.length; i += batchSize) {
-    const batch = db.batch();
-    msgs.docs.slice(i, i + batchSize).forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-  }
-
-  await ref.delete();
+  // Messages are cascade-deleted via FK (on delete cascade)
+  await supabase.from('chats').delete().eq('chat_id', chatId);
   logger.info(`Chat ${chatId} deleted by ${uid}`);
   return members;
 };
 
-/**
- * Delete a message only for the requesting user: adds their UID to deletedFor[].
- */
 export const deleteMessageForUser = async (messageId: string, uid: string): Promise<boolean> => {
-  const ref = db.collection('messages').doc(messageId);
-  const snap = await ref.get();
-  if (!snap.exists) return false;
-  const msg = snap.data() as Message;
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('chat_id, deleted_for')
+    .eq('message_id', messageId)
+    .single();
+  if (!msgData) return false;
 
-  // Verify membership
-  const chatSnap = await db.collection('chats').doc(msg.chatId).get();
-  if (!chatSnap.exists) return false;
-  const chat = chatSnap.data() as Chat;
-  if (!chat.members.includes(uid)) return false;
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('members')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+  if (!chatData || !(chatData.members as string[]).includes(uid)) return false;
 
-  const existing = (msg.deletedFor as string[] | undefined) || [];
+  const existing: string[] = (msgData.deleted_for as string[]) ?? [];
   if (!existing.includes(uid)) {
-    await ref.update({ deletedFor: [...existing, uid] });
+    await supabase
+      .from('messages')
+      .update({ deleted_for: [...existing, uid] })
+      .eq('message_id', messageId);
   }
   return true;
 };
 
-/**
- * Delete a message for everyone: marks deleted=true, clears content.
- * Returns { chatId, members } so caller can emit socket events.
- */
 export const deleteMessageForAll = async (
   messageId: string,
   uid: string,
 ): Promise<{ chatId: string; members: string[] } | null> => {
-  const ref = db.collection('messages').doc(messageId);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  const msg = snap.data() as Message;
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('chat_id')
+    .eq('message_id', messageId)
+    .single();
+  if (!msgData) return null;
 
-  const chatSnap = await db.collection('chats').doc(msg.chatId).get();
-  if (!chatSnap.exists) return null;
-  const chat = chatSnap.data() as Chat;
-  if (!chat.members.includes(uid)) return null;
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('members')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+  if (!chatData || !(chatData.members as string[]).includes(uid)) return null;
 
-  await ref.update({ deleted: true, content: '' });
+  await supabase
+    .from('messages')
+    .update({ deleted: true, content: '' })
+    .eq('message_id', messageId);
+
   logger.info(`Message ${messageId} deleted for all by ${uid}`);
-  return { chatId: msg.chatId, members: chat.members };
+  return { chatId: msgData.chat_id as string, members: chatData.members as string[] };
 };
 
-/**
- * Edit a message's text content. Only the original sender may edit.
- * Returns { chatId, members } so the caller can broadcast the update.
- */
 export const editMessage = async (
   messageId: string,
   uid: string,
   newContent: string,
 ): Promise<{ chatId: string; members: string[] } | null> => {
-  const ref = db.collection('messages').doc(messageId);
-  const snap = await ref.get();
-  if (!snap.exists) return null;
-  const msg = snap.data() as Message;
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('chat_id, sender_id, deleted')
+    .eq('message_id', messageId)
+    .single();
+  if (!msgData) return null;
+  if ((msgData.sender_id as string) !== uid || msgData.deleted) return null;
 
-  // Only the original sender can edit; cannot edit deleted messages
-  if (msg.senderId !== uid || msg.deleted) return null;
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('members')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+  if (!chatData || !(chatData.members as string[]).includes(uid)) return null;
 
-  const chatSnap = await db.collection('chats').doc(msg.chatId).get();
-  if (!chatSnap.exists) return null;
-  const chat = chatSnap.data() as Chat;
-  if (!chat.members.includes(uid)) return null;
+  await supabase
+    .from('messages')
+    .update({ content: newContent.trim(), is_edited: true })
+    .eq('message_id', messageId);
 
-  await ref.update({ content: newContent.trim(), isEdited: true });
   logger.info(`Message ${messageId} edited by ${uid}`);
-  return { chatId: msg.chatId, members: chat.members };
+  return { chatId: msgData.chat_id as string, members: chatData.members as string[] };
 };
 
 const MAX_PINS = 50;
 
-/**
- * Pin a message in a chat. Max 5 pins per chat.
- * Returns updated pinnedMessageIds array, or null on failure.
- */
 export const pinMessage = async (
   chatId: string,
   messageId: string,
   uid: string,
 ): Promise<{ pinnedMessageIds: string[]; members: string[] } | null> => {
-  const chatRef = db.collection('chats').doc(chatId);
-  const snap = await chatRef.get();
-  if (!snap.exists) return null;
-  const chat = snap.data() as Chat;
+  const { data } = await supabase.from('chats').select('*').eq('chat_id', chatId).single();
+  if (!data) return null;
+  const chat = rowToChat(data as ChatRow);
   if (!chat.members.includes(uid)) return null;
 
-  const current: string[] = chat.pinnedMessageIds || [];
+  const current = chat.pinnedMessageIds ?? [];
   if (current.includes(messageId)) return { pinnedMessageIds: current, members: chat.members };
-  if (current.length >= MAX_PINS) return null; // limit reached
+  if (current.length >= MAX_PINS) return null;
 
   const updated = [...current, messageId];
-  await chatRef.update({ pinnedMessageIds: updated });
+  await supabase.from('chats').update({ pinned_message_ids: updated }).eq('chat_id', chatId);
   logger.info(`Message ${messageId} pinned in chat ${chatId} by ${uid}`);
   return { pinnedMessageIds: updated, members: chat.members };
 };
 
-/**
- * Unpin a message from a chat.
- * Returns updated pinnedMessageIds array, or null on failure.
- */
 export const unpinMessage = async (
   chatId: string,
   messageId: string,
   uid: string,
 ): Promise<{ pinnedMessageIds: string[]; members: string[] } | null> => {
-  const chatRef = db.collection('chats').doc(chatId);
-  const snap = await chatRef.get();
-  if (!snap.exists) return null;
-  const chat = snap.data() as Chat;
+  const { data } = await supabase.from('chats').select('*').eq('chat_id', chatId).single();
+  if (!data) return null;
+  const chat = rowToChat(data as ChatRow);
   if (!chat.members.includes(uid)) return null;
 
-  const current: string[] = chat.pinnedMessageIds || [];
-  const updated = current.filter((id) => id !== messageId);
-  await chatRef.update({ pinnedMessageIds: updated });
+  const updated = (chat.pinnedMessageIds ?? []).filter((id) => id !== messageId);
+  await supabase.from('chats').update({ pinned_message_ids: updated }).eq('chat_id', chatId);
   logger.info(`Message ${messageId} unpinned in chat ${chatId} by ${uid}`);
   return { pinnedMessageIds: updated, members: chat.members };
 };

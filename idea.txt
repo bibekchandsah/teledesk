@@ -370,6 +370,30 @@ message info of user profile
 lock chat for specific user
 set app lock & if forgot enter registered email and verify it with link to get code
 show logged in devices
+window icon & receiver name during call
+show mute & unmute status of user during call
+show video on/off status of user during call
+
+superbase
+project url: https://ebirgnwqjfxeqdpxjper.supabase.co
+Publishable Key: sb_publishable_8iCBrVYZvjln9i_zRIoGiA_nJLJdZZb
+Direct connection string: postgresql://postgres:[YOUR-PASSWORD]@db.ebirgnwqjfxeqdpxjper.supabase.co:5432/postgres
+Anon Key (Legacy): eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViaXJnbndxamZ4ZXFkcHhqcGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjM1NzksImV4cCI6MjA4ODU5OTU3OX0.mou_uf9P62zz-ha6ACMr4YpE_83tfLwzeybbK10gqHQ
+service_role secretKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImViaXJnbndxamZ4ZXFkcHhqcGVyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzAyMzU3OSwiZXhwIjoyMDg4NTk5NTc5fQ.sq2kSpbclydrjg9AXTu_afgZsL9_LQwOWOAjGemx9oU
+
+
+vite:
+VITE_SUPABASE_URL=https://ebirgnwqjfxeqdpxjper.supabase.co
+VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_8iCBrVYZvjln9i_zRIoGiA_nJLJdZZb
+
+
+r2
+Public Development URL: https://pub-298c867323a54f42a05d14750304272e.r2.dev
+Token value: M2JTUvuDp9yp92ohVNtpvBZ2MOaa661QDz3VQ-qP
+Access Key ID: 8f1ec1bc58a30ce8662ef34c626417b9
+Secret Access Key: e7e7236b3f02bcc857068bb0864c3d1f8e26e347cd56b17a10bfe910ca239d1e
+Use jurisdiction-specific endpoints for S3 clients: https://3ff0db8934ac81bc8cb6990fafcb457b.r2.cloudflarestorage.com
+
 
 
 when i open chat in new during call then it don't show call button disabled

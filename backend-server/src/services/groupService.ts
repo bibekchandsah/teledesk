@@ -1,11 +1,28 @@
-import { db } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import { Group, Chat } from '../../../shared/types';
 import { generateId, now } from '../utils/helpers';
 import logger from '../utils/logger';
 
-/**
- * Create a new group chat
- */
+type GroupRow = {
+  group_id: string;
+  name: string;
+  avatar: string;
+  members: string[];
+  admins: string[];
+  created_at: string;
+  description: string;
+};
+
+const rowToGroup = (r: GroupRow): Group => ({
+  groupId: r.group_id,
+  name: r.name,
+  avatar: r.avatar,
+  members: r.members,
+  admins: r.admins,
+  createdAt: r.created_at,
+  description: r.description,
+});
+
 export const createGroup = async (
   name: string,
   creatorUid: string,
@@ -15,48 +32,38 @@ export const createGroup = async (
   const groupId = generateId();
   const members = [...new Set([creatorUid, ...memberUids])];
 
-  const group: Group = {
-    groupId,
+  const groupRow: GroupRow = {
+    group_id: groupId,
     name,
     avatar: '',
     members,
     admins: [creatorUid],
-    createdAt: now(),
+    created_at: now(),
     description: description || '',
   };
 
-  await db.collection('groups').doc(groupId).set(group);
+  await supabase.from('groups').insert(groupRow);
 
-  // Create corresponding chat entry
-  const chat: Chat = {
-    chatId: groupId,
+  const chatCreatedAt = now();
+  await supabase.from('chats').insert({
+    chat_id: groupId,
     type: 'group',
     members,
-    createdAt: now(),
-  };
-  await db.collection('chats').doc(groupId).set(chat);
+    created_at: chatCreatedAt,
+  });
 
   logger.info(`Group created: ${groupId} by ${creatorUid}`);
-  return group;
+  return rowToGroup(groupRow);
 };
 
-/**
- * Get a group by ID, verifying membership
- */
-export const getGroupById = async (
-  groupId: string,
-  uid: string,
-): Promise<Group | null> => {
-  const doc = await db.collection('groups').doc(groupId).get();
-  if (!doc.exists) return null;
-  const group = doc.data() as Group;
+export const getGroupById = async (groupId: string, uid: string): Promise<Group | null> => {
+  const { data } = await supabase.from('groups').select('*').eq('group_id', groupId).single();
+  if (!data) return null;
+  const group = rowToGroup(data as GroupRow);
   if (!group.members.includes(uid)) return null;
   return group;
 };
 
-/**
- * Add a member to a group (admin only)
- */
 export const addGroupMember = async (
   groupId: string,
   adminUid: string,
@@ -67,21 +74,18 @@ export const addGroupMember = async (
   if (!group.admins.includes(adminUid)) throw new Error('Only admins can add members');
 
   const updatedMembers = [...new Set([...group.members, newMemberUid])];
-  await db.collection('groups').doc(groupId).update({ members: updatedMembers });
-  await db.collection('chats').doc(groupId).update({ members: updatedMembers });
+  await supabase.from('groups').update({ members: updatedMembers }).eq('group_id', groupId);
+  await supabase.from('chats').update({ members: updatedMembers }).eq('chat_id', groupId);
 };
 
-/**
- * Remove a member from a group (admin or self-leave)
- */
 export const removeGroupMember = async (
   groupId: string,
   requesterUid: string,
   targetUid: string,
 ): Promise<void> => {
-  const doc = await db.collection('groups').doc(groupId).get();
-  if (!doc.exists) throw new Error('Group not found');
-  const group = doc.data() as Group;
+  const { data } = await supabase.from('groups').select('*').eq('group_id', groupId).single();
+  if (!data) throw new Error('Group not found');
+  const group = rowToGroup(data as GroupRow);
 
   if (requesterUid !== targetUid && !group.admins.includes(requesterUid)) {
     throw new Error('Only admins can remove other members');
@@ -90,16 +94,13 @@ export const removeGroupMember = async (
   const updatedMembers = group.members.filter((m) => m !== targetUid);
   const updatedAdmins = group.admins.filter((a) => a !== targetUid);
 
-  await db.collection('groups').doc(groupId).update({
-    members: updatedMembers,
-    admins: updatedAdmins,
-  });
-  await db.collection('chats').doc(groupId).update({ members: updatedMembers });
+  await supabase
+    .from('groups')
+    .update({ members: updatedMembers, admins: updatedAdmins })
+    .eq('group_id', groupId);
+  await supabase.from('chats').update({ members: updatedMembers }).eq('chat_id', groupId);
 };
 
-/**
- * Update group metadata (admin only)
- */
 export const updateGroup = async (
   groupId: string,
   adminUid: string,
@@ -108,5 +109,11 @@ export const updateGroup = async (
   const group = await getGroupById(groupId, adminUid);
   if (!group) throw new Error('Group not found or access denied');
   if (!group.admins.includes(adminUid)) throw new Error('Only admins can update group');
-  await db.collection('groups').doc(groupId).update(updates);
+
+  const dbUpdates: Partial<GroupRow> = {};
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.avatar !== undefined) dbUpdates.avatar = updates.avatar;
+  if (updates.description !== undefined) dbUpdates.description = updates.description;
+
+  await supabase.from('groups').update(dbUpdates).eq('group_id', groupId);
 };

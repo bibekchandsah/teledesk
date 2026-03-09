@@ -20,7 +20,8 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound } from 'lucide-react';
+import { formatTime } from '../utils/formatters';
 
 interface ChatWindowProps {
   /** When provided (e.g. rendered in-call sidebar), skips useParams and disables nav. */
@@ -57,6 +58,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   // ─── Chat header three-dot menu ──────────────────────────────────────────
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showProfileMore, setShowProfileMore] = useState(false);
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
 
@@ -804,13 +807,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
         </button>
         {peer ? (
           <>
-            <UserAvatar
-              name={peer.profile?.name || currentUser?.name || 'User'}
-              avatar={peer.profile?.avatar || currentUser?.avatar}
-              size={40}
-              online={peer.online}
-            />
-            <div>
+            <button
+              onClick={() => setShowProfile((v) => !v)}
+              title="View profile"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }}
+            >
+              <UserAvatar
+                name={peer.profile?.name || currentUser?.name || 'User'}
+                avatar={peer.profile?.avatar || currentUser?.avatar}
+                size={40}
+                online={peer.online}
+              />
+            </button>
+            <button
+              onClick={() => setShowProfile((v) => !v)}
+              title="View profile"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+            >
               <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {peer.isSelf
                   ? (peer.profile?.name || currentUser?.name || 'You')
@@ -822,7 +835,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
               <div style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)') }}>
                 {peer.isSelf ? 'Message yourself' : (peer.online ? 'Online' : 'Offline')}
               </div>
-            </div>
+            </button>
           </>
         ) : (
           <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
@@ -954,6 +967,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
             );
           })() : (
             <>
+              {peer && (
+                <button
+                  onClick={() => { setHeaderMenu(null); setShowProfile(true); }}
+                  style={headerCtxItemStyle}
+                >
+                  <UserRound size={14} style={{ marginRight: 8 }} />View profile
+                </button>
+              )}
               <button
                 onClick={() => { setHeaderMenu(null); enterSelectionModeEmpty(); }}
                 style={headerCtxItemStyle}
@@ -1503,6 +1524,184 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
           <Send size={16} />
         </button>
       </div>
+
+      {/* ── Profile panel (Telegram-style right drawer) ─────────────── */}
+      {showProfile && peer && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 320,
+            backgroundColor: 'var(--bg-secondary)',
+            borderLeft: '1px solid var(--border)',
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto',
+            boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
+          }}
+        >
+          {/* Close button */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Profile</span>
+            <button
+              onClick={() => setShowProfile(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Avatar + name */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px 24px', gap: 12 }}>
+            <UserAvatar
+              name={peer.profile?.name || 'User'}
+              avatar={peer.profile?.avatar}
+              size={90}
+              online={peer.online}
+            />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', marginBottom: 4 }}>
+                {peer.isSelf ? (peer.profile?.name || currentUser?.name || 'You') : (peer.profile?.name || 'User')}
+                {peer.isSelf && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', marginLeft: 6 }}>(You)</span>}
+              </div>
+              <div style={{ fontSize: 13, color: peer.online ? '#22c55e' : 'var(--text-secondary)', fontWeight: 500 }}>
+                {peer.isSelf
+                  ? 'Your saved messages'
+                  : peer.online
+                    ? '● Online'
+                    : `Last seen ${formatTime(peer.profile?.lastSeen || '')}`}
+              </div>
+            </div>
+          </div>
+
+          {/* Info rows */}
+          {peer.profile?.createdAt && (
+            <div style={{ margin: '0 16px 16px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Member since</div>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                  {new Date(peer.profile.createdAt).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          {!peer.isSelf && (
+            <div style={{ margin: '0 16px 16px', position: 'relative' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {/* Message */}
+                <button
+                  onClick={() => setShowProfile(false)}
+                  title="Message"
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--accent)', fontSize: 11, fontWeight: 500 }}
+                >
+                  <MessageCircle size={20} />
+                  <span>Message</span>
+                </button>
+                {/* Voice call */}
+                <button
+                  onClick={() => { if (!isInCall) { setShowProfile(false); handleStartCall('voice'); } }}
+                  title={isInCall ? 'Already in a call' : 'Voice call'}
+                  disabled={isInCall}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
+                >
+                  <Phone size={20} />
+                  <span>Call</span>
+                </button>
+                {/* Video call */}
+                <button
+                  onClick={() => { if (!isInCall) { setShowProfile(false); handleStartCall('video'); } }}
+                  title={isInCall ? 'Already in a call' : 'Video call'}
+                  disabled={isInCall}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
+                >
+                  <Video size={20} />
+                  <span>Video</span>
+                </button>
+                {/* More */}
+                <button
+                  onClick={() => setShowProfileMore((v) => !v)}
+                  title="More options"
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: showProfileMore ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 11, fontWeight: 500 }}
+                >
+                  <MoreVertical size={20} />
+                  <span>More</span>
+                </button>
+              </div>
+
+              {/* More dropdown */}
+              {showProfileMore && (
+                <div
+                  style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, zIndex: 100, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.3)', overflow: 'hidden', minWidth: 190 }}
+                >
+                  <button
+                    onClick={() => { setShowProfileMore(false); navigate(`/profile/${peer.uid}`); }}
+                    style={headerCtxItemStyle}
+                  >
+                    <UserRound size={14} style={{ marginRight: 8 }} />Open full profile
+                  </button>
+                  <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+                  {activeChat && (
+                    <>
+                      <button
+                        onClick={() => { togglePinChat(activeChat.chatId); setShowProfileMore(false); }}
+                        style={headerCtxItemStyle}
+                      >
+                        {pinnedChatIds.includes(activeChat.chatId)
+                          ? <><PinOff size={14} style={{ marginRight: 8 }} />Unpin chat</>
+                          : <><Pin size={14} style={{ marginRight: 8 }} />Pin chat</>}
+                      </button>
+                      <button
+                        onClick={() => { toggleArchiveChat(activeChat.chatId); setShowProfileMore(false); navigate('/chats'); }}
+                        style={headerCtxItemStyle}
+                      >
+                        {archivedChatIds.includes(activeChat.chatId)
+                          ? <><ArchiveRestore size={14} style={{ marginRight: 8 }} />Unarchive chat</>
+                          : <><Archive size={14} style={{ marginRight: 8 }} />Archive chat</>}
+                      </button>
+                      <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+                      <button
+                        onClick={() => { setShowProfileMore(false); handleDeleteChat('me'); }}
+                        style={headerCtxItemStyle}
+                      >
+                        <Trash2 size={14} style={{ marginRight: 8 }} />Delete for me
+                      </button>
+                      <button
+                        onClick={() => { setChatConfirmDelete('both'); setShowProfileMore(false); }}
+                        style={{ ...headerCtxItemStyle, color: 'var(--error, #e74c3c)' }}
+                      >
+                        <Trash2 size={14} style={{ marginRight: 8 }} />Delete for everyone
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Username / email */}
+          {peer && (peer.profile?.name || peer.profile?.email) && (
+            <div style={{ margin: '0 16px 16px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {peer.profile?.name && (
+                <div style={{ padding: '12px 16px', borderBottom: peer.profile?.email ? '1px solid var(--border)' : undefined }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Username</div>
+                  <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{peer.profile.name}</div>
+                </div>
+              )}
+              {peer.profile?.email && (
+                <div style={{ padding: '12px 16px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Email</div>
+                  <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{peer.profile.email}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Forward modal */}
       {forwardingMsgs.length > 0 && (
