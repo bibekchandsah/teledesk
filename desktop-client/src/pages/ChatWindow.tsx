@@ -351,7 +351,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? currentUser?.uid
       : activeChat.members.find((m) => m !== currentUser?.uid);
     if (!peerId) return null;
-    const peerProfile = userProfiles[peerId];
+    
+    // For the current user, always use the latest currentUser data
+    // For other users, use the cached profile
+    const peerProfile = peerId === currentUser?.uid 
+      ? currentUser 
+      : userProfiles[peerId];
+      
     const isPeerVisible = peerProfile?.showActiveStatus !== false;
     const isSelfVisible = currentUser?.showActiveStatus !== false;
     return {
@@ -468,7 +474,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (!activeChat) return undefined;
     if (activeChat.type === 'group') return activeChat.chatId;
     const otherUid = activeChat.members.find((m) => m !== currentUser?.uid);
-    return otherUid ? userProfiles[otherUid]?.name : undefined;
+    if (!otherUid) return undefined;
+    return otherUid === currentUser?.uid ? currentUser?.name : userProfiles[otherUid]?.name;
   }, [activeChat, currentUser, userProfiles]);
 
   const handleBookmarkMessage = useCallback((message: Message) => {
@@ -1110,7 +1117,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             )}
             <div style={{ flex: 1, overflow: 'hidden', borderLeft: pinnedMsgs.length <= 1 ? '3px solid var(--accent)' : 'none', paddingLeft: pinnedMsgs.length <= 1 ? 8 : 4 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>
-                {userProfiles[current.senderId]?.name || current.senderName || 'Unknown'}
+                {current.senderId === currentUser?.uid ? currentUser?.name : (userProfiles[current.senderId]?.name || current.senderName || 'Unknown')}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {current.type !== 'text' && !current.content ? `[${current.type}]` : (current.content || `[${current.type}]`)}
@@ -1279,8 +1286,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 <MessageBubble
                   message={msg}
                   isOwn={msg.senderId === currentUser?.uid}
-                  senderName={userProfiles[msg.senderId]?.name}
-                  senderAvatar={userProfiles[msg.senderId]?.avatar}
+                  senderName={msg.senderId === currentUser?.uid ? currentUser?.name : userProfiles[msg.senderId]?.name}
+                  senderAvatar={msg.senderId === currentUser?.uid ? currentUser?.avatar : userProfiles[msg.senderId]?.avatar}
                   showSender={activeChat.type === 'group'}
                   onDelete={selectionMode ? undefined : handleDeleteMessage}
                   onStartEdit={selectionMode ? undefined : (msg) => {
@@ -1931,14 +1938,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   const q = forwardSearch.toLowerCase();
                   const isSelf = c.type === 'private' && c.members.every((m) => m === currentUid);
                   const uid = c.type === 'private' ? (isSelf ? currentUid : c.members.find((m) => m !== currentUid)) : null;
-                  const p = uid ? userProfiles[uid] : null;
+                  const p = uid === currentUid ? currentUser : (uid ? userProfiles[uid] : null);
                   const n = isSelf ? `${p?.name || 'you'} (you)` : (p?.name || c.chatId);
                   return n.toLowerCase().includes(q);
                 })
                 .map((c) => {
                   const isSelfChat = c.type === 'private' && c.members.every((m) => m === currentUid);
                   const otherUid = c.type === 'private' ? (isSelfChat ? currentUid : c.members.find((m) => m !== currentUid)) : null;
-                  const profile = otherUid ? userProfiles[otherUid] : null;
+                  const profile = otherUid === currentUid ? currentUser : (otherUid ? userProfiles[otherUid] : null);
                   const name = isSelfChat ? `${profile?.name || 'You'} (You)` : (profile?.name || c.chatId);
                   const checked = forwardTargetIds.has(c.chatId);
                   return (

@@ -5,6 +5,7 @@ import type { Instance as SimplePeerInstance } from 'simple-peer';
 const SimplePeer = ((Sp as any).default ?? Sp) as typeof Sp;
 import { WEBRTC_CONFIG } from '@shared/constants/config';
 import { sendOffer, sendAnswer, sendIceCandidate, endCall as endCallSignal } from './socketService';
+import { addConnectionDiagnostics } from './webrtcDiagnostics';
 
 export interface PeerConnection {
   peer: SimplePeerInstance;
@@ -257,6 +258,9 @@ export const createInitiatorPeer = (
   // Catches renegotiation video tracks A receives from B (e.g. B enables camera).
   setTimeout(() => attachRenegotiationTrackListener(onRemoteStream), 0);
 
+  // Add connection diagnostics
+  setTimeout(() => addConnectionDiagnostics(currentPeer, onError, 'Initiator'), 0);
+
   currentPeer.on('stream', (remoteStream) => {
     if (!firstRemoteStream) {
       firstRemoteStream = remoteStream;
@@ -309,6 +313,9 @@ export const createReceiverPeer = (
   // Attach after simple-peer has set up its own listeners (next tick).
   // Shared helper handles both renegotiation tracks and onunmute resume cycles.
   setTimeout(() => attachRenegotiationTrackListener(onRemoteStream), 0);
+
+  // Add connection diagnostics
+  setTimeout(() => addConnectionDiagnostics(currentPeer, onError, 'Receiver'), 0);
 
   // Process the incoming offer immediately
   currentPeer.signal(offer as unknown as import('simple-peer').SignalData);
@@ -692,3 +699,6 @@ export const hangUp = (targetUserId: string, callId: string): void => {
   destroyPeer();
   stopLocalStream();
 };
+
+// Export connectivity test for UI
+export { testConnectivity } from './webrtcDiagnostics';

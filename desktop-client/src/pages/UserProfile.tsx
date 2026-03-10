@@ -34,6 +34,13 @@ const UserProfile: React.FC = () => {
       .finally(() => setLoading(false));
   }, [targetUid, currentUser]);
 
+  // Update profile when currentUser changes (for own profile view)
+  useEffect(() => {
+    if (targetUid === currentUser?.uid && currentUser) {
+      setProfile(currentUser);
+    }
+  }, [currentUser, targetUid]);
+
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

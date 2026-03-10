@@ -1,6 +1,7 @@
 ﻿import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../store/authStore';
+import { useChatStore } from '../store/chatStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
 import { updateMyProfile, uploadAvatar } from '../services/apiService';
@@ -10,6 +11,7 @@ import { Pencil, Sun, Moon } from 'lucide-react';
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
   const { currentUser, setCurrentUser } = useAuthStore();
+  const { setUserProfile } = useChatStore();
   const { theme, toggleTheme, liveTypingEnabled, toggleLiveTyping, selectedMicId, setSelectedMicId } = useUIStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
@@ -69,7 +71,8 @@ const SettingsPage: React.FC = () => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
     setShowMessageStatus(currentUser?.showMessageStatus !== false);
     setUsernameInput(currentUser?.username ?? '');
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.username]);
+    setNameInput(currentUser?.name ?? '');
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.username, currentUser?.name]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -85,7 +88,10 @@ const SettingsPage: React.FC = () => {
     setIsSavingName(true);
     try {
       const res = await updateMyProfile({ name: trimmed });
-      if (res.success && res.data) setCurrentUser(res.data);
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setUserProfile(res.data); // Also update chat store cache
+      }
     } catch (e) {
       console.error('[Profile] Failed to update name', e);
     } finally {
@@ -129,7 +135,10 @@ const SettingsPage: React.FC = () => {
       
       if (result.success) {
         const res = await updateMyProfile({ username: usernameInput.trim().toLowerCase() });
-        if (res.success && res.data) setCurrentUser(res.data);
+        if (res.success && res.data) {
+          setCurrentUser(res.data);
+          setUserProfile(res.data); // Also update chat store cache
+        }
         setEditingUsername(false);
       } else {
         setUsernameMessage(result.error || 'Failed to update username');
@@ -156,7 +165,10 @@ const SettingsPage: React.FC = () => {
       if (!uploadRes.success || !uploadRes.data?.url) throw new Error('Upload failed');
       setAvatarProgress(100);
       const res = await updateMyProfile({ avatar: uploadRes.data.url });
-      if (res.success && res.data) setCurrentUser(res.data);
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setUserProfile(res.data); // Also update chat store cache
+      }
     } catch (err) {
       console.error('[Profile] Avatar upload failed', err);
     } finally {

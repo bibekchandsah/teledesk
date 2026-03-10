@@ -15,8 +15,9 @@ export const syncUser = async (req: Request, res: Response): Promise<void> => {
 
     // For existing users, only sync email (name & avatar may have been customised
     // by the user and must not be overwritten with Firebase Auth values on every refresh).
+    // However, if the existing user has a default name ('User' or 'Unknown'), update it.
     const existing = await getUserById(uid);
-    const updateData = existing
+    const updateData = existing && existing.name !== 'User' && existing.name !== 'Unknown'
       ? { email }
       : { name, email, avatar };
 

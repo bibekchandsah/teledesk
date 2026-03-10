@@ -132,11 +132,17 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         const otherUid = isSelfChat
           ? currentUser?.uid
           : chat.members.find((m) => m !== currentUser?.uid);
-        const profile = otherUid ? userProfiles[otherUid] : null;
+        
+        // For the current user, always use the latest currentUser data
+        // For other users, use the cached profile
+        const profile = otherUid === currentUser?.uid 
+          ? currentUser 
+          : (otherUid ? userProfiles[otherUid] : null);
+          
         const isPeerVisible = profile?.showActiveStatus !== false;
         const isSelfVisible = currentUser?.showActiveStatus !== false;
         const baseName = isSelfChat
-          ? `${profile?.name || currentUser?.name || 'Unknown'} (You)`
+          ? `${profile?.name || 'Unknown'} (You)`
           : profile?.name || 'Unknown';
         const displayName = (!isSelfChat && otherUid && nicknames[otherUid])
           ? nicknames[otherUid]

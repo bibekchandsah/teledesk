@@ -73,6 +73,10 @@ export const signUpWithEmail = async (
 ): Promise<FirebaseUser> => {
   const result = await createUserWithEmailAndPassword(firebaseAuth, email, password);
   await updateProfile(result.user, { displayName });
+  
+  // Reload the user to ensure displayName is available
+  await result.user.reload();
+  
   return result.user;
 };
 
@@ -194,17 +198,19 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
 
 // Retained as a best-effort fallback for AuthContext when backend is unavailable.
 // Uses /api/users/sync which upserts the user in Supabase.
-export const upsertUserProfile = async (fbUser: FirebaseUser): Promise<User> => {
+export const upsertUserProfile = async (fbUser: FirebaseUser, fallbackName?: string): Promise<User> => {
   const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   const token = await getIdToken();
   const now = new Date().toISOString();
+  const displayName = fbUser.displayName || fallbackName || 'User';
+  
   if (token) {
     try {
       const res = await fetch(`${BASE_URL}/api/users/sync`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: fbUser.displayName || 'User',
+          name: displayName,
           email: fbUser.email || '',
           avatar: fbUser.photoURL || '',
         }),
@@ -217,7 +223,7 @@ export const upsertUserProfile = async (fbUser: FirebaseUser): Promise<User> => 
   }
   return {
     uid: fbUser.uid,
-    name: fbUser.displayName || 'User',
+    name: displayName,
     email: fbUser.email || '',
     avatar: fbUser.photoURL || '',
     createdAt: now,

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import {
   onAuthChange,
@@ -30,7 +30,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const pendingDisplayNameRef = useRef<string | null>(null);
   const { setCurrentUser, setLoading, setError, logout: storeLogout } = useAuthStore();
+  const { setUserProfile } = useChatStore();
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
@@ -41,9 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Firebase resolves the cached auth state from local storage in ~50-100ms.
         // Setting currentUser here removes the loading screen right away instead of
         // waiting for backend HTTP + Firestore calls (which take 3-5 seconds).
+        const displayName = fbUser.displayName || pendingDisplayNameRef.current || 'User';
         const immediateProfile = {
           uid: fbUser.uid,
-          name: fbUser.displayName || 'User',
+          name: displayName,
           email: fbUser.email || '',
           avatar: fbUser.photoURL || '',
           createdAt: new Date().toISOString(),
@@ -51,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           onlineStatus: 'online' as const,
         };
         setCurrentUser(immediateProfile);
+        setUserProfile(immediateProfile); // Also update chat store cache
         setLoading(false);
 
         // ── Step 2: Background sync — enrich profile without blocking the UI ──
@@ -64,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let userProfile = null;
             try {
               const response = await syncUserProfile(
-                fbUser.displayName || 'User',
+                displayName,
                 fbUser.email || '',
                 fbUser.photoURL || '',
               );
@@ -77,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             // Always write to Firestore directly (ensures user is searchable by others)
             try {
-              const fsProfile = await upsertUserProfile(fbUser);
+              const fsProfile = await upsertUserProfile(fbUser, displayName);
               if (!userProfile) userProfile = fsProfile;
             } catch (fsErr) {
               console.warn('[Auth] Firestore write failed:', fsErr);
@@ -86,9 +90,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Update with the richer profile once the background sync completes
             if (userProfile) {
               setCurrentUser(userProfile);
+              setUserProfile(userProfile); // Also update chat store cache
               useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
               useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
               useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
+            }
+            
+            // Clear pending name after sync completes
+            if (pendingDisplayNameRef.current) {
+              pendingDisplayNameRef.current = null;
             }
           } catch (err) {
             console.error('[Auth] Background sync failed:', err);
@@ -141,10 +151,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       setError(null);
+      // Store the intended name before registration
+      pendingDisplayNameRef.current = name;
       await signUpWithEmail(email, password, name);
     } catch (err) {
       setLoading(false);
       setError((err as Error).message);
+      // Clear pending name on error
+      pendingDisplayNameRef.current = null;
     }
   };
 
