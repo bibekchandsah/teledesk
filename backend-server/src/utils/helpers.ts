@@ -33,31 +33,30 @@ export const extractBearerToken = (authHeader: string | undefined): string | nul
 /**
  * Extract client IP address from request or socket
  */
-export const extractClientIP = (source: {
-  ip?: string;
-  connection?: { remoteAddress?: string };
-  socket?: { remoteAddress?: string };
-  headers?: { 'x-forwarded-for'?: string };
-} | {
-  handshake?: { 
-    headers?: { 'x-forwarded-for'?: string };
-    address?: string;
-  };
-  conn?: { remoteAddress?: string };
-}): string => {
+export const extractClientIP = (source: any): string => {
   // Handle Express Request object
-  if ('ip' in source) {
-    return (source.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-           source.ip ||
+  if (source.ip !== undefined || source.connection !== undefined) {
+    const forwardedFor = source.headers?.['x-forwarded-for'];
+    if (typeof forwardedFor === 'string') {
+      const ip = forwardedFor.split(',')[0]?.trim();
+      if (ip) return ip;
+    }
+    
+    return source.ip ||
            source.connection?.remoteAddress ||
            source.socket?.remoteAddress ||
            '127.0.0.1';
   }
   
   // Handle Socket.IO socket object
-  if ('handshake' in source) {
-    return (source.handshake?.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-           source.handshake?.address ||
+  if (source.handshake !== undefined) {
+    const forwardedFor = source.handshake?.headers?.['x-forwarded-for'];
+    if (typeof forwardedFor === 'string') {
+      const ip = forwardedFor.split(',')[0]?.trim();
+      if (ip) return ip;
+    }
+    
+    return source.handshake?.address ||
            source.conn?.remoteAddress ||
            '127.0.0.1';
   }
