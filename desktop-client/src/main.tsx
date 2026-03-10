@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/global.css';
+import './utils/csp'; // Update CSP for backend URL
 
 // In production Electron sub-windows, the app is loaded via file:// with a
 // hash-encoded route (e.g. index.html#/chats/abc). Convert it to a real path
