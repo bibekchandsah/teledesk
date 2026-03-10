@@ -73,7 +73,11 @@ async function getLocationFromIP(ipAddress: string): Promise<{
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as {
+      country?: string;
+      city?: string;
+      region?: string;
+    };
     return {
       country: data.country,
       city: data.city,

@@ -528,8 +528,8 @@ react messaages
 
 lock chat for specific user
 set app lock & if forgot enter registered email and verify it with link to get code
-show logged in devices and allow user to logout from specific device
 allow multiple account to login and switch between them without logout
+show logged in devices and allow user to logout from specific device
 check network connection status (
     online → show "You are back online" toast (only when connection is lost and restored not on every page load)
     offline → show "You are offline" toast
