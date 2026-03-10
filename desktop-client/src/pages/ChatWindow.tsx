@@ -834,8 +834,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }}
             >
               <UserAvatar
-                name={peer.profile?.name || currentUser?.name || 'User'}
-                avatar={peer.profile?.avatar || currentUser?.avatar}
+                name={peer.profile?.name || 'User'}
+                avatar={peer.profile?.avatar}
                 size={40}
                 online={peer.online}
               />
@@ -854,7 +854,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 )}
               </div>
               <div style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)') }}>
-                {peer.isSelf ? 'Message yourself' : (peer.online ? 'Online' : 'Offline')}
+                {peer.isSelf 
+                  ? 'Message yourself' 
+                  : peer.online 
+                    ? 'Online' 
+                    : `Last seen ${formatTime(peer.profile?.lastSeen || '')}`}
               </div>
             </button>
           </>
