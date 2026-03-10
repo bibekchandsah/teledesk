@@ -1761,7 +1761,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           {/* Info rows */}
           <div style={{ margin: '0 16px 16px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
             {/* Name */}
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ padding: '12px 16px', borderBottom: peer.profile?.username ? '1px solid var(--border)' : 'none' }}>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Name</div>
               <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
                 {peer.profile?.name || 'Unknown'}
@@ -1769,15 +1769,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
             
             {/* Username (only show if user has one) */}
-            {peer.profile?.username && (
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+            {peer.profile?.username && peer.profile.username.trim() !== '' && (
+              <div style={{ padding: '12px 16px', borderBottom: peer.profile?.createdAt ? '1px solid var(--border)' : 'none' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Username</div>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
                   @{peer.profile.username}
                 </div>
               </div>
             )}
-            
+
+            {/* email */}
+            {peer.profile?.email && (
+              <div style={{ padding: '12px 16px', borderBottom: peer.profile?.createdAt ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Email</div>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+                  {peer.profile.email}
+                </div>
+              </div>
+            )}
+
             {/* Member since */}
             {peer.profile?.createdAt && (
               <div style={{ padding: '12px 16px' }}>
@@ -1788,24 +1798,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </div>
             )}
           </div>
-
-          {/* Username / email */}
-          {peer && (peer.profile?.name || peer.profile?.email) && (
-            <div style={{ margin: '0 16px 16px', backgroundColor: 'var(--bg-tertiary)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
-              {peer.profile?.name && (
-                <div style={{ padding: '12px 16px', borderBottom: peer.profile?.email ? '1px solid var(--border)' : undefined }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Username</div>
-                  <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{peer.profile.name}</div>
-                </div>
-              )}
-              {peer.profile?.email && (
-                <div style={{ padding: '12px 16px' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>Email</div>
-                  <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>{peer.profile.email}</div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 

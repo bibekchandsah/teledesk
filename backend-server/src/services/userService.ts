@@ -22,7 +22,7 @@ type UserRow = {
 const rowToUser = (r: UserRow): User => ({
   uid: r.uid,
   name: r.name,
-  username: r.username ?? undefined,
+  username: r.username && r.username.trim() !== '' ? r.username : undefined,
   email: r.email,
   avatar: r.avatar,
   createdAt: r.created_at,
