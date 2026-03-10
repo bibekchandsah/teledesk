@@ -25,35 +25,74 @@ export const ConnectionTest: React.FC = () => {
     }
   };
 
+  const styles = {
+    container: {
+      padding: '20px',
+      border: '1px solid #ddd',
+      borderRadius: '8px',
+      margin: '20px 0',
+    },
+    button: {
+      background: testing ? '#ccc' : '#007bff',
+      color: 'white',
+      border: 'none',
+      padding: '10px 20px',
+      borderRadius: '4px',
+      cursor: testing ? 'not-allowed' : 'pointer',
+      margin: '10px 0',
+    },
+    results: {
+      marginTop: '20px',
+      padding: '15px',
+      background: '#f8f9fa',
+      borderRadius: '4px',
+    },
+    resultItem: {
+      margin: '10px 0',
+      padding: '5px',
+    },
+    success: {
+      color: '#28a745',
+    },
+    error: {
+      color: '#dc3545',
+    },
+    recommendations: {
+      marginTop: '15px',
+      paddingTop: '15px',
+      borderTop: '1px solid #ddd',
+    },
+  };
+
   return (
-    <div className="connection-test">
+    <div style={styles.container}>
       <h3>WebRTC Connection Test</h3>
       <p>Test your network connectivity for voice/video calls</p>
       
       <button 
         onClick={runTest} 
         disabled={testing}
-        className="test-button"
+        style={styles.button}
       >
         {testing ? 'Testing...' : 'Test Connection'}
       </button>
 
       {result && (
-        <div className="test-results">
+        <div style={styles.results}>
           <h4>Test Results:</h4>
-          <div className={`result-item ${result.stunWorking ? 'success' : 'error'}`}>
+          <div style={{...styles.resultItem, ...(result.stunWorking ? styles.success : styles.error)}}>
             <span>STUN Server: </span>
             <span>{result.stunWorking ? '✅ Working' : '❌ Failed'}</span>
           </div>
           
           {result.publicIP && (
-            <div className="result-item">
+            <div style={styles.resultItem}>
               <span>Public IP: </span>
               <span>{result.publicIP}</span>
             </div>
           )}
           
-          <div className="recommendations">
+          <div style={styles.recommendations}>
             <h5>Recommendations:</h5>
             {result.stunWorking ? (
               <p>✅ Basic connectivity is working. Calls should work on most networks.</p>
@@ -61,7 +100,7 @@ export const ConnectionTest: React.FC = () => {
               <div>
                 <p>❌ STUN server connection failed. This may cause issues with calls.</p>
                 <p>Possible solutions:</p>
-                <ul>
+                <ul style={{margin: '10px 0', paddingLeft: '20px'}}>
                   <li>Check your internet connection</li>
                   <li>Disable VPN temporarily</li>
                   <li>Check firewall settings</li>
@@ -79,61 +118,6 @@ export const ConnectionTest: React.FC = () => {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .connection-test {
-          padding: 20px;
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          margin: 20px 0;
-        }
-        
-        .test-button {
-          background: #007bff;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 4px;
-          cursor: pointer;
-          margin: 10px 0;
-        }
-        
-        .test-button:disabled {
-          background: #ccc;
-          cursor: not-allowed;
-        }
-        
-        .test-results {
-          margin-top: 20px;
-          padding: 15px;
-          background: #f8f9fa;
-          border-radius: 4px;
-        }
-        
-        .result-item {
-          margin: 10px 0;
-          padding: 5px;
-        }
-        
-        .result-item.success {
-          color: #28a745;
-        }
-        
-        .result-item.error {
-          color: #dc3545;
-        }
-        
-        .recommendations {
-          margin-top: 15px;
-          padding-top: 15px;
-          border-top: 1px solid #ddd;
-        }
-        
-        .recommendations ul {
-          margin: 10px 0;
-          padding-left: 20px;
-        }
-      `}</style>
     </div>
   );
 };

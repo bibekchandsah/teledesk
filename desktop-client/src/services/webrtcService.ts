@@ -3,7 +3,7 @@ import type { Instance as SimplePeerInstance } from 'simple-peer';
 // Handle Vite CJS/ESM interop — simple-peer exports as CJS module.exports
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const SimplePeer = ((Sp as any).default ?? Sp) as typeof Sp;
-import { WEBRTC_CONFIG } from '@shared/constants/config';
+import { WEBRTC_CONFIG } from '../config/webrtc';
 import { sendOffer, sendAnswer, sendIceCandidate, endCall as endCallSignal } from './socketService';
 import { addConnectionDiagnostics } from './webrtcDiagnostics';
 

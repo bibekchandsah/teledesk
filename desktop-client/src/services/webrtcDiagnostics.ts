@@ -116,11 +116,11 @@ const logSelectedCandidates = async (pc: RTCPeerConnection, label: string): Prom
       candidatePairs.forEach(async (pair) => {
         const localCandidate = Array.from(stats.values()).find(
           s => s.id === pair.localCandidateId
-        ) as RTCIceCandidateStats;
+        ) as any; // RTCIceCandidateStats type varies by browser
         
         const remoteCandidate = Array.from(stats.values()).find(
           s => s.id === pair.remoteCandidateId
-        ) as RTCIceCandidateStats;
+        ) as any; // RTCIceCandidateStats type varies by browser
         
         if (localCandidate && remoteCandidate) {
           console.log(`[${label}] Connection path:`, {
@@ -161,7 +161,7 @@ export const testConnectivity = async (): Promise<{
         
         if (event.candidate.type === 'srflx') {
           result.stunWorking = true;
-          result.publicIP = event.candidate.address;
+          result.publicIP = event.candidate.address || undefined;
         }
       }
     };
