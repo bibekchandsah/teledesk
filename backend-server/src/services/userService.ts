@@ -6,6 +6,7 @@ import logger from '../utils/logger';
 type UserRow = {
   uid: string;
   name: string;
+  username: string | null;
   email: string;
   avatar: string;
   created_at: string;
@@ -21,6 +22,7 @@ type UserRow = {
 const rowToUser = (r: UserRow): User => ({
   uid: r.uid,
   name: r.name,
+  username: r.username ?? undefined,
   email: r.email,
   avatar: r.avatar,
   createdAt: r.created_at,
@@ -44,6 +46,7 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
     const newUser: UserRow = {
       uid,
       name: data.name || 'Unknown',
+      username: data.username ?? null,
       email: data.email || '',
       avatar: data.avatar || '',
       created_at: now(),
@@ -62,6 +65,7 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
 
   const updates: Partial<UserRow> = { last_seen: now(), online_status: 'online' };
   if (data.name !== undefined) updates.name = data.name;
+  if (data.username !== undefined) updates.username = data.username;
   if (data.email !== undefined) updates.email = data.email;
   if (data.avatar !== undefined) updates.avatar = data.avatar;
   if (data.showActiveStatus !== undefined) updates.show_active_status = data.showActiveStatus;
@@ -121,4 +125,46 @@ export const updatePresence = async (uid: string, status: 'online' | 'offline'):
     .from('users')
     .update({ online_status: status, last_seen: now() })
     .eq('uid', uid);
+};
+
+// ─── Username validation ───────────────────────────────────────────────────
+import { isValidUsernameFormat, isReservedUsername } from '../../../shared/constants/reservedUsernames';
+
+export const checkUsernameAvailability = async (username: string): Promise<{
+  available: boolean;
+  reason?: 'invalid_format' | 'reserved' | 'taken';
+}> => {
+  // Validate format
+  if (!isValidUsernameFormat(username)) {
+    return { available: false, reason: 'invalid_format' };
+  }
+
+  // Check if reserved
+  if (isReservedUsername(username)) {
+    return { available: false, reason: 'reserved' };
+  }
+
+  // Check if already taken
+  const { data } = await supabase
+    .from('users')
+    .select('uid')
+    .eq('username', username.toLowerCase())
+    .single();
+
+  if (data) {
+    return { available: false, reason: 'taken' };
+  }
+
+  return { available: true };
+};
+
+export const getUserByUsername = async (username: string): Promise<User | null> => {
+  const { data } = await supabase
+    .from('users')
+    .select('*')
+    .eq('username', username.toLowerCase())
+    .single();
+  
+  if (!data) return null;
+  return rowToUser(data as UserRow);
 };

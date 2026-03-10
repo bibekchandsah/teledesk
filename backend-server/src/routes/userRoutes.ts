@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername } from '../controllers/userController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
 
@@ -9,7 +9,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 const router = Router();
 
-// All routes require authentication
+// Public routes (no authentication required)
+// GET /api/users/check-username/:username - Check username availability
+router.get('/check-username/:username', checkUsername);
+
+// All other routes require authentication
 router.use(authenticateToken);
 
 // POST /api/auth/sync - Sync user after login
@@ -61,6 +65,16 @@ router.patch(
   '/me/nicknames',
   [body('nicknames').isObject(), handleValidationErrors],
   updateNicknamesHandler,
+);
+
+// PATCH /api/users/me/username - Set/update username
+router.patch(
+  '/me/username',
+  [
+    body('username').trim().notEmpty().isLength({ min: 3, max: 20 }),
+    handleValidationErrors,
+  ],
+  updateUsername,
 );
 
 // GET /api/users/search?q=...

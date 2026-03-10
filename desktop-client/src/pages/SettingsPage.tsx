@@ -58,12 +58,18 @@ const SettingsPage: React.FC = () => {
   const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
   const [showMessageStatus, setShowMessageStatus] = useState(currentUser?.showMessageStatus !== false);
   const [editingName, setEditingName] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState(currentUser?.username ?? '');
+  const [usernameCheckStatus, setUsernameCheckStatus] = useState<'idle' | 'checking' | 'available' | 'unavailable'>('idle');
+  const [usernameMessage, setUsernameMessage] = useState('');
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
 
   // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
   useEffect(() => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
     setShowMessageStatus(currentUser?.showMessageStatus !== false);
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus]);
+    setUsernameInput(currentUser?.username ?? '');
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.username]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -85,6 +91,56 @@ const SettingsPage: React.FC = () => {
     } finally {
       setIsSavingName(false);
       setEditingName(false);
+    }
+  };
+
+  // Username validation with debounce
+  useEffect(() => {
+    if (!editingUsername || !usernameInput || usernameInput === currentUser?.username) {
+      setUsernameCheckStatus('idle');
+      setUsernameMessage('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setUsernameCheckStatus('checking');
+      const { checkUsernameAvailability } = await import('../services/usernameService');
+      const result = await checkUsernameAvailability(usernameInput);
+      
+      if (result.available) {
+        setUsernameCheckStatus('available');
+        setUsernameMessage('✓ Username is available');
+      } else {
+        setUsernameCheckStatus('unavailable');
+        setUsernameMessage(result.message);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [usernameInput, editingUsername, currentUser?.username]);
+
+  const handleSaveUsername = async () => {
+    if (!usernameInput.trim() || usernameCheckStatus !== 'available') return;
+    
+    setIsSavingUsername(true);
+    try {
+      const { updateUsername } = await import('../services/usernameService');
+      const result = await updateUsername(usernameInput.trim());
+      
+      if (result.success) {
+        const res = await updateMyProfile({ username: usernameInput.trim().toLowerCase() });
+        if (res.success && res.data) setCurrentUser(res.data);
+        setEditingUsername(false);
+      } else {
+        setUsernameMessage(result.error || 'Failed to update username');
+        setUsernameCheckStatus('unavailable');
+      }
+    } catch (e) {
+      console.error('[Profile] Failed to update username', e);
+      setUsernameMessage('Failed to update username');
+      setUsernameCheckStatus('unavailable');
+    } finally {
+      setIsSavingUsername(false);
     }
   };
 
@@ -233,6 +289,76 @@ const SettingsPage: React.FC = () => {
               </div>
             )}
             <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>{currentUser.email}</div>
+            {/* Username */}
+            {editingUsername ? (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value.toLowerCase())}
+                    onKeyDown={(e) => { 
+                      if (e.key === 'Enter' && usernameCheckStatus === 'available') handleSaveUsername(); 
+                      if (e.key === 'Escape') { setEditingUsername(false); setUsernameInput(currentUser.username ?? ''); setUsernameCheckStatus('idle'); setUsernameMessage(''); } 
+                    }}
+                    placeholder="username"
+                    maxLength={20}
+                    style={{
+                      fontSize: 13, color: 'var(--text-primary)',
+                      background: 'var(--bg-tertiary)', border: '1px solid var(--accent)',
+                      borderRadius: 6, padding: '4px 8px', flex: 1, minWidth: 0,
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveUsername}
+                    disabled={isSavingUsername || usernameCheckStatus !== 'available'}
+                    style={{ 
+                      ...smallBtnStyle, 
+                      backgroundColor: usernameCheckStatus === 'available' ? 'var(--accent)' : 'var(--bg-tertiary)', 
+                      color: usernameCheckStatus === 'available' ? '#fff' : 'var(--text-secondary)', 
+                      border: 'none',
+                      opacity: usernameCheckStatus === 'available' ? 1 : 0.5,
+                      cursor: usernameCheckStatus === 'available' ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {isSavingUsername ? '...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingUsername(false); setUsernameInput(currentUser.username ?? ''); setUsernameCheckStatus('idle'); setUsernameMessage(''); }}
+                    style={smallBtnStyle}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {usernameMessage && (
+                  <div style={{ 
+                    fontSize: 11, 
+                    marginTop: 4, 
+                    color: usernameCheckStatus === 'available' ? '#22c55e' : '#ef4444' 
+                  }}>
+                    {usernameMessage}
+                  </div>
+                )}
+                {usernameCheckStatus === 'checking' && (
+                  <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-secondary)' }}>
+                    Checking availability...
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  @{currentUser.username || 'not set'}
+                </span>
+                <button
+                  onClick={() => { setUsernameInput(currentUser.username ?? ''); setEditingUsername(true); }}
+                  title="Edit username"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: 2, display: 'flex', alignItems: 'center' }}
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </Section>

@@ -10,6 +10,7 @@ create extension if not exists "uuid-ossp";
 create table if not exists public.users (
   uid                 text        primary key,
   name                text        not null default '',
+  username            text        unique,
   email               text        not null default '',
   avatar              text        not null default '',
   created_at          text        not null,
@@ -21,6 +22,9 @@ create table if not exists public.users (
   archived_chat_ids   text[]      not null default '{}',
   nicknames           jsonb       not null default '{}'
 );
+
+-- Index for username lookups
+create index if not exists users_username_idx on public.users (username);
 
 -- ─── chats ────────────────────────────────────────────────────────────────
 create table if not exists public.chats (
@@ -98,6 +102,28 @@ create index if not exists saved_messages_uid_idx on public.saved_messages (uid)
 create index if not exists saved_messages_updated_at_idx on public.saved_messages (uid, updated_at);
 
 -- ─── Migrations (run if table already exists without these columns) ─────────
+-- Add columns first (without constraints)
 alter table public.users add column if not exists nicknames jsonb not null default '{}';
 alter table public.users add column if not exists show_message_status boolean not null default true;
+alter table public.users add column if not exists username text;
+alter table public.messages add column if not exists delivered_to text[] not null default '{}';
+
+-- Add unique constraint separately (only if it doesn't exist)
+do $$ 
+begin
+  if not exists (
+    select 1 from pg_constraint 
+    where conname = 'users_username_key' 
+    and conrelid = 'public.users'::regclass
+  ) then
+    alter table public.users add constraint users_username_key unique (username);
+  end if;
+exception
+  when duplicate_table then
+    -- Constraint already exists, ignore
+    null;
+end $$;
+
+-- Create index
+create index if not exists users_username_idx on public.users (username);
 alter table public.messages add column if not exists delivered_to text[] not null default '{}';

@@ -5,6 +5,7 @@
 export interface User {
   uid: string;
   name: string;
+  username?: string; // unique username for @mentions and profile URLs
   email: string;
   avatar: string;
   createdAt: string;

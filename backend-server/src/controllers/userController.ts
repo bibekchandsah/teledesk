@@ -184,3 +184,94 @@ export const updateNicknamesHandler = async (req: Request, res: Response): Promi
     res.status(500).json({ success: false, error: 'Failed to update nicknames' });
   }
 };
+
+/**
+ * GET /api/users/check-username/:username
+ * Check if a username is available
+ */
+export const checkUsername = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { username } = req.params;
+    
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ success: false, error: 'Username is required' });
+      return;
+    }
+
+    const { checkUsernameAvailability } = await import('../services/userService');
+    const result = await checkUsernameAvailability(username);
+
+    if (!result.available) {
+      let message = 'Username is not available';
+      if (result.reason === 'invalid_format') {
+        message = 'Username must be 3-20 characters, start with a letter, and contain only letters, numbers, and underscores';
+      } else if (result.reason === 'reserved') {
+        message = 'This username is reserved and cannot be used';
+      } else if (result.reason === 'taken') {
+        message = 'This username is already taken';
+      }
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          available: false, 
+          reason: result.reason,
+          message 
+        } 
+      });
+      return;
+    }
+
+    res.json({ 
+      success: true, 
+      data: { 
+        available: true,
+        message: 'Username is available' 
+      } 
+    });
+  } catch (error) {
+    logger.error(`checkUsername error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to check username' });
+  }
+};
+
+/**
+ * PATCH /api/users/me/username
+ * Set or update username
+ */
+export const updateUsername = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { username } = req.body as { username: string };
+
+    if (!username || typeof username !== 'string') {
+      res.status(400).json({ success: false, error: 'Username is required' });
+      return;
+    }
+
+    const { checkUsernameAvailability, upsertUser } = await import('../services/userService');
+    
+    // Check availability
+    const check = await checkUsernameAvailability(username);
+    if (!check.available) {
+      let message = 'Username is not available';
+      if (check.reason === 'invalid_format') {
+        message = 'Username must be 3-20 characters, start with a letter, and contain only letters, numbers, and underscores';
+      } else if (check.reason === 'reserved') {
+        message = 'This username is reserved and cannot be used';
+      } else if (check.reason === 'taken') {
+        message = 'This username is already taken';
+      }
+      
+      res.status(400).json({ success: false, error: message });
+      return;
+    }
+
+    // Update username (stored as lowercase for consistency)
+    const user = await upsertUser(uid, { username: username.toLowerCase() });
+    res.json({ success: true, data: user });
+  } catch (error) {
+    logger.error(`updateUsername error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to update username' });
+  }
+};

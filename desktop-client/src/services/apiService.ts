@@ -38,7 +38,7 @@ export const syncUserProfile = (name: string, email: string, avatar: string) =>
 
 export const getMyProfile = () => authFetch<User>('/api/users/me');
 
-export const updateMyProfile = (updates: { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean }) =>
+export const updateMyProfile = (updates: { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean; username?: string }) =>
   authFetch<User>('/api/users/me', {
     method: 'PATCH',
     body: JSON.stringify(updates),
