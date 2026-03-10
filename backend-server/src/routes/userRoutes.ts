@@ -81,9 +81,6 @@ router.patch(
 // GET /api/users/search?q=...
 router.get('/search', searchUsersHandler);
 
-// GET /api/users/:uid
-router.get('/:uid', getUserProfile);
-
 // ─── Device Sessions (temporary workaround) ────────────────────────────────
 // GET /api/users/device-sessions - Get all device sessions for current user
 router.get('/device-sessions', getDeviceSessions);
@@ -93,5 +90,8 @@ router.delete('/device-sessions/:sessionId', revokeSession);
 
 // DELETE /api/users/device-sessions/others/all - Revoke all other device sessions
 router.delete('/device-sessions/others/all', revokeAllOtherDeviceSessions);
+
+// GET /api/users/:uid
+router.get('/:uid', getUserProfile);
 
 export default router;
