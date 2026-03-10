@@ -238,13 +238,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     })),
 
-  removeChat: (chatId) =>
+  removeChat: (chatId) => {
+    // Clear the persisted last-active chat if it's the one being removed
+    if (localStorage.getItem('lastActiveChatId') === chatId) {
+      localStorage.removeItem('lastActiveChatId');
+    }
     set((state) => ({
       chats: state.chats.filter((c) => c.chatId !== chatId),
       activeChat: state.activeChat?.chatId === chatId ? null : state.activeChat,
       messages: Object.fromEntries(Object.entries(state.messages).filter(([k]) => k !== chatId)),
       unreadCounts: Object.fromEntries(Object.entries(state.unreadCounts).filter(([k]) => k !== chatId)),
-    })),
+    }));
+  },
 
   removeMessage: (chatId, messageId) =>
     set((state) => ({

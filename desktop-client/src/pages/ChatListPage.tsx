@@ -13,10 +13,15 @@ import { User } from '@shared/types';
 const ChatListPage: React.FC = () => {
   const { setChats, setUserProfile, userProfiles } = useChatStore();
   const { currentUser } = useAuthStore();
-  const { newGroupModalOpen, setNewGroupModal } = useUIStore();
+  const { newGroupModalOpen, setNewGroupModal, setLastActiveChatId } = useUIStore();
   const { sidebarOpen } = useUIStore();
   const navigate = useNavigate();
   const { chatId } = useParams<{ chatId?: string }>();
+
+  // Remember the last opened chat so navigating back to /chats restores it
+  useEffect(() => {
+    if (chatId) setLastActiveChatId(chatId);
+  }, [chatId, setLastActiveChatId]);
   const [showNewChat, setShowNewChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);

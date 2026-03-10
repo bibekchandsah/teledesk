@@ -45,7 +45,7 @@ import { useChatStore } from './store/chatStore';
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading } = useAuthStore();
-  const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar } = useUIStore();
+  const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId } = useUIStore();
   const { activeCall, incomingCall } = useCallStore();
   const { archivedChatIds } = useChatStore();
   const hasArchived = archivedChatIds.length > 0;
@@ -178,7 +178,7 @@ const AppInner: React.FC = () => {
                   toggleSidebar();
                 } else {
                   setSidebarOpen(true);
-                  navigate('/chats');
+                  navigate(lastActiveChatId ? `/chats/${lastActiveChatId}` : '/chats');
                 }
               }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}

@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats, onAuthChange } from '../services/firebaseService';
-import { getUserById } from '../services/apiService';
+import { getUserById, getChats } from '../services/apiService';
 import ChatWindow from './ChatWindow';
 
 /**
@@ -13,16 +14,40 @@ import ChatWindow from './ChatWindow';
  * which would delay the chat from loading — this bypasses that wait.
  */
 const PopupChatPage: React.FC = () => {
-  const { setChats, setUserProfile } = useChatStore();
+  const { chatId } = useParams<{ chatId: string }>();
+  const { setChats, setUserProfile, setActiveChat, chats } = useChatStore();
+
+  // Whenever chats load, resolve and set activeChat for the target chatId
+  useEffect(() => {
+    if (!chatId || chats.length === 0) return;
+    const found = chats.find((c) => c.chatId === chatId);
+    if (found) setActiveChat(found);
+  }, [chatId, chats, setActiveChat]);
 
   useEffect(() => {
     let chatUnsub: (() => void) | null = null;
 
-    const authUnsub = onAuthChange((fbUser) => {
+    const authUnsub = onAuthChange(async (fbUser) => {
       // Already subscribed — nothing to do
       if (chatUnsub) return;
       if (!fbUser) return;
 
+      // Eagerly fetch chats via the REST API so the chat loads immediately
+      // without waiting for the Supabase realtime handshake.
+      const res = await getChats().catch(() => null);
+      if (res?.success && res.data) {
+        setChats(res.data);
+        // Load member profiles
+        const memberIds = new Set<string>();
+        res.data.forEach((c) => c.members.forEach((m: string) => memberIds.add(m)));
+        memberIds.delete(fbUser.uid);
+        for (const uid of memberIds) {
+          const r = await getUserById(uid);
+          if (r.success && r.data) setUserProfile(r.data);
+        }
+      }
+
+      // Also set up realtime subscription for live updates
       chatUnsub = listenToUserChats(fbUser.uid, async (chats) => {
         setChats(chats);
 
@@ -31,8 +56,8 @@ const PopupChatPage: React.FC = () => {
         memberIds.delete(fbUser.uid);
 
         for (const uid of memberIds) {
-          const res = await getUserById(uid);
-          if (res.success && res.data) setUserProfile(res.data);
+          const r = await getUserById(uid);
+          if (r.success && r.data) setUserProfile(r.data);
         }
       });
     });

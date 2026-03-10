@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -13,6 +14,61 @@ export default defineConfig({
       include: ['stream', 'buffer', 'util', 'events', 'process'],
       globals: { Buffer: true, global: true, process: true },
       protocolImports: true,
+    }),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['icon.ico', 'icon.png', 'icon.webp', 'apple-touch-icon.png'],
+      manifest: {
+        name: 'TeleDesk',
+        short_name: 'TeleDesk',
+        description: 'TeleDesk — Messaging & Video Calls',
+        theme_color: '#0f172a',
+        background_color: '#0f172a',
+        display: 'standalone',
+        orientation: 'any',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,webp,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-stylesheets' },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
     }),
   ],
   base: '/',

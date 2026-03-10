@@ -203,6 +203,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
   // ─── Join/leave room & load messages ─────────────────────────────────────
   useEffect(() => {
     if (!chatId) return;
+    // Wait for auth to resolve before attempting to load messages.
+    // In popup windows, this effect fires before Firebase auth is ready;
+    // adding currentUid as a dependency causes it to re-run once auth resolves.
+    if (!currentUid) return;
 
     // Reset pagination state whenever we switch chats
     setOlderMessages([]);
@@ -234,16 +238,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
       chatId,
       (msgs) => {
         // Strip messages this user has deleted "for me" before storing
-        const uid = currentUser?.uid ?? '';
-        const filtered = msgs.filter((m) => !(m.deletedFor ?? []).includes(uid));
+        const filtered = msgs.filter((m) => !(m.deletedFor ?? []).includes(currentUid));
         setMessages(chatId, filtered);
       },
       // Fallback: if Firestore streaming is blocked (e.g. ad blocker), load via HTTP
       async () => {
         const res = await getChatMessages(chatId).catch(() => null);
         if (res?.success && res.data) {
-          const uid = currentUser?.uid ?? '';
-          const filtered = res.data.filter((m: import('@shared/types').Message) => !(m.deletedFor ?? []).includes(uid));
+          const filtered = res.data.filter((m: import('@shared/types').Message) => !(m.deletedFor ?? []).includes(currentUid));
           setMessages(chatId, filtered);
         }
       },
@@ -255,7 +257,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
       document.removeEventListener('visibilitychange', handleVisible);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [chatId, setMessages, clearUnread]);
+  }, [chatId, currentUid, setMessages, clearUnread]);
 
   // ─── Scroll logic ─────────────────────────────────────────────────────────
   // useLayoutEffect fires synchronously after DOM mutations, before the browser
