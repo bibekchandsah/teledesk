@@ -59,6 +59,10 @@ export const SOCKET_EVENTS = {
 
   // Saved Messages / Bookmarks sync (per-user)
   SAVED_MESSAGE_UPDATED: 'saved_message_updated',
+
+  // Device session management
+  SESSION_REVOKED: 'session_revoked',
+  FORCE_LOGOUT: 'force_logout',
 } as const;
 
 export type SocketEvent = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];

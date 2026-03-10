@@ -5,6 +5,7 @@ import { SOCKET_EVENTS } from '@shared/constants/events';
 import { useChatStore } from '../store/chatStore';
 import { useCallStore } from '../store/callStore';
 import { useAuthStore } from '../store/authStore';
+import { useAuth } from './AuthContext';
 import { useUIStore } from '../store/uiStore';
 import { showNotification } from '../services/notificationService';
 import { Message, SavedMessage } from '@shared/types';
@@ -21,6 +22,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
+  const { logout } = useAuth();
   const { liveTypingEnabled } = useUIStore();
   const navigate = useNavigate();
   const isConnectedRef = useRef(false);
@@ -201,6 +203,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!payload?.entry) return;
       useBookmarkStore.getState().applyRemoteEntry(payload.entry);
     };
+
+    // ─── Session Management ──────────────────────────────────────────────────
+    const handleSessionRevoked = (data: { sessionId: string; firebaseTokenId: string; message: string }) => {
+      console.warn('Session revoked:', data.message);
+      // Show a notification but don't force logout (might be another session)
+      alert(`Security Alert: ${data.message}. If this was not you, please check your active sessions.`);
+    };
+
+    const handleForceLogout = (data: { message: string; revokedSessions: string[] }) => {
+      console.warn('Force logout:', data.message);
+      alert(`Security Alert: ${data.message}`);
+      
+      // Force logout from this device
+      logout();
+    };
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
     socket.on(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
     socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
@@ -216,6 +233,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
     socket.on(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
     socket.on(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
+    socket.on(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
+    socket.on(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
 
     isConnectedRef.current = socket.connected;
 

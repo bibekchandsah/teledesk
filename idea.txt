@@ -534,6 +534,7 @@ check network connection status (
     online → show "You are back online" toast (only when connection is lost and restored not on every page load)
     offline → show "You are offline" toast
     )
+when usesr create account and enter their name then it don't show on the end user 
 check if username is available or not during registration and show message
 user should be able to send message themslef too: search, forward
 store save chat history in database and show them when user login from another device

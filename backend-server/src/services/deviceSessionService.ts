@@ -2,6 +2,12 @@ import { supabase } from '../config/supabase';
 import { now } from '../utils/helpers';
 import logger from '../utils/logger';
 
+// Import socket.io for session revocation notifications
+let io: any = null;
+export const setSocketIO = (socketIO: any) => {
+  io = socketIO;
+};
+
 export interface DeviceSession {
   sessionId: string;
   uid: string;
@@ -224,6 +230,14 @@ export const revokeDeviceSession = async (
   uid: string,
   sessionId: string,
 ): Promise<boolean> => {
+  // Get session info before deleting for notification
+  const { data: sessionData } = await supabase
+    .from('device_sessions')
+    .select('firebase_token_id')
+    .eq('uid', uid)
+    .eq('session_id', sessionId)
+    .single();
+
   const { error } = await supabase
     .from('device_sessions')
     .delete()
@@ -235,6 +249,16 @@ export const revokeDeviceSession = async (
     return false;
   }
 
+  // Notify the specific session to logout via socket
+  if (io && sessionData) {
+    const { SOCKET_EVENTS } = await import('../../../shared/constants/events');
+    io.to(`user:${uid}`).emit(SOCKET_EVENTS.SESSION_REVOKED, {
+      sessionId,
+      firebaseTokenId: sessionData.firebase_token_id,
+      message: 'Your session has been revoked from another device'
+    });
+  }
+
   logger.info(`Device session ${sessionId} revoked for user ${uid}`);
   return true;
 };
@@ -243,6 +267,13 @@ export const revokeAllOtherSessions = async (
   uid: string,
   currentSessionId: string,
 ): Promise<number> => {
+  // Get session info before deleting for notifications
+  const { data: sessionsToRevoke } = await supabase
+    .from('device_sessions')
+    .select('session_id, firebase_token_id')
+    .eq('uid', uid)
+    .neq('session_id', currentSessionId);
+
   const { data, error } = await supabase
     .from('device_sessions')
     .delete()
@@ -256,6 +287,18 @@ export const revokeAllOtherSessions = async (
   }
 
   const count = data?.length || 0;
+
+  // Notify all revoked sessions to logout via socket
+  if (io && sessionsToRevoke && sessionsToRevoke.length > 0) {
+    const { SOCKET_EVENTS } = await import('../../../shared/constants/events');
+    
+    // Send force logout to all sessions for this user
+    io.to(`user:${uid}`).emit(SOCKET_EVENTS.FORCE_LOGOUT, {
+      message: 'You have been logged out from all other devices',
+      revokedSessions: sessionsToRevoke.map(s => s.firebase_token_id)
+    });
+  }
+
   logger.info(`Revoked ${count} other sessions for user ${uid}`);
   return count;
 };

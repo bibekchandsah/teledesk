@@ -34,6 +34,10 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     pingInterval: 25000,
   });
 
+  // Set up socket IO for device session service
+  const { setSocketIO } = require('../services/deviceSessionService');
+  setSocketIO(io);
+
   // ─── Authentication Middleware ─────────────────────────────────────────────
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string;
