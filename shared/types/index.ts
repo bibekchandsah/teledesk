@@ -18,6 +18,22 @@ export interface User {
   nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
 }
 
+export interface DeviceSession {
+  sessionId: string;
+  uid: string;
+  deviceName: string;
+  deviceType: 'desktop' | 'mobile' | 'web';
+  ipAddress: string;
+  locationCountry?: string;
+  locationCity?: string;
+  locationRegion?: string;
+  userAgent: string;
+  firebaseTokenId: string;
+  createdAt: string;
+  lastActive: string;
+  isCurrent: boolean;
+}
+
 export interface Message {
   messageId: string;
   chatId: string;

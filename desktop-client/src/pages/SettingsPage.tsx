@@ -383,6 +383,26 @@ const SettingsPage: React.FC = () => {
           <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>✓ Enabled</span>
         </SettingRow>
         <SettingRow
+          label="Device Sessions"
+          description="Manage your active sessions across all devices"
+        >
+          <button
+            onClick={() => window.location.href = '/device-sessions'}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            Manage Devices
+          </button>
+        </SettingRow>
+        <SettingRow
           label="Live Typing Preview"
           description="When both users enable this, you see each other’s text as they type"
         >

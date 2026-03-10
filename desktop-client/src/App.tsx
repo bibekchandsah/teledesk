@@ -32,6 +32,7 @@ import ChatListPage from './pages/ChatListPage';
 import ChatWindow from './pages/ChatWindow';
 import PopupChatPage from './pages/PopupChatPage';
 import SettingsPage from './pages/SettingsPage';
+import DeviceSessionsPage from './pages/DeviceSessionsPage';
 import UserProfile from './pages/UserProfile';
 import CallScreen from './pages/CallScreen';
 import IncomingCallModal from './pages/IncomingCallModal';
@@ -245,6 +246,11 @@ const AppInner: React.FC = () => {
               <Route path="/settings" element={
                 <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
                   <SettingsPage />
+                </div>
+              } />
+              <Route path="/device-sessions" element={
+                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                  <DeviceSessionsPage />
                 </div>
               } />
               <Route path="/calls" element={
