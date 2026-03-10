@@ -534,8 +534,8 @@ check network connection status (
     online → show "You are back online" toast (only when connection is lost and restored not on every page load)
     offline → show "You are offline" toast
     )
-user should be able to send message themslef too: search, forward
 check if username is available or not during registration and show message
+user should be able to send message themslef too: search, forward
 store save chat history in database and show them when user login from another device
 
 show mute & unmute status of user during call

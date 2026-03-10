@@ -17,7 +17,7 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
+  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
@@ -134,6 +134,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setUserShowActiveStatus(data.userId, data.showActiveStatus);
     };
 
+    const handleMessageStatusChanged = (data: { userId: string; showMessageStatus: boolean }) => {
+      setUserShowMessageStatus(data.userId, data.showMessageStatus);
+    };
+
     // ─── Incoming Call Event ─────────────────────────────────────────────
     const handleIncomingCall = (data: {
       callId: string;
@@ -205,6 +209,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
     socket.on(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
     socket.on(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
+    socket.on(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
     socket.on(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
     socket.on(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
@@ -223,6 +228,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.USER_ONLINE, handleUserOnline);
       socket.off(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
       socket.off(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
+      socket.off(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
       socket.off(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
       socket.off(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
@@ -230,7 +236,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
       socket.off(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
     };
-  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
+  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
 
   // ─── Notification reply (Electron only) ──────────────────────────────────
   useEffect(() => {

@@ -43,6 +43,7 @@ interface ChatState {
   setUserOnline: (userId: string, online: boolean, showActiveStatus?: boolean) => void;
   setUserProfile: (user: User) => void;
   setUserShowActiveStatus: (userId: string, showActiveStatus: boolean) => void;
+  setUserShowMessageStatus: (userId: string, showMessageStatus: boolean) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
   updateChatLastMessage: (message: Message) => void;
@@ -212,6 +213,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       userProfiles: state.userProfiles[userId]
         ? { ...state.userProfiles, [userId]: { ...state.userProfiles[userId], showActiveStatus } }
+        : state.userProfiles,
+    })),
+
+  setUserShowMessageStatus: (userId, showMessageStatus) =>
+    set((state) => ({
+      userProfiles: state.userProfiles[userId]
+        ? { ...state.userProfiles, [userId]: { ...state.userProfiles[userId], showMessageStatus } }
         : state.userProfiles,
     })),
 

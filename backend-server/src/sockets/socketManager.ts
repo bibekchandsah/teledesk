@@ -432,6 +432,19 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       socket.broadcast.emit(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, { userId: uid, showActiveStatus: newVal });
     });
 
+    // ─── Message Status Visibility ─────────────────────────────────────────
+    socket.on(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, async (payload: { showMessageStatus: boolean }) => {
+      const newVal = payload.showMessageStatus === true;
+      await getUserById(uid).then(user => {
+        if (user) {
+          const { upsertUser } = require('../services/userService');
+          return upsertUser(uid, { showMessageStatus: newVal });
+        }
+      }).catch(() => {});
+      // Notify all other connected clients so they can update their UI in real-time
+      socket.broadcast.emit(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, { userId: uid, showMessageStatus: newVal });
+    });
+
     // ─── Heartbeat ─────────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.HEARTBEAT, () => {
       updatePresence(uid, 'online').catch(() => {});

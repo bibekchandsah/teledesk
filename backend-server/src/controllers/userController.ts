@@ -35,11 +35,12 @@ export const syncUser = async (req: Request, res: Response): Promise<void> => {
 export const updateMe = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const { name, avatar, showActiveStatus } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean };
+    const { name, avatar, showActiveStatus, showMessageStatus } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean };
     const updates: Partial<import('../../../shared/types').User> = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
     if (avatar !== undefined) updates.avatar = String(avatar);
     if (showActiveStatus !== undefined) updates.showActiveStatus = Boolean(showActiveStatus);
+    if (showMessageStatus !== undefined) updates.showMessageStatus = Boolean(showMessageStatus);
     const user = await upsertUser(uid, updates);
     res.json({ success: true, data: user });
   } catch (error) {

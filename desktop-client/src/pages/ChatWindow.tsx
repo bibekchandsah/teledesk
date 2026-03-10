@@ -1305,6 +1305,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   searchQuery={isSearchMatch ? searchQuery : undefined}
                   isActiveSearchMatch={isActiveMatch}
                   isHighlighted={highlightedMsgId === msg.messageId}
+                  currentUserShowMessageStatus={currentUser?.showMessageStatus !== false}
+                  otherUserShowMessageStatus={(() => {
+                    const otherUserId = msg.senderId === currentUser?.uid 
+                      ? activeChat.members.find(m => m !== currentUser?.uid) 
+                      : msg.senderId;
+                    return otherUserId ? userProfiles[otherUserId]?.showMessageStatus !== false : true;
+                  })()}
                 />
                 </div>
               </div>

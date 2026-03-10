@@ -25,6 +25,8 @@ interface MessageBubbleProps {
   searchQuery?: string;
   isActiveSearchMatch?: boolean;
   isHighlighted?: boolean;
+  currentUserShowMessageStatus?: boolean;
+  otherUserShowMessageStatus?: boolean;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -47,6 +49,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   searchQuery,
   isActiveSearchMatch = false,
   isHighlighted = false,
+  currentUserShowMessageStatus = true,
+  otherUserShowMessageStatus = true,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -365,7 +369,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             {message.isEdited && !message.deleted && (
               <span style={{ fontSize: 10, opacity: 0.65, fontStyle: 'italic' }}>edited</span>
             )}
-            {isOwn && !message.deleted && (
+            {isOwn && !message.deleted && currentUserShowMessageStatus && otherUserShowMessageStatus && (
               <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
                 {message.readBy.length > 1
                   ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />

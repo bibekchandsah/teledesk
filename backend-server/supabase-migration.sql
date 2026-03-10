@@ -16,6 +16,7 @@ create table if not exists public.users (
   last_seen           text        not null,
   online_status       text        not null default 'offline',   -- 'online' | 'offline' | 'away'
   show_active_status  boolean     not null default true,
+  show_message_status boolean     not null default true,
   pinned_chat_ids     text[]      not null default '{}',
   archived_chat_ids   text[]      not null default '{}',
   nicknames           jsonb       not null default '{}'
@@ -98,4 +99,5 @@ create index if not exists saved_messages_updated_at_idx on public.saved_message
 
 -- ─── Migrations (run if table already exists without these columns) ─────────
 alter table public.users add column if not exists nicknames jsonb not null default '{}';
+alter table public.users add column if not exists show_message_status boolean not null default true;
 alter table public.messages add column if not exists delivered_to text[] not null default '{}';

@@ -56,7 +56,14 @@ const SettingsPage: React.FC = () => {
   }, []);
 
   const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
+  const [showMessageStatus, setShowMessageStatus] = useState(currentUser?.showMessageStatus !== false);
   const [editingName, setEditingName] = useState(false);
+
+  // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
+  useEffect(() => {
+    setShowActiveStatus(currentUser?.showActiveStatus !== false);
+    setShowMessageStatus(currentUser?.showMessageStatus !== false);
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -119,6 +126,23 @@ const SettingsPage: React.FC = () => {
     } catch (e) {
       console.error('[Settings] Failed to update active status', e);
       setShowActiveStatus(!newVal); // rollback on error
+    }
+  };
+
+  const handleToggleMessageStatus = async () => {
+    const newVal = !showMessageStatus;
+    setShowMessageStatus(newVal);
+    try {
+      const res = await updateMyProfile({ showMessageStatus: newVal });
+      if (res.success && res.data) setCurrentUser(res.data);
+      // Emit socket event to notify other users
+      const socket = (await import('../services/socketService')).getSocket();
+      if (socket) {
+        socket.emit('message_status_changed', { showMessageStatus: newVal });
+      }
+    } catch (e) {
+      console.error('[Settings] Failed to update message status', e);
+      setShowMessageStatus(!newVal); // rollback on error
     }
   };
 
@@ -289,6 +313,39 @@ const SettingsPage: React.FC = () => {
                 position: 'absolute',
                 top: 3,
                 left: showActiveStatus ? 23 : 3,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                backgroundColor: '#fff',
+                transition: 'left 0.2s',
+              }}
+            />
+          </button>
+        </SettingRow>
+        <SettingRow
+          label="Show Message Status"
+          description="When enabled, you can see delivery/read receipts — only if both users have enabled this"
+        >
+          <button
+            onClick={handleToggleMessageStatus}
+            style={{
+              width: 46,
+              height: 26,
+              borderRadius: 13,
+              border: 'none',
+              cursor: 'pointer',
+              backgroundColor: showMessageStatus ? 'var(--accent)' : 'var(--bg-tertiary)',
+              position: 'relative',
+              transition: 'background-color 0.2s',
+              flexShrink: 0,
+            }}
+            aria-label="Toggle message status visibility"
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 3,
+                left: showMessageStatus ? 23 : 3,
                 width: 20,
                 height: 20,
                 borderRadius: '50%',
