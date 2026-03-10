@@ -41,10 +41,11 @@ import CallWindowPage from './pages/CallWindowPage';
 import IncomingCallWindowPage from './pages/IncomingCallWindowPage';
 import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
+import { useBookmarkStore } from './store/bookmarkStore';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
-  const { isAuthenticated, isLoading, setLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, setLoading, currentUser } = useAuthStore();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId } = useUIStore();
   const { activeCall, incomingCall } = useCallStore();
   const { archivedChatIds } = useChatStore();
@@ -95,6 +96,14 @@ const AppInner: React.FC = () => {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hydrate Saved Messages from cloud (sync across devices)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const uid = currentUser?.uid;
+    if (!uid) return;
+    useBookmarkStore.getState().initializeForUser(uid).catch(() => {});
+  }, [isAuthenticated, currentUser?.uid]);
 
   // ─── Popup window mode (bypass loading screen — auth resolves inside) ────
   if (isPopupWindow) {

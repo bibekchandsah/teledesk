@@ -173,6 +173,10 @@ body {
 .mobile-back-btn {
   display: none !important;
 }
+/* Always show the back button when explicitly requested (e.g. in-call chat panel) */
+.mobile-back-btn.show {
+  display: flex !important;
+}
 
 /* ─── Utilities ────────────────────────────────────────────────────────────── */
 .truncate {

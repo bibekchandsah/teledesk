@@ -11,6 +11,7 @@ import userRoutes from './routes/userRoutes';
 import chatRoutes from './routes/chatRoutes';
 import groupRoutes from './routes/groupRoutes';
 import fileRoutes from './routes/fileRoutes';
+import savedMessagesRoutes from './routes/savedMessagesRoutes';
 import { initializeSocket } from './sockets/socketManager';
 import { setIo } from './controllers/chatController';
 import logger from './utils/logger';
@@ -51,6 +52,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/saved-messages', savedMessagesRoutes);
 
 // ─── 404 & Error Handlers ──────────────────────────────────────────────────
 app.use(notFoundHandler);

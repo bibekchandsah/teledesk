@@ -1,25 +1,20 @@
 import { create } from 'zustand';
-import { Message } from '@shared/types';
+import { Message, SavedMessage } from '@shared/types';
+import { useAuthStore } from './authStore';
+import { deleteSavedMessage, getSavedMessages, upsertSavedMessage } from '../services/apiService';
 
 const genId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-// SavedMessage extends Message so it can be passed directly to MessageBubble
-export interface SavedMessage extends Message {
-  isNote?: boolean;        // true = typed by user directly in saved messages
-  sourceChatName?: string; // from which chat this was bookmarked
-  savedAt: string;
-  pinnedInSaved?: boolean;
-}
-
 // Legacy alias kept for backward compat (BookmarksPage no longer uses this)
 export type BookmarkedMessage = { message: Message; bookmarkedAt: string; sourceChatName?: string };
 
-const SAVED_KEY = 'teledesk_saved_entries';
+const LEGACY_SAVED_KEY = 'teledesk_saved_entries';
+const keyForUid = (uid?: string | null) => (uid ? `teledesk_saved_entries:${uid}` : LEGACY_SAVED_KEY);
 
-const load = (): SavedMessage[] => {
+const loadLocal = (uid?: string | null): SavedMessage[] => {
   try {
     // Migrate legacy bookmarks format if present
     const legacy = localStorage.getItem('teledesk_bookmarks');
@@ -31,21 +26,29 @@ const load = (): SavedMessage[] => {
         isNote: false,
         sourceChatName: b.sourceChatName,
         savedAt: b.bookmarkedAt,
+        updatedAt: b.bookmarkedAt,
       }));
-      localStorage.setItem(SAVED_KEY, JSON.stringify(migrated));
+      localStorage.setItem(keyForUid(uid), JSON.stringify(migrated));
       localStorage.removeItem('teledesk_bookmarks');
       return migrated;
     }
-    return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
+    // Per-user key preferred; fall back to legacy global key if present
+    const perUser = localStorage.getItem(keyForUid(uid));
+    if (perUser) return JSON.parse(perUser || '[]');
+    const legacySaved = localStorage.getItem(LEGACY_SAVED_KEY);
+    if (legacySaved) return JSON.parse(legacySaved || '[]');
+    return [];
   } catch { return []; }
 };
 
-const persist = (entries: SavedMessage[]) => {
-  try { localStorage.setItem(SAVED_KEY, JSON.stringify(entries)); } catch {}
+const persistLocal = (uid: string | null | undefined, entries: SavedMessage[]) => {
+  try { localStorage.setItem(keyForUid(uid), JSON.stringify(entries)); } catch {}
 };
 
 interface BookmarkState {
   savedEntries: SavedMessage[]; // oldest-first
+  isCloudSynced: boolean;
+  isSyncing: boolean;
 
   // ── Backward-compat API (used by ChatWindow & MessageBubble) ──────────────
   addBookmark: (message: Message, sourceChatName?: string) => void;
@@ -53,6 +56,8 @@ interface BookmarkState {
   isBookmarked: (messageId: string) => boolean;
 
   // ── Full saved-messages operations ────────────────────────────────────────
+  initializeForUser: (uid: string) => Promise<void>;
+  applyRemoteEntry: (entry: SavedMessage) => void;
   addNote: (params: {
     senderId: string;
     senderName?: string;
@@ -76,33 +81,131 @@ interface BookmarkState {
   updateEntry: (messageId: string, updates: Partial<SavedMessage>) => void;
 }
 
+const byId = (entries: SavedMessage[]) => {
+  const map = new Map<string, SavedMessage>();
+  for (const e of entries) map.set(e.messageId, e);
+  return map;
+};
+
+const getEntryUpdatedAt = (e: SavedMessage) =>
+  new Date(e.updatedAt || e.savedAt || e.timestamp || 0).getTime();
+
+const mergeEntries = (local: SavedMessage[], remote: SavedMessage[]) => {
+  const merged = new Map<string, SavedMessage>();
+  for (const e of local) merged.set(e.messageId, e);
+  for (const r of remote) {
+    const existing = merged.get(r.messageId);
+    if (!existing || getEntryUpdatedAt(r) >= getEntryUpdatedAt(existing)) {
+      merged.set(r.messageId, r);
+    }
+  }
+  return [...merged.values()].sort((a, b) =>
+    new Date(a.savedAt || a.timestamp).getTime() - new Date(b.savedAt || b.timestamp).getTime(),
+  );
+};
+
+const getUid = () => useAuthStore.getState().currentUser?.uid ?? null;
+
+const cloudUpsert = async (entry: SavedMessage) => {
+  try {
+    await upsertSavedMessage(entry.messageId, entry);
+  } catch {
+    // Offline / backend unavailable: keep local; next init will retry.
+  }
+};
+
+const cloudDelete = async (messageId: string) => {
+  try {
+    await deleteSavedMessage(messageId);
+  } catch {
+    // Best-effort; we also write a tombstone via upsert in deleteEntry/removeBookmark.
+  }
+};
+
 export const useBookmarkStore = create<BookmarkState>((set, get) => ({
-  savedEntries: load(),
+  savedEntries: [],
+  isCloudSynced: false,
+  isSyncing: false,
+
+  initializeForUser: async (uid) => {
+    set({ isSyncing: true });
+    // 1) Load local cache (per-user, with legacy fallback/migration)
+    const local = loadLocal(uid);
+    set({ savedEntries: local });
+    persistLocal(uid, local);
+
+    // 2) Fetch cloud and merge
+    try {
+      const res = await getSavedMessages();
+      if (res.success && res.data) {
+        const merged = mergeEntries(local, res.data);
+        set({ savedEntries: merged, isCloudSynced: true });
+        persistLocal(uid, merged);
+
+        // 3) Backfill cloud with any local entries that are newer/missing
+        const remoteMap = byId(res.data);
+        const toUpsert = merged.filter((e) => {
+          const r = remoteMap.get(e.messageId);
+          return !r || getEntryUpdatedAt(e) > getEntryUpdatedAt(r);
+        });
+        for (const e of toUpsert) {
+          // Skip invalid entries (shouldn't happen, but guards legacy garbage)
+          if (!e?.messageId) continue;
+          await cloudUpsert(e);
+        }
+      }
+    } catch {
+      // Ignore; app stays usable offline with local cache.
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  applyRemoteEntry: (entry) => {
+    if (!entry?.messageId) return;
+    const uid = getUid();
+    const current = get().savedEntries;
+    const merged = mergeEntries(current, [entry]);
+    set({ savedEntries: merged, isCloudSynced: true });
+    persistLocal(uid, merged);
+  },
 
   addBookmark: (message, sourceChatName) => {
     const entries = get().savedEntries;
-    if (entries.some((e) => e.messageId === message.messageId)) return;
+    if (entries.some((e) => e.messageId === message.messageId && !e.deleted)) return;
     const entry: SavedMessage = {
       ...message,
       chatId: '__saved__',
       isNote: false,
       sourceChatName,
       savedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deleted: false,
     };
     const updated = [...entries, entry];
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    void cloudUpsert(entry);
   },
 
   removeBookmark: (messageId) => {
-    const updated = get().savedEntries.filter((e) => e.messageId !== messageId);
-    persist(updated);
+    const uid = getUid();
+    const nowIso = new Date().toISOString();
+    const updated = get().savedEntries.map((e) =>
+      e.messageId === messageId ? { ...e, deleted: true, updatedAt: nowIso } : e,
+    );
+    persistLocal(uid, updated);
     set({ savedEntries: updated });
+    // Use both tombstone upsert (best for sync) and DELETE (best for storage hygiene)
+    const tomb = updated.find((e) => e.messageId === messageId);
+    if (tomb) void cloudUpsert(tomb);
+    void cloudDelete(messageId);
   },
 
-  isBookmarked: (messageId) => get().savedEntries.some((e) => e.messageId === messageId),
+  isBookmarked: (messageId) => get().savedEntries.some((e) => e.messageId === messageId && !e.deleted),
 
   addNote: ({ senderId, senderName, senderAvatar, content, replyTo }) => {
+    const nowIso = new Date().toISOString();
     const entry: SavedMessage = {
       messageId: genId(),
       chatId: '__saved__',
@@ -111,18 +214,21 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       senderAvatar,
       content,
       type: 'text',
-      timestamp: new Date().toISOString(),
+      timestamp: nowIso,
       readBy: [senderId],
       isNote: true,
-      savedAt: new Date().toISOString(),
+      savedAt: nowIso,
+      updatedAt: nowIso,
       ...(replyTo && { replyTo }),
     };
     const updated = [...get().savedEntries, entry];
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    void cloudUpsert(entry);
   },
 
   addFileNote: ({ senderId, senderName, senderAvatar, content, type, fileUrl, fileName, fileSize }) => {
+    const nowIso = new Date().toISOString();
     const entry: SavedMessage = {
       messageId: genId(),
       chatId: '__saved__',
@@ -134,43 +240,61 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       fileUrl,
       fileName,
       fileSize,
-      timestamp: new Date().toISOString(),
+      timestamp: nowIso,
       readBy: [senderId],
       isNote: true,
-      savedAt: new Date().toISOString(),
+      savedAt: nowIso,
+      updatedAt: nowIso,
     };
     const updated = [...get().savedEntries, entry];
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    void cloudUpsert(entry);
   },
 
   deleteEntry: (messageId) => {
-    const updated = get().savedEntries.filter((e) => e.messageId !== messageId);
-    persist(updated);
+    const uid = getUid();
+    const nowIso = new Date().toISOString();
+    const updated = get().savedEntries.map((e) =>
+      e.messageId === messageId ? { ...e, deleted: true, updatedAt: nowIso } : e,
+    );
+    persistLocal(uid, updated);
     set({ savedEntries: updated });
+    const tomb = updated.find((e) => e.messageId === messageId);
+    if (tomb) void cloudUpsert(tomb);
+    void cloudDelete(messageId);
   },
 
   editEntry: (messageId, content) => {
+    const nowIso = new Date().toISOString();
     const updated = get().savedEntries.map((e) =>
-      e.messageId === messageId ? { ...e, content, isEdited: true } : e
+      e.messageId === messageId ? { ...e, content, isEdited: true, updatedAt: nowIso } : e,
     );
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    const entry = updated.find((e) => e.messageId === messageId);
+    if (entry) void cloudUpsert(entry);
   },
 
   togglePin: (messageId) => {
+    const nowIso = new Date().toISOString();
     const updated = get().savedEntries.map((e) =>
-      e.messageId === messageId ? { ...e, pinnedInSaved: !e.pinnedInSaved } : e
+      e.messageId === messageId ? { ...e, pinnedInSaved: !e.pinnedInSaved, updatedAt: nowIso } : e,
     );
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    const entry = updated.find((e) => e.messageId === messageId);
+    if (entry) void cloudUpsert(entry);
   },
 
   updateEntry: (messageId, updates) => {
+    const nowIso = new Date().toISOString();
     const updated = get().savedEntries.map((e) =>
-      e.messageId === messageId ? { ...e, ...updates } : e
+      e.messageId === messageId ? { ...e, ...updates, updatedAt: nowIso } : e,
     );
-    persist(updated);
+    persistLocal(getUid(), updated);
     set({ savedEntries: updated });
+    const entry = updated.find((e) => e.messageId === messageId);
+    if (entry) void cloudUpsert(entry);
   },
 }));

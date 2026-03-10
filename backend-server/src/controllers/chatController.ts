@@ -86,6 +86,7 @@ export const markChatRead = async (req: Request, res: Response): Promise<void> =
 // io is injected at server startup so controller can emit socket events
 let _io: import('socket.io').Server | null = null;
 export const setIo = (io: import('socket.io').Server) => { _io = io; };
+export const getIo = () => _io;
 
 /**
  * DELETE /api/chats/:chatId

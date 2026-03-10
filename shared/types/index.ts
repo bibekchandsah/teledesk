@@ -50,6 +50,15 @@ export interface Message {
   callStatusReceiver?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined'; // receiver's view
 }
 
+// Saved Messages / Bookmarks (stored per-user, synced across devices)
+export interface SavedMessage extends Message {
+  isNote?: boolean;        // true = typed by user directly in saved messages
+  sourceChatName?: string; // from which chat this was bookmarked
+  savedAt: string;
+  pinnedInSaved?: boolean;
+  updatedAt?: string;      // used for cross-device conflict resolution
+}
+
 export interface Chat {
   chatId: string;
   type: 'private' | 'group';

@@ -7,14 +7,14 @@ import {
   CornerUpLeft, Forward, Copy, CheckSquare, Trash2, Pin, PinOff,
   Pencil, MoreVertical, Check,
 } from 'lucide-react';
-import { useBookmarkStore, SavedMessage } from '../store/bookmarkStore';
+import { useBookmarkStore } from '../store/bookmarkStore';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import MessageBubble from '../components/MessageBubble';
 import UserAvatar from '../components/UserAvatar';
 import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../services/fileService';
 import { sendMessage } from '../services/socketService';
-import { Message } from '@shared/types';
+import { Message, SavedMessage } from '@shared/types';
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
 const getDateKey = (ts: string) => {

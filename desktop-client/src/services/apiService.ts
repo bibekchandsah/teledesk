@@ -28,7 +28,7 @@ const authFetch = async <T>(
 };
 
 // ─── Auth / User API ───────────────────────────────────────────────────────
-import { User, Chat, Group, Message } from '@shared/types';
+import { User, Chat, Group, Message, SavedMessage } from '@shared/types';
 
 export const syncUserProfile = (name: string, email: string, avatar: string) =>
   authFetch<User>('/api/users/sync', {
@@ -127,6 +127,19 @@ export const unpinMessage = (chatId: string, messageId: string) =>
     method: 'PATCH',
     body: JSON.stringify({ messageId, action: 'unpin' }),
   });
+
+// ─── Saved Messages API ─────────────────────────────────────────────────────
+
+export const getSavedMessages = () => authFetch<SavedMessage[]>('/api/saved-messages');
+
+export const upsertSavedMessage = (messageId: string, entry: SavedMessage) =>
+  authFetch(`/api/saved-messages/${encodeURIComponent(messageId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ entry }),
+  });
+
+export const deleteSavedMessage = (messageId: string) =>
+  authFetch(`/api/saved-messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
 
 // ─── Group API ─────────────────────────────────────────────────────────────
 

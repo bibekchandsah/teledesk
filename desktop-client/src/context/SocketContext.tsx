@@ -7,7 +7,8 @@ import { useCallStore } from '../store/callStore';
 import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import { showNotification } from '../services/notificationService';
-import { Message } from '@shared/types';
+import { Message, SavedMessage } from '@shared/types';
+import { useBookmarkStore } from '../store/bookmarkStore';
 
 interface SocketContextValue {
   isConnected: boolean;
@@ -190,6 +191,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const handlePinsUpdated = ({ chatId, pinnedMessageIds }: { chatId: string; pinnedMessageIds: string[] }) => {
       updateChatPins(chatId, pinnedMessageIds);
     };
+
+    // ─── Saved Messages sync (other device updates) ───────────────────────
+    const handleSavedMessageUpdated = (payload: { entry: SavedMessage }) => {
+      if (!payload?.entry) return;
+      useBookmarkStore.getState().applyRemoteEntry(payload.entry);
+    };
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
     socket.on(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
     socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
@@ -203,6 +210,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
     socket.on(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
+    socket.on(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
 
     isConnectedRef.current = socket.connected;
 
@@ -220,6 +228,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
+      socket.off(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
 

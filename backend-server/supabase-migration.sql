@@ -82,6 +82,20 @@ create table if not exists public.groups (
 -- alter table public.messages enable row level security;
 -- alter table public.groups  enable row level security;
 
+-- ─── saved_messages (Saved Messages / Bookmarks) ───────────────────────────
+-- Stores per-user saved messages as jsonb so it can evolve with the client.
+create table if not exists public.saved_messages (
+  uid         text    not null,
+  message_id  text    not null,
+  entry       jsonb   not null,
+  created_at  text    not null,
+  updated_at  text    not null,
+  primary key (uid, message_id)
+);
+
+create index if not exists saved_messages_uid_idx on public.saved_messages (uid);
+create index if not exists saved_messages_updated_at_idx on public.saved_messages (uid, updated_at);
+
 -- ─── Migrations (run if table already exists without these columns) ─────────
 alter table public.users add column if not exists nicknames jsonb not null default '{}';
 alter table public.messages add column if not exists delivered_to text[] not null default '{}';

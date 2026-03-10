@@ -817,9 +817,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           backgroundColor: 'var(--bg-secondary)',
         }}
       >
-        {/* Mobile back button */}
+        {/* Mobile back button — always visible when embedded (onBack set) */}
         <button
-          className="mobile-back-btn"
+          className={`mobile-back-btn${onBack ? ' show' : ''}`}
           onClick={() => onBack ? onBack() : navigate('/chats')}
           title="Back"
           style={{ ...headerBtnStyle, marginLeft: -6 }}

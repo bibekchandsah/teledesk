@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats, onAuthChange } from '../services/firebaseService';
 import { getUserById, getChats } from '../services/apiService';
@@ -15,6 +15,7 @@ import ChatWindow from './ChatWindow';
  */
 const PopupChatPage: React.FC = () => {
   const { chatId } = useParams<{ chatId: string }>();
+  const navigate = useNavigate();
   const { setChats, setUserProfile, setActiveChat, chats } = useChatStore();
 
   // Whenever chats load, resolve and set activeChat for the target chatId
@@ -70,7 +71,7 @@ const PopupChatPage: React.FC = () => {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <ChatWindow />
+      <ChatWindow onBack={() => navigate('/chats')} />
     </div>
   );
 };
