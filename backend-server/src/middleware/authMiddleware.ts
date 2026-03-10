@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { auth } from '../config/firebase';
-import { extractBearerToken } from '../utils/helpers';
+import { extractBearerToken, extractClientIP } from '../utils/helpers';
 import logger from '../utils/logger';
 import { createDeviceSession, updateSessionActivity, getSessionByTokenId, cleanupDuplicateSessions } from '../services/deviceSessionService';
 
@@ -45,15 +45,14 @@ export const authenticateToken = async (
     // Track device session (optional - don't fail auth if this fails)
     try {
       const userAgent = req.headers['user-agent'] || 'Unknown';
-      const ipAddress = req.ip || 
-                       req.connection.remoteAddress || 
-                       req.socket.remoteAddress || 
-                       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-                       '127.0.0.1';
+      const ipAddress = extractClientIP(req);
       
       // Create a stable session identifier based on user, device, and location
       // This will be the same for the same user on the same device/browser
       const sessionFingerprint = `${decodedToken.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+      
+      // Log session fingerprint for debugging
+      logger.debug(`HTTP auth session fingerprint: ${sessionFingerprint}, IP: ${ipAddress}, UA: ${userAgent.slice(0, 50)}...`);
       
       // Check if session exists for this fingerprint
       let session = await getSessionByTokenId(sessionFingerprint);
@@ -100,6 +99,7 @@ export const authenticateSocket = async (
     let sessionFingerprint: string | undefined;
     if (userAgent && ipAddress) {
       sessionFingerprint = `${decoded.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+      logger.debug(`Socket auth creating session fingerprint: ${sessionFingerprint}`);
     }
     
     return { 

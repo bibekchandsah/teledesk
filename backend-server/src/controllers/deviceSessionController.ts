@@ -76,3 +76,31 @@ export const cleanupDuplicateDeviceSessions = async (req: Request, res: Response
     res.status(500).json({ success: false, error: 'Failed to cleanup duplicate sessions' });
   }
 };
+
+export const debugSessionInfo = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { extractClientIP } = await import('../utils/helpers');
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ipAddress = extractClientIP(req);
+    const sessionFingerprint = `${req.user!.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+    
+    const { getSessionSockets } = await import('../sockets/socketManager');
+    const sessionSockets = getSessionSockets();
+    
+    res.json({
+      success: true,
+      debug: {
+        uid: req.user!.uid,
+        userAgent: userAgent.slice(0, 100),
+        ipAddress,
+        sessionFingerprint,
+        currentSessionId: req.sessionId,
+        socketMappings: Array.from(sessionSockets.entries()),
+        hasActiveSocket: sessionSockets.has(sessionFingerprint)
+      }
+    });
+  } catch (error) {
+    logger.error(`debugSessionInfo error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to get debug info' });
+  }
+};

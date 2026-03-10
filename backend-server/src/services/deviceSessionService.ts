@@ -99,40 +99,84 @@ async function getLocationFromIP(ipAddress: string): Promise<{
 function parseDeviceInfo(userAgent: string): { deviceName: string; deviceType: DeviceSession['deviceType'] } {
   const ua = userAgent.toLowerCase();
   
-  // Detect device type
+  // Detect device type - check mobile first, then desktop app
   let deviceType: DeviceSession['deviceType'] = 'web';
-  if (ua.includes('electron')) {
-    deviceType = 'desktop';
-  } else if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
-    deviceType = 'mobile';
-  }
-
-  // Parse device name
   let deviceName = 'Unknown Device';
   
-  if (ua.includes('electron')) {
+  // Check for mobile devices first (most specific)
+  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+    deviceType = 'mobile';
+    
+    // Mobile browser detection
+    if (ua.includes('chrome') && ua.includes('android')) {
+      deviceName = 'Chrome Mobile';
+    } else if (ua.includes('firefox') && (ua.includes('mobile') || ua.includes('android'))) {
+      deviceName = 'Firefox Mobile';
+    } else if (ua.includes('safari') && (ua.includes('iphone') || ua.includes('ipad'))) {
+      deviceName = 'Safari Mobile';
+    } else if (ua.includes('edge') && ua.includes('mobile')) {
+      deviceName = 'Edge Mobile';
+    } else if (ua.includes('samsung')) {
+      deviceName = 'Samsung Browser';
+    } else if (ua.includes('android')) {
+      deviceName = 'Android Browser';
+    } else if (ua.includes('iphone') || ua.includes('ipad')) {
+      deviceName = 'iOS Browser';
+    } else {
+      deviceName = 'Mobile Browser';
+    }
+    
+    // Add mobile OS info
+    if (ua.includes('android')) {
+      deviceName += ' (Android)';
+    } else if (ua.includes('iphone')) {
+      deviceName += ' (iPhone)';
+    } else if (ua.includes('ipad')) {
+      deviceName += ' (iPad)';
+    }
+    
+  } else if (ua.includes('electron')) {
+    // Desktop application
+    deviceType = 'desktop';
     deviceName = 'TeleDesk Desktop';
-  } else if (ua.includes('chrome')) {
-    deviceName = 'Chrome Browser';
-  } else if (ua.includes('firefox')) {
-    deviceName = 'Firefox Browser';
-  } else if (ua.includes('safari') && !ua.includes('chrome')) {
-    deviceName = 'Safari Browser';
-  } else if (ua.includes('edge')) {
-    deviceName = 'Edge Browser';
-  }
-
-  // Add OS info
-  if (ua.includes('windows')) {
-    deviceName += ' (Windows)';
-  } else if (ua.includes('mac')) {
-    deviceName += ' (macOS)';
-  } else if (ua.includes('linux')) {
-    deviceName += ' (Linux)';
-  } else if (ua.includes('android')) {
-    deviceName += ' (Android)';
-  } else if (ua.includes('iphone') || ua.includes('ipad')) {
-    deviceName += ' (iOS)';
+    
+    // Add desktop OS info
+    if (ua.includes('windows')) {
+      deviceName += ' (Windows)';
+    } else if (ua.includes('mac')) {
+      deviceName += ' (macOS)';
+    } else if (ua.includes('linux')) {
+      deviceName += ' (Linux)';
+    }
+    
+  } else {
+    // Desktop web browsers
+    deviceType = 'web';
+    
+    if (ua.includes('chrome') && !ua.includes('edge')) {
+      deviceName = 'Chrome Browser';
+    } else if (ua.includes('firefox')) {
+      deviceName = 'Firefox Browser';
+    } else if (ua.includes('safari') && !ua.includes('chrome')) {
+      deviceName = 'Safari Browser';
+    } else if (ua.includes('edge')) {
+      deviceName = 'Edge Browser';
+    } else if (ua.includes('opera')) {
+      deviceName = 'Opera Browser';
+    } else {
+      deviceName = 'Web Browser';
+    }
+    
+    // Add desktop OS info
+    if (ua.includes('windows')) {
+      deviceName += ' (Windows)';
+    } else if (ua.includes('mac')) {
+      deviceName += ' (macOS)';
+    } else if (ua.includes('linux')) {
+      deviceName += ' (Linux)';
+    } else if (ua.includes('chromeos')) {
+      deviceName += ' (Chrome OS)';
+    }
   }
 
   return { deviceName, deviceType };
@@ -230,6 +274,8 @@ export const revokeDeviceSession = async (
   uid: string,
   sessionId: string,
 ): Promise<boolean> => {
+  logger.info(`Attempting to revoke session ${sessionId} for user ${uid}`);
+  
   // Get session info before deleting for notification
   const { data: sessionData } = await supabase
     .from('device_sessions')
@@ -237,6 +283,11 @@ export const revokeDeviceSession = async (
     .eq('uid', uid)
     .eq('session_id', sessionId)
     .single();
+
+  if (!sessionData) {
+    logger.warn(`Session ${sessionId} not found for user ${uid}`);
+    return false;
+  }
 
   const { error } = await supabase
     .from('device_sessions')
@@ -248,6 +299,8 @@ export const revokeDeviceSession = async (
     logger.error(`Failed to revoke device session: ${error.message}`);
     return false;
   }
+
+  logger.info(`Successfully deleted session ${sessionId} from database`);
 
   // Notify the specific session to logout via socket
   if (io && sessionData) {
@@ -271,6 +324,8 @@ export const revokeDeviceSession = async (
       logger.info(`Sent session revocation to specific socket: ${targetSocketId} for session: ${sessionFingerprint}`);
     } else {
       logger.warn(`No active socket found for session fingerprint: ${sessionFingerprint}`);
+      // List all current socket mappings for debugging
+      logger.debug(`Current socket mappings: ${JSON.stringify(Array.from(sessionSockets.entries()))}`);
     }
   }
 
@@ -282,6 +337,8 @@ export const revokeAllOtherSessions = async (
   uid: string,
   currentSessionId: string,
 ): Promise<number> => {
+  logger.info(`Attempting to revoke all other sessions for user ${uid}, keeping current session: ${currentSessionId}`);
+  
   // Get current session's firebase_token_id (session fingerprint) to exclude from notifications
   const { data: currentSessionData } = await supabase
     .from('device_sessions')
@@ -290,12 +347,18 @@ export const revokeAllOtherSessions = async (
     .eq('session_id', currentSessionId)
     .single();
 
+  if (!currentSessionData) {
+    logger.warn(`Current session ${currentSessionId} not found for user ${uid}`);
+  }
+
   // Get session info before deleting for notifications
   const { data: sessionsToRevoke } = await supabase
     .from('device_sessions')
     .select('session_id, firebase_token_id')
     .eq('uid', uid)
     .neq('session_id', currentSessionId);
+
+  logger.info(`Found ${sessionsToRevoke?.length || 0} other sessions to revoke`);
 
   const { data, error } = await supabase
     .from('device_sessions')
@@ -310,6 +373,7 @@ export const revokeAllOtherSessions = async (
   }
 
   const count = data?.length || 0;
+  logger.info(`Successfully deleted ${count} other sessions from database`);
 
   // Notify specific revoked sessions to logout via socket (exclude current session)
   if (io && sessionsToRevoke && sessionsToRevoke.length > 0) {
@@ -322,6 +386,8 @@ export const revokeAllOtherSessions = async (
     logger.debug(`Current session fingerprint: ${currentSessionFingerprint}`);
     logger.debug(`Sessions to revoke: ${JSON.stringify(sessionsToRevoke.map(s => s.firebase_token_id))}`);
     logger.debug(`Available session sockets: ${JSON.stringify(Array.from(sessionSockets.keys()))}`);
+    
+    let notificationsSent = 0;
     
     // Send force logout to each specific session that was revoked (excluding current)
     for (const session of sessionsToRevoke) {
@@ -340,10 +406,13 @@ export const revokeAllOtherSessions = async (
           sessionId: session.session_id
         });
         logger.info(`Sent force logout to socket: ${targetSocketId} for session: ${sessionFingerprint}`);
+        notificationsSent++;
       } else {
         logger.debug(`No active socket found for session: ${sessionFingerprint}`);
       }
     }
+    
+    logger.info(`Sent ${notificationsSent} force logout notifications out of ${sessionsToRevoke.length} sessions`);
   }
 
   logger.info(`Revoked ${count} other sessions for user ${uid}, kept current session: ${currentSessionId}`);

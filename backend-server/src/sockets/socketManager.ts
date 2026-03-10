@@ -4,7 +4,7 @@ import { authenticateSocket } from '../middleware/authMiddleware';
 import { updatePresence, getUserById, updateActiveStatusSetting } from '../services/userService';
 import { saveMessage, getChatById, markMessageDelivered, getUndeliveredMessagesForUser } from '../services/chatService';
 import { Message } from '../../../shared/types';
-import { generateId, now, sanitizeString } from '../utils/helpers';
+import { generateId, now, sanitizeString, extractClientIP } from '../utils/helpers';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import logger from '../utils/logger';
 
@@ -50,13 +50,19 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string;
     const userAgent = socket.handshake.headers['user-agent'] || 'Unknown';
-    const ipAddress = socket.handshake.address || '127.0.0.1';
+    const ipAddress = extractClientIP(socket);
     
     const user = await authenticateSocket(token, userAgent, ipAddress);
     if (!user) {
       logger.warn(`Socket auth failed for socket ${socket.id}`);
       return next(new Error('Authentication failed'));
     }
+    
+    // Log session fingerprint for debugging
+    if (user.sessionFingerprint) {
+      logger.debug(`Socket auth successful: ${socket.id}, session: ${user.sessionFingerprint}, IP: ${ipAddress}, UA: ${userAgent.slice(0, 50)}...`);
+    }
+    
     (socket as SocketWithUser).user = user;
     next();
   });
