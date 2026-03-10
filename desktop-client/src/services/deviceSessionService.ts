@@ -103,3 +103,26 @@ export const cleanupDuplicateSessions = async (): Promise<ApiResponse<{ sessionC
     return { success: false, error: 'Network error' };
   }
 };
+
+export const getDebugSessionInfo = async (): Promise<ApiResponse<any>> => {
+  try {
+    const response = await fetch(`${API_BASE}/api/users/device-sessions/debug`, {
+      method: 'GET',
+      headers: await createHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      return { 
+        success: false, 
+        error: errorData.error || `HTTP ${response.status}: ${response.statusText}` 
+      };
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to get debug session info:', error);
+    return { success: false, error: 'Network error' };
+  }
+};

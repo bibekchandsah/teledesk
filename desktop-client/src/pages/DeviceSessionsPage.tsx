@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { DeviceSession } from '@shared/types';
-import { getDeviceSessions, revokeDeviceSession, revokeAllOtherSessions, cleanupDuplicateSessions } from '../services/deviceSessionService';
-import { Monitor, Smartphone, Globe, MapPin, Clock, Shield, Trash2, LogOut } from 'lucide-react';
+import { getDeviceSessions, revokeDeviceSession, revokeAllOtherSessions, cleanupDuplicateSessions, getDebugSessionInfo } from '../services/deviceSessionService';
+import { Monitor, Smartphone, Globe, MapPin, Clock, Shield, Trash2, LogOut, Bug } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 const DeviceSessionsPage: React.FC = () => {
@@ -10,6 +10,7 @@ const DeviceSessionsPage: React.FC = () => {
   const [revoking, setRevoking] = useState<string | null>(null);
   const [revokingAll, setRevokingAll] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [debugging, setDebugging] = useState(false);
 
   const loadSessions = async () => {
     setLoading(true);
@@ -55,6 +56,18 @@ const DeviceSessionsPage: React.FC = () => {
       alert('Failed to cleanup duplicate sessions: ' + (response.error || 'Unknown error'));
     }
     setCleaningUp(false);
+  };
+
+  const handleDebugSessions = async () => {
+    setDebugging(true);
+    const response = await getDebugSessionInfo();
+    if (response.success) {
+      console.log('Debug Session Info:', response.data);
+      alert('Debug info logged to console. Check browser developer tools.');
+    } else {
+      alert('Failed to get debug info: ' + (response.error || 'Unknown error'));
+    }
+    setDebugging(false);
   };
   const handleRevokeAllOthers = async () => {
     if (!confirm('Are you sure you want to log out all other devices? This will end all other active sessions.')) {
@@ -226,6 +239,29 @@ const DeviceSessionsPage: React.FC = () => {
           </h3>
           
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleDebugSessions}
+              disabled={debugging}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 10px',
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: debugging ? 'not-allowed' : 'pointer',
+                opacity: debugging ? 0.6 : 1,
+              }}
+              title="Debug session fingerprints and socket mappings"
+            >
+              <Bug size={12} />
+              {debugging ? 'Debugging...' : 'Debug'}
+            </button>
+            
             {sessions.length > 2 && (
               <button
                 onClick={handleCleanupDuplicates}

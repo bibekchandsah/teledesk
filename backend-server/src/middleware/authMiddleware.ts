@@ -49,7 +49,9 @@ export const authenticateToken = async (
       
       // Create a stable session identifier based on user, device, and location
       // This will be the same for the same user on the same device/browser
-      const sessionFingerprint = `${decodedToken.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+      // Include more device-specific info to differentiate between devices on same network
+      const deviceFingerprint = Buffer.from(userAgent).toString('base64').slice(0, 30); // Increased from 20 to 30
+      const sessionFingerprint = `${decodedToken.uid}_${deviceFingerprint}_${ipAddress}`;
       
       // Log session fingerprint for debugging
       logger.debug(`HTTP auth session fingerprint: ${sessionFingerprint}, IP: ${ipAddress}, UA: ${userAgent.slice(0, 50)}...`);
@@ -98,7 +100,8 @@ export const authenticateSocket = async (
     // Create session fingerprint if we have the required info
     let sessionFingerprint: string | undefined;
     if (userAgent && ipAddress) {
-      sessionFingerprint = `${decoded.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+      const deviceFingerprint = Buffer.from(userAgent).toString('base64').slice(0, 30); // Increased from 20 to 30
+      sessionFingerprint = `${decoded.uid}_${deviceFingerprint}_${ipAddress}`;
       logger.debug(`Socket auth creating session fingerprint: ${sessionFingerprint}`);
     }
     

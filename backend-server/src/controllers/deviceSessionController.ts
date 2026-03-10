@@ -82,21 +82,36 @@ export const debugSessionInfo = async (req: Request, res: Response): Promise<voi
     const { extractClientIP } = await import('../utils/helpers');
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const ipAddress = extractClientIP(req);
-    const sessionFingerprint = `${req.user!.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+    const deviceFingerprint = Buffer.from(userAgent).toString('base64').slice(0, 30);
+    const sessionFingerprint = `${req.user!.uid}_${deviceFingerprint}_${ipAddress}`;
     
     const { getSessionSockets } = await import('../sockets/socketManager');
+    const { getUserSessions } = await import('../services/deviceSessionService');
     const sessionSockets = getSessionSockets();
+    
+    // Get all sessions for this user
+    const allSessions = await getUserSessions(req.user!.uid);
     
     res.json({
       success: true,
       debug: {
         uid: req.user!.uid,
-        userAgent: userAgent.slice(0, 100),
+        userAgent: userAgent,
+        userAgentBase64: deviceFingerprint,
         ipAddress,
         sessionFingerprint,
         currentSessionId: req.sessionId,
         socketMappings: Array.from(sessionSockets.entries()),
-        hasActiveSocket: sessionSockets.has(sessionFingerprint)
+        hasActiveSocket: sessionSockets.has(sessionFingerprint),
+        allSessions: allSessions.map(s => ({
+          sessionId: s.sessionId,
+          deviceName: s.deviceName,
+          deviceType: s.deviceType,
+          isCurrent: s.isCurrent,
+          firebaseTokenId: s.firebaseTokenId,
+          ipAddress: s.ipAddress,
+          userAgent: s.userAgent.slice(0, 100)
+        }))
       }
     });
   } catch (error) {

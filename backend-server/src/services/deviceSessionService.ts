@@ -99,6 +99,8 @@ async function getLocationFromIP(ipAddress: string): Promise<{
 function parseDeviceInfo(userAgent: string): { deviceName: string; deviceType: DeviceSession['deviceType'] } {
   const ua = userAgent.toLowerCase();
   
+  logger.debug(`Parsing device info for UA: ${userAgent}`);
+  
   // Detect device type - check mobile first, then desktop app
   let deviceType: DeviceSession['deviceType'] = 'web';
   let deviceName = 'Unknown Device';
@@ -179,6 +181,7 @@ function parseDeviceInfo(userAgent: string): { deviceName: string; deviceType: D
     }
   }
 
+  logger.debug(`Parsed device: ${deviceName} (${deviceType}) from UA: ${ua.slice(0, 100)}`);
   return { deviceName, deviceType };
 }
 
@@ -188,16 +191,45 @@ export const createDeviceSession = async (
   ipAddress: string,
   userAgent: string,
 ): Promise<DeviceSession> => {
+  logger.info(`Creating device session for user ${uid} with fingerprint: ${firebaseTokenId}`);
+  logger.debug(`User Agent: ${userAgent}`);
+  logger.debug(`IP Address: ${ipAddress}`);
+  
   const { deviceName, deviceType } = parseDeviceInfo(userAgent);
   const location = await getLocationFromIP(ipAddress);
+  
+  logger.info(`Detected device: ${deviceName} (${deviceType})`);
   
   // Check if a session with this fingerprint already exists (race condition protection)
   const existingSession = await getSessionByTokenId(firebaseTokenId);
   if (existingSession) {
-    // Update the existing session and return it
-    await updateSessionActivity(firebaseTokenId);
-    return existingSession;
+    logger.info(`Found existing session for fingerprint ${firebaseTokenId}: ${existingSession.deviceName}`);
+    
+    // Mark all other sessions as not current
+    await supabase
+      .from('device_sessions')
+      .update({ is_current: false })
+      .eq('uid', uid)
+      .neq('firebase_token_id', firebaseTokenId);
+    
+    // Mark this session as current and update activity
+    await supabase
+      .from('device_sessions')
+      .update({ 
+        is_current: true,
+        last_active: now()
+      })
+      .eq('firebase_token_id', firebaseTokenId);
+    
+    // Return updated session
+    const updatedSession = await getSessionByTokenId(firebaseTokenId);
+    if (updatedSession) {
+      logger.info(`Device session reactivated for user ${uid}: ${deviceName} (was: ${existingSession.deviceName})`);
+      return updatedSession;
+    }
   }
+  
+  logger.info(`Creating new session for ${deviceName}`);
   
   // Mark all other sessions as not current
   await supabase
@@ -227,12 +259,38 @@ export const createDeviceSession = async (
     .single();
 
   if (error) {
+    logger.error(`Failed to insert session: ${error.message}`);
     // If it's a unique constraint violation, try to get the existing session
     if (error.code === '23505') {
+      logger.warn(`Unique constraint violation for fingerprint ${firebaseTokenId}, trying to update existing`);
       const existingSession = await getSessionByTokenId(firebaseTokenId);
       if (existingSession) {
-        await updateSessionActivity(firebaseTokenId);
-        return existingSession;
+        // Mark this session as current
+        await supabase
+          .from('device_sessions')
+          .update({ 
+            is_current: true,
+            last_active: now(),
+            device_name: deviceName, // Update device name in case it changed
+            device_type: deviceType,
+            location_country: location.country || null,
+            location_city: location.city || null,
+            location_region: location.region || null,
+          })
+          .eq('firebase_token_id', firebaseTokenId);
+        
+        // Mark all others as not current
+        await supabase
+          .from('device_sessions')
+          .update({ is_current: false })
+          .eq('uid', uid)
+          .neq('firebase_token_id', firebaseTokenId);
+        
+        const updatedSession = await getSessionByTokenId(firebaseTokenId);
+        if (updatedSession) {
+          logger.info(`Updated existing session for user ${uid}: ${deviceName}`);
+          return updatedSession;
+        }
       }
     }
     logger.error(`Failed to create device session: ${error.message}`);
@@ -267,7 +325,15 @@ export const getUserSessions = async (uid: string): Promise<DeviceSession[]> => 
     throw new Error('Failed to get user sessions');
   }
 
-  return (data as DeviceSessionRow[]).map(rowToSession);
+  const sessions = (data as DeviceSessionRow[]).map(rowToSession);
+  
+  // Debug logging
+  logger.debug(`Found ${sessions.length} sessions for user ${uid}:`);
+  sessions.forEach(session => {
+    logger.debug(`  - ${session.deviceName} (${session.deviceType}) - Current: ${session.isCurrent} - Fingerprint: ${session.firebaseTokenId}`);
+  });
+  
+  return sessions;
 };
 
 export const revokeDeviceSession = async (
