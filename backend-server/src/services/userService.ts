@@ -92,7 +92,7 @@ export const searchUsers = async (query: string, _requestingUid: string): Promis
   const { data } = await supabase
     .from('users')
     .select('*')
-    .or(`name.ilike.${q},email.ilike.${q}`)
+    .or(`name.ilike.${q},email.ilike.${q},username.ilike.${q}`)
     .limit(20);
 
   return ((data ?? []) as UserRow[]).map(rowToUser);

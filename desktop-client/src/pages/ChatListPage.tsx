@@ -183,7 +183,7 @@ const ChatListPage: React.FC = () => {
             </div>
             <input
               type="text"
-              placeholder="Search by name or email..."
+              placeholder="Search by name, username, or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
@@ -228,7 +228,9 @@ const ChatListPage: React.FC = () => {
                         <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}>(You)</span>
                       )}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{user.email}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {user.username ? `@${user.username}` : user.email}
+                    </div>
                   </div>
                 </div>
               ))}
