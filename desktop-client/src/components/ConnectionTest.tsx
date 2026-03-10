@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
-import { testConnectivity } from '../services/webrtcService';
-
-interface ConnectionTestResult {
-  stunWorking: boolean;
-  turnWorking: boolean;
-  publicIP?: string;
-}
+import { testCurrentTurnConfig, TurnTestResult } from '../utils/turnTest';
 
 export const ConnectionTest: React.FC = () => {
   const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<ConnectionTestResult | null>(null);
+  const [result, setResult] = useState<TurnTestResult | null>(null);
 
   const runTest = async () => {
     setTesting(true);
     setResult(null);
     
     try {
-      const testResult = await testConnectivity();
+      const testResult = await testCurrentTurnConfig();
       setResult(testResult);
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -80,9 +74,15 @@ export const ConnectionTest: React.FC = () => {
       {result && (
         <div style={styles.results}>
           <h4>Test Results:</h4>
+          
           <div style={{...styles.resultItem, ...(result.stunWorking ? styles.success : styles.error)}}>
             <span>STUN Server: </span>
             <span>{result.stunWorking ? '✅ Working' : '❌ Failed'}</span>
+          </div>
+          
+          <div style={{...styles.resultItem, ...(result.turnWorking ? styles.success : styles.error)}}>
+            <span>TURN Server: </span>
+            <span>{result.turnWorking ? '✅ Working' : '❌ Failed'}</span>
           </div>
           
           {result.publicIP && (
@@ -92,27 +92,46 @@ export const ConnectionTest: React.FC = () => {
             </div>
           )}
           
+          <div style={styles.resultItem}>
+            <span>ICE Candidates: </span>
+            <span>Host: {result.candidates.host}, STUN: {result.candidates.srflx}, TURN: {result.candidates.relay}</span>
+          </div>
+          
+          {result.errors.length > 0 && (
+            <div style={{...styles.resultItem, ...styles.error}}>
+              <span>Errors: </span>
+              <ul style={{margin: '5px 0', paddingLeft: '20px'}}>
+                {result.errors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          
           <div style={styles.recommendations}>
             <h5>Recommendations:</h5>
-            {result.stunWorking ? (
-              <p>✅ Basic connectivity is working. Calls should work on most networks.</p>
+            {result.turnWorking ? (
+              <p>✅ TURN server is working! Calls should work across all networks.</p>
+            ) : result.stunWorking ? (
+              <div>
+                <p>⚠️ STUN working but TURN failed. Calls may fail on restrictive networks.</p>
+                <p>Issues:</p>
+                <ul style={{margin: '10px 0', paddingLeft: '20px'}}>
+                  <li>Check TURN server URL format (should start with 'turn:')</li>
+                  <li>Verify TURN server credentials</li>
+                  <li>Test with different TURN server</li>
+                </ul>
+              </div>
             ) : (
               <div>
-                <p>❌ STUN server connection failed. This may cause issues with calls.</p>
+                <p>❌ Both STUN and TURN failed. Calls will likely fail.</p>
                 <p>Possible solutions:</p>
                 <ul style={{margin: '10px 0', paddingLeft: '20px'}}>
                   <li>Check your internet connection</li>
                   <li>Disable VPN temporarily</li>
                   <li>Check firewall settings</li>
-                  <li>Contact your network administrator</li>
+                  <li>Try different TURN server</li>
                 </ul>
-              </div>
-            )}
-            
-            {!result.turnWorking && (
-              <div>
-                <p>ℹ️ TURN server not configured. This may cause issues on restrictive networks.</p>
-                <p>For better connectivity, configure TURN servers in your environment variables.</p>
               </div>
             )}
           </div>
