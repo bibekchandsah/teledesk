@@ -252,11 +252,26 @@ export const revokeDeviceSession = async (
   // Notify the specific session to logout via socket
   if (io && sessionData) {
     const { SOCKET_EVENTS } = await import('../../../shared/constants/events');
-    io.to(`user:${uid}`).emit(SOCKET_EVENTS.SESSION_REVOKED, {
-      sessionId,
-      firebaseTokenId: sessionData.firebase_token_id,
-      message: 'Your session has been revoked from another device'
-    });
+    const { getSessionSockets } = await import('../sockets/socketManager');
+    
+    const sessionSockets = getSessionSockets();
+    const sessionFingerprint = sessionData.firebase_token_id; // This is actually the session fingerprint
+    const targetSocketId = sessionSockets.get(sessionFingerprint);
+    
+    logger.debug(`Attempting to revoke session: ${sessionFingerprint}`);
+    logger.debug(`Available session sockets: ${JSON.stringify(Array.from(sessionSockets.keys()))}`);
+    
+    if (targetSocketId) {
+      // Send to specific socket only
+      io.to(targetSocketId).emit(SOCKET_EVENTS.SESSION_REVOKED, {
+        sessionId,
+        firebaseTokenId: sessionFingerprint,
+        message: 'Your session has been revoked from another device. If this was not you, please check your active sessions.'
+      });
+      logger.info(`Sent session revocation to specific socket: ${targetSocketId} for session: ${sessionFingerprint}`);
+    } else {
+      logger.warn(`No active socket found for session fingerprint: ${sessionFingerprint}`);
+    }
   }
 
   logger.info(`Device session ${sessionId} revoked for user ${uid}`);
@@ -267,6 +282,14 @@ export const revokeAllOtherSessions = async (
   uid: string,
   currentSessionId: string,
 ): Promise<number> => {
+  // Get current session's firebase_token_id (session fingerprint) to exclude from notifications
+  const { data: currentSessionData } = await supabase
+    .from('device_sessions')
+    .select('firebase_token_id')
+    .eq('uid', uid)
+    .eq('session_id', currentSessionId)
+    .single();
+
   // Get session info before deleting for notifications
   const { data: sessionsToRevoke } = await supabase
     .from('device_sessions')
@@ -288,18 +311,42 @@ export const revokeAllOtherSessions = async (
 
   const count = data?.length || 0;
 
-  // Notify all revoked sessions to logout via socket
+  // Notify specific revoked sessions to logout via socket (exclude current session)
   if (io && sessionsToRevoke && sessionsToRevoke.length > 0) {
     const { SOCKET_EVENTS } = await import('../../../shared/constants/events');
+    const { getSessionSockets } = await import('../sockets/socketManager');
     
-    // Send force logout to all sessions for this user
-    io.to(`user:${uid}`).emit(SOCKET_EVENTS.FORCE_LOGOUT, {
-      message: 'You have been logged out from all other devices',
-      revokedSessions: sessionsToRevoke.map(s => s.firebase_token_id)
-    });
+    const sessionSockets = getSessionSockets();
+    const currentSessionFingerprint = currentSessionData?.firebase_token_id;
+    
+    logger.debug(`Current session fingerprint: ${currentSessionFingerprint}`);
+    logger.debug(`Sessions to revoke: ${JSON.stringify(sessionsToRevoke.map(s => s.firebase_token_id))}`);
+    logger.debug(`Available session sockets: ${JSON.stringify(Array.from(sessionSockets.keys()))}`);
+    
+    // Send force logout to each specific session that was revoked (excluding current)
+    for (const session of sessionsToRevoke) {
+      const sessionFingerprint = session.firebase_token_id;
+      
+      // Double-check we're not targeting the current session
+      if (sessionFingerprint === currentSessionFingerprint) {
+        logger.warn(`Skipping current session in revoke all others: ${sessionFingerprint}`);
+        continue;
+      }
+      
+      const targetSocketId = sessionSockets.get(sessionFingerprint);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit(SOCKET_EVENTS.FORCE_LOGOUT, {
+          message: 'You have been logged out from all other devices',
+          sessionId: session.session_id
+        });
+        logger.info(`Sent force logout to socket: ${targetSocketId} for session: ${sessionFingerprint}`);
+      } else {
+        logger.debug(`No active socket found for session: ${sessionFingerprint}`);
+      }
+    }
   }
 
-  logger.info(`Revoked ${count} other sessions for user ${uid}`);
+  logger.info(`Revoked ${count} other sessions for user ${uid}, kept current session: ${currentSessionId}`);
   return count;
 };
 

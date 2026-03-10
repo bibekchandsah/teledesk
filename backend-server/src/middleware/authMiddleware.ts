@@ -89,11 +89,25 @@ export const authenticateToken = async (
  */
 export const authenticateSocket = async (
   token: string,
-): Promise<{ uid: string; email?: string; name?: string } | null> => {
+  userAgent?: string,
+  ipAddress?: string,
+): Promise<{ uid: string; email?: string; name?: string; sessionFingerprint?: string } | null> => {
   if (!token) return null;
   try {
     const decoded = await auth.verifyIdToken(token);
-    return { uid: decoded.uid, email: decoded.email, name: decoded.name };
+    
+    // Create session fingerprint if we have the required info
+    let sessionFingerprint: string | undefined;
+    if (userAgent && ipAddress) {
+      sessionFingerprint = `${decoded.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
+    }
+    
+    return { 
+      uid: decoded.uid, 
+      email: decoded.email, 
+      name: decoded.name,
+      sessionFingerprint 
+    };
   } catch {
     return null;
   }

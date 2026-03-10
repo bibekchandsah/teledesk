@@ -10,8 +10,16 @@ import logger from '../utils/logger';
 
 // Map of userId -> socketId for presence tracking
 const onlineUsers = new Map<string, string>();
+// Map of sessionFingerprint -> socketId for device-specific targeting
+const sessionSockets = new Map<string, string>();
 // Cache of userId -> showActiveStatus so late-joining users get accurate state
 const userShowStatus = new Map<string, boolean>();
+
+// Export for device session service and debugging
+export const getSessionSockets = () => {
+  logger.debug(`Current session mappings: ${JSON.stringify(Array.from(sessionSockets.entries()))}`);
+  return sessionSockets;
+};
 // Active calls: callId -> full call data needed for re-delivery
 const activeCalls = new Map<string, {
   callerId: string;
@@ -41,7 +49,10 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   // ─── Authentication Middleware ─────────────────────────────────────────────
   io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token as string;
-    const user = await authenticateSocket(token);
+    const userAgent = socket.handshake.headers['user-agent'] || 'Unknown';
+    const ipAddress = socket.handshake.address || '127.0.0.1';
+    
+    const user = await authenticateSocket(token, userAgent, ipAddress);
     if (!user) {
       logger.warn(`Socket auth failed for socket ${socket.id}`);
       return next(new Error('Authentication failed'));
@@ -54,9 +65,16 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   io.on('connection', async (rawSocket) => {
     const socket = rawSocket as SocketWithUser;
     const uid = socket.user.uid;
+    const sessionFingerprint = socket.user.sessionFingerprint;
 
-    logger.info(`Socket connected: ${socket.id} (user: ${uid})`);
+    logger.info(`Socket connected: ${socket.id} (user: ${uid}, session: ${sessionFingerprint})`);
     onlineUsers.set(uid, socket.id);
+    
+    // Track session fingerprint for device-specific targeting
+    if (sessionFingerprint) {
+      sessionSockets.set(sessionFingerprint, socket.id);
+      logger.debug(`Mapped session ${sessionFingerprint} to socket ${socket.id}`);
+    }
 
     // Update Firestore presence
     await updatePresence(uid, 'online').catch(() => {});
@@ -459,6 +477,12 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       logger.info(`Socket disconnected: ${socket.id} (user: ${uid})`);
       onlineUsers.delete(uid);
       userShowStatus.delete(uid);
+      
+      // Clean up session fingerprint mapping
+      if (sessionFingerprint) {
+        sessionSockets.delete(sessionFingerprint);
+        logger.debug(`Removed session ${sessionFingerprint} from socket mapping`);
+      }
       // If this user was in an active call, notify the other party
       const activeCallId = userActiveCall.get(uid);
       if (activeCallId) {
@@ -489,5 +513,5 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface SocketWithUser extends Socket {
-  user: { uid: string; email?: string; name?: string };
+  user: { uid: string; email?: string; name?: string; sessionFingerprint?: string };
 }

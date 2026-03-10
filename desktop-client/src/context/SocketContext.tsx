@@ -207,11 +207,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // ─── Session Management ──────────────────────────────────────────────────
     const handleSessionRevoked = (data: { sessionId: string; firebaseTokenId: string; message: string }) => {
       console.warn('Session revoked:', data.message);
-      // Show a notification but don't force logout (might be another session)
-      alert(`Security Alert: ${data.message}. If this was not you, please check your active sessions.`);
+      // This is for individual session revocation - show alert but don't force logout
+      alert(`Security Alert: ${data.message}`);
     };
 
-    const handleForceLogout = (data: { message: string; revokedSessions: string[] }) => {
+    const handleForceLogout = (data: { message: string; sessionId: string }) => {
       console.warn('Force logout:', data.message);
       alert(`Security Alert: ${data.message}`);
       
@@ -254,6 +254,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
       socket.off(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
+      socket.off(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
+      socket.off(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
 
