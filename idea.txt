@@ -535,6 +535,8 @@ check network connection status (
     offline → show "You are offline" toast
     )
 user should be able to send message themslef too: search, forward
+check if username is available or not during registration and show message
+store save chat history in database and show them when user login from another device
 
 show mute & unmute status of user during call
     user A mutes themselves → show "You are muted" in the call status area for A, and "User A is muted" for B  

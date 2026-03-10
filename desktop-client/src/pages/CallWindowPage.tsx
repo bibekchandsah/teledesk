@@ -1436,7 +1436,7 @@ const CallWindowPage: React.FC = () => {
             onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
           />
           <div style={{ width: chatPanelWidth, minWidth: 280, maxWidth: 700, height: '100%', borderLeft: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <ChatWindow chatId={callChat.chatId} />
+            <ChatWindow chatId={callChat.chatId} onBack={() => setShowCallChat(false)} />
           </div>
         </>
       )}

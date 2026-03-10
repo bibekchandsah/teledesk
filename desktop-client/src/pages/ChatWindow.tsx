@@ -26,9 +26,11 @@ import { formatTime } from '../utils/formatters';
 interface ChatWindowProps {
   /** When provided (e.g. rendered in-call sidebar), skips useParams and disables nav. */
   chatId?: string;
+  /** Called when the mobile back button is pressed while embedded (e.g. in-call chat panel). */
+  onBack?: () => void;
 }
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) => {
   const { chatId: chatIdParam } = useParams<{ chatId: string }>();
   const chatId = chatIdProp ?? chatIdParam;
   const navigateRouter = useNavigate();
@@ -818,7 +820,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp }) => {
         {/* Mobile back button */}
         <button
           className="mobile-back-btn"
-          onClick={() => navigate('/chats')}
+          onClick={() => onBack ? onBack() : navigate('/chats')}
           title="Back"
           style={{ ...headerBtnStyle, marginLeft: -6 }}
         >

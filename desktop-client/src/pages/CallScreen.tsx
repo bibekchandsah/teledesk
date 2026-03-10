@@ -948,7 +948,7 @@ const CallScreen: React.FC = () => {
               flexShrink: 0,
             }}
           >
-            <ChatWindow chatId={callChat.chatId} />
+            <ChatWindow chatId={callChat.chatId} onBack={() => setShowCallChat(false)} />
           </div>
         </>
       )}
