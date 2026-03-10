@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
 import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername } from '../controllers/userController';
+import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
 
@@ -82,5 +83,15 @@ router.get('/search', searchUsersHandler);
 
 // GET /api/users/:uid
 router.get('/:uid', getUserProfile);
+
+// ─── Device Sessions (temporary workaround) ────────────────────────────────
+// GET /api/users/device-sessions - Get all device sessions for current user
+router.get('/device-sessions', getDeviceSessions);
+
+// DELETE /api/users/device-sessions/:sessionId - Revoke specific device session
+router.delete('/device-sessions/:sessionId', revokeSession);
+
+// DELETE /api/users/device-sessions/others/all - Revoke all other device sessions
+router.delete('/device-sessions/others/all', revokeAllOtherDeviceSessions);
 
 export default router;

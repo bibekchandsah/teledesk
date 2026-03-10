@@ -14,7 +14,7 @@ const createHeaders = async (): Promise<HeadersInit> => {
 
 export const getDeviceSessions = async (): Promise<ApiResponse<DeviceSession[]>> => {
   try {
-    const response = await fetch(`${API_BASE}/api/device-sessions`, {
+    const response = await fetch(`${API_BASE}/api/users/device-sessions`, {
       method: 'GET',
       headers: await createHeaders(),
     });
@@ -37,10 +37,18 @@ export const getDeviceSessions = async (): Promise<ApiResponse<DeviceSession[]>>
 
 export const revokeDeviceSession = async (sessionId: string): Promise<ApiResponse> => {
   try {
-    const response = await fetch(`${API_BASE}/api/device-sessions/${sessionId}`, {
+    const response = await fetch(`${API_BASE}/api/users/device-sessions/${sessionId}`, {
       method: 'DELETE',
       headers: await createHeaders(),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      return { 
+        success: false, 
+        error: errorData.error || `HTTP ${response.status}: ${response.statusText}` 
+      };
+    }
 
     const data = await response.json();
     return data;
@@ -52,10 +60,18 @@ export const revokeDeviceSession = async (sessionId: string): Promise<ApiRespons
 
 export const revokeAllOtherSessions = async (): Promise<ApiResponse<{ revokedCount: number }>> => {
   try {
-    const response = await fetch(`${API_BASE}/api/device-sessions/others/all`, {
+    const response = await fetch(`${API_BASE}/api/users/device-sessions/others/all`, {
       method: 'DELETE',
       headers: await createHeaders(),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      return { 
+        success: false, 
+        error: errorData.error || `HTTP ${response.status}: ${response.statusText}` 
+      };
+    }
 
     const data = await response.json();
     return data;

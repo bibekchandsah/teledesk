@@ -59,6 +59,22 @@ app.use('/api/files', fileRoutes);
 app.use('/api/saved-messages', savedMessagesRoutes);
 app.use('/api/device-sessions', deviceSessionRoutes);
 
+// ─── Debug route to verify deployment ──────────────────────────────────────
+app.get('/api/debug/routes', (_req, res) => {
+  res.json({ 
+    status: 'ok', 
+    routes: [
+      '/api/users',
+      '/api/chats', 
+      '/api/groups',
+      '/api/files',
+      '/api/saved-messages',
+      '/api/device-sessions'
+    ],
+    timestamp: new Date().toISOString() 
+  });
+});
+
 // ─── 404 & Error Handlers ──────────────────────────────────────────────────
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -73,6 +89,7 @@ const PORT = Number(process.env.PORT) || 3001;
 httpServer.listen(PORT, () => {
   logger.info(`TeleDesk backend server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info('Registered routes: /api/users, /api/chats, /api/groups, /api/files, /api/saved-messages, /api/device-sessions');
 });
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────

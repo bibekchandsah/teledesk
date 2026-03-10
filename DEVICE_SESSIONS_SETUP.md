@@ -53,9 +53,11 @@ Or run it directly:
 
 ## 4. API Endpoints
 
-- `GET /api/device-sessions` - Get all user's device sessions
-- `DELETE /api/device-sessions/:sessionId` - Revoke specific session
-- `DELETE /api/device-sessions/others/all` - Revoke all other sessions
+- `GET /api/users/device-sessions` - Get all user's device sessions
+- `DELETE /api/users/device-sessions/:sessionId` - Revoke specific session
+- `DELETE /api/users/device-sessions/others/all` - Revoke all other sessions
+
+**Note**: The routes are currently under `/api/users/` for deployment compatibility.
 
 ## 5. Security Features
 
