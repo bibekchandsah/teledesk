@@ -141,6 +141,14 @@ export const createDeviceSession = async (
   const { deviceName, deviceType } = parseDeviceInfo(userAgent);
   const location = await getLocationFromIP(ipAddress);
   
+  // Check if a session with this fingerprint already exists (race condition protection)
+  const existingSession = await getSessionByTokenId(firebaseTokenId);
+  if (existingSession) {
+    // Update the existing session and return it
+    await updateSessionActivity(firebaseTokenId);
+    return existingSession;
+  }
+  
   // Mark all other sessions as not current
   await supabase
     .from('device_sessions')
@@ -169,6 +177,14 @@ export const createDeviceSession = async (
     .single();
 
   if (error) {
+    // If it's a unique constraint violation, try to get the existing session
+    if (error.code === '23505') {
+      const existingSession = await getSessionByTokenId(firebaseTokenId);
+      if (existingSession) {
+        await updateSessionActivity(firebaseTokenId);
+        return existingSession;
+      }
+    }
     logger.error(`Failed to create device session: ${error.message}`);
     throw new Error('Failed to create device session');
   }
@@ -187,6 +203,9 @@ export const updateSessionActivity = async (
 };
 
 export const getUserSessions = async (uid: string): Promise<DeviceSession[]> => {
+  // First, clean up any duplicate sessions
+  await cleanupDuplicateSessions(uid);
+  
   const { data, error } = await supabase
     .from('device_sessions')
     .select('*')
@@ -255,4 +274,58 @@ export const getSessionByTokenId = async (
   }
 
   return rowToSession(data as DeviceSessionRow);
+};
+
+// Clean up duplicate sessions for a user (keep only the most recent ones)
+export const cleanupDuplicateSessions = async (uid: string): Promise<void> => {
+  try {
+    // Get all sessions for the user
+    const { data: sessions, error } = await supabase
+      .from('device_sessions')
+      .select('*')
+      .eq('uid', uid)
+      .order('last_active', { ascending: false });
+
+    if (error || !sessions) return;
+
+    // Group sessions by device fingerprint (same device/browser)
+    const sessionGroups = new Map<string, DeviceSessionRow[]>();
+    
+    for (const session of sessions as DeviceSessionRow[]) {
+      // Create a device fingerprint based on user agent and IP
+      const deviceFingerprint = `${session.user_agent}_${session.ip_address}`;
+      
+      if (!sessionGroups.has(deviceFingerprint)) {
+        sessionGroups.set(deviceFingerprint, []);
+      }
+      sessionGroups.get(deviceFingerprint)!.push(session);
+    }
+
+    // For each device, keep only the most recent session
+    const sessionsToDelete: string[] = [];
+    
+    for (const [, deviceSessions] of sessionGroups) {
+      if (deviceSessions.length > 1) {
+        // Sort by last_active and keep the first (most recent)
+        deviceSessions.sort((a, b) => new Date(b.last_active).getTime() - new Date(a.last_active).getTime());
+        
+        // Mark older sessions for deletion
+        for (let i = 1; i < deviceSessions.length; i++) {
+          sessionsToDelete.push(deviceSessions[i].session_id);
+        }
+      }
+    }
+
+    // Delete duplicate sessions
+    if (sessionsToDelete.length > 0) {
+      await supabase
+        .from('device_sessions')
+        .delete()
+        .in('session_id', sessionsToDelete);
+      
+      logger.info(`Cleaned up ${sessionsToDelete.length} duplicate sessions for user ${uid}`);
+    }
+  } catch (error) {
+    logger.warn(`Failed to cleanup duplicate sessions: ${(error as Error).message}`);
+  }
 };

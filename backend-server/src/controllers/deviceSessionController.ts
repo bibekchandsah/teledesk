@@ -56,3 +56,23 @@ export const revokeAllOtherDeviceSessions = async (req: Request, res: Response):
     res.status(500).json({ success: false, error: 'Failed to revoke other sessions' });
   }
 };
+
+export const cleanupDuplicateDeviceSessions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { cleanupDuplicateSessions } = await import('../services/deviceSessionService');
+    await cleanupDuplicateSessions(req.user!.uid);
+    
+    // Get updated session count
+    const { getUserSessions } = await import('../services/deviceSessionService');
+    const sessions = await getUserSessions(req.user!.uid);
+    
+    res.json({ 
+      success: true, 
+      message: 'Duplicate sessions cleaned up successfully',
+      sessionCount: sessions.length
+    });
+  } catch (error) {
+    logger.error(`cleanupDuplicateSessions error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to cleanup duplicate sessions' });
+  }
+};

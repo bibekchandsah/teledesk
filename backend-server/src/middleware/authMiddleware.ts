@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { auth } from '../config/firebase';
 import { extractBearerToken } from '../utils/helpers';
 import logger from '../utils/logger';
-import { createDeviceSession, updateSessionActivity, getSessionByTokenId } from '../services/deviceSessionService';
+import { createDeviceSession, updateSessionActivity, getSessionByTokenId, cleanupDuplicateSessions } from '../services/deviceSessionService';
 
 // Extend Express Request to include authenticated user and session
 declare global {
@@ -51,23 +51,24 @@ export const authenticateToken = async (
                        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
                        '127.0.0.1';
       
-      // Use a combination of token hash and user ID as session identifier
-      const tokenId = decodedToken.jti || `${decodedToken.uid}_${token.slice(-10)}`;
+      // Create a stable session identifier based on user, device, and location
+      // This will be the same for the same user on the same device/browser
+      const sessionFingerprint = `${decodedToken.uid}_${Buffer.from(userAgent).toString('base64').slice(0, 20)}_${ipAddress}`;
       
-      // Check if session exists for this token
-      let session = await getSessionByTokenId(tokenId);
+      // Check if session exists for this fingerprint
+      let session = await getSessionByTokenId(sessionFingerprint);
       
       if (!session) {
         // Create new session
         session = await createDeviceSession(
           decodedToken.uid,
-          tokenId,
+          sessionFingerprint,
           ipAddress,
           userAgent,
         );
       } else {
         // Update existing session activity
-        await updateSessionActivity(tokenId);
+        await updateSessionActivity(sessionFingerprint);
       }
       
       req.sessionId = session.sessionId;

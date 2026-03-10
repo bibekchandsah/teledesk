@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { DeviceSession } from '@shared/types';
-import { getDeviceSessions, revokeDeviceSession, revokeAllOtherSessions } from '../services/deviceSessionService';
+import { getDeviceSessions, revokeDeviceSession, revokeAllOtherSessions, cleanupDuplicateSessions } from '../services/deviceSessionService';
 import { Monitor, Smartphone, Globe, MapPin, Clock, Shield, Trash2, LogOut } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
@@ -9,6 +9,7 @@ const DeviceSessionsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [revokingAll, setRevokingAll] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
 
   const loadSessions = async () => {
     setLoading(true);
@@ -44,6 +45,17 @@ const DeviceSessionsPage: React.FC = () => {
     setRevoking(null);
   };
 
+  const handleCleanupDuplicates = async () => {
+    setCleaningUp(true);
+    const response = await cleanupDuplicateSessions();
+    if (response.success) {
+      await loadSessions(); // Reload to show cleaned up list
+      alert(`Duplicate sessions cleaned up successfully. ${response.data?.sessionCount || 0} sessions remaining.`);
+    } else {
+      alert('Failed to cleanup duplicate sessions: ' + (response.error || 'Unknown error'));
+    }
+    setCleaningUp(false);
+  };
   const handleRevokeAllOthers = async () => {
     if (!confirm('Are you sure you want to log out all other devices? This will end all other active sessions.')) {
       return;
@@ -213,29 +225,55 @@ const DeviceSessionsPage: React.FC = () => {
             Other Sessions ({otherSessions.length})
           </h3>
           
-          {otherSessions.length > 0 && (
-            <button
-              onClick={handleRevokeAllOthers}
-              disabled={revokingAll}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 12px',
-                backgroundColor: 'var(--error)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: revokingAll ? 'not-allowed' : 'pointer',
-                opacity: revokingAll ? 0.6 : 1,
-              }}
-            >
-              <LogOut size={14} />
-              {revokingAll ? 'Logging out...' : 'Log out all others'}
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {sessions.length > 2 && (
+              <button
+                onClick={handleCleanupDuplicates}
+                disabled={cleaningUp}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 10px',
+                  backgroundColor: 'var(--accent)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: cleaningUp ? 'not-allowed' : 'pointer',
+                  opacity: cleaningUp ? 0.6 : 1,
+                }}
+                title="Remove duplicate sessions from the same device"
+              >
+                {cleaningUp ? 'Cleaning...' : 'Clean Duplicates'}
+              </button>
+            )}
+            
+            {otherSessions.length > 0 && (
+              <button
+                onClick={handleRevokeAllOthers}
+                disabled={revokingAll}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--error)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: revokingAll ? 'not-allowed' : 'pointer',
+                  opacity: revokingAll ? 0.6 : 1,
+                }}
+              >
+                <LogOut size={14} />
+                {revokingAll ? 'Logging out...' : 'Log out all others'}
+              </button>
+            )}
+          </div>
         </div>
 
         {otherSessions.length === 0 ? (

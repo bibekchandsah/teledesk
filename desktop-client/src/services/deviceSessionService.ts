@@ -80,3 +80,26 @@ export const revokeAllOtherSessions = async (): Promise<ApiResponse<{ revokedCou
     return { success: false, error: 'Network error' };
   }
 };
+
+export const cleanupDuplicateSessions = async (): Promise<ApiResponse<{ sessionCount: number }>> => {
+  try {
+    const response = await fetch(`${API_BASE}/api/users/device-sessions/cleanup`, {
+      method: 'POST',
+      headers: await createHeaders(),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      return { 
+        success: false, 
+        error: errorData.error || `HTTP ${response.status}: ${response.statusText}` 
+      };
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to cleanup duplicate sessions:', error);
+    return { success: false, error: 'Network error' };
+  }
+};
