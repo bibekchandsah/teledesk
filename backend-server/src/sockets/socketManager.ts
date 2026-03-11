@@ -187,6 +187,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         callStatus?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined';
         callStatusReceiver?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined';
         replyTo?: Message['replyTo'];
+        duration?: number;
         forwarded?: boolean;
       }) => {
         try {
@@ -230,6 +231,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
             ...(payload.callStatus !== undefined && { callStatus: payload.callStatus }),
             ...(payload.callStatusReceiver !== undefined && { callStatusReceiver: payload.callStatusReceiver }),
             ...(payload.replyTo !== undefined && { replyTo: payload.replyTo }),
+            ...(payload.duration !== undefined && { duration: payload.duration }),
             ...(payload.forwarded && { forwarded: true }),
           };
 

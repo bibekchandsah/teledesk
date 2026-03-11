@@ -158,6 +158,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [showHoldToast, setShowHoldToast] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressActive = useRef(false);
+  const recordingDurationRef = useRef(0);
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -898,8 +899,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-        if (recordingDuration > 1) { // Min 1s recording
-          handleSendRecordedMedia(blob);
+        const finalDuration = recordingDurationRef.current;
+        if (finalDuration >= 1) { // Min 1s recording
+          handleSendRecordedMedia(blob, finalDuration);
         }
         stream.getTracks().forEach(track => track.stop());
       };
@@ -947,8 +949,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       setRecorder(mediaRecorder);
       setIsRecording(true);
       setRecordingDuration(0);
+      recordingDurationRef.current = 0;
       recordingTimerRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
+        setRecordingDuration(prev => {
+          const next = prev + 1;
+          recordingDurationRef.current = next;
+          return next;
+        });
       }, 1000);
 
     } catch (err) {
@@ -987,7 +994,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
-  const handleSendRecordedMedia = async (blob: Blob) => {
+  const handleSendRecordedMedia = async (blob: Blob, duration: number) => {
     if (!chatId || !currentUser) return;
     try {
       setIsUploading(true);
@@ -997,13 +1004,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       });
 
       const msgType = recordingMode === 'video' ? 'video_note' : 'voice_note';
+      const messageId = genId();
+      const optimisticMsg: Message = {
+        messageId,
+        chatId,
+        senderId: currentUser.uid,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        content: `Sent a ${recordingMode === 'video' ? 'video note' : 'voice note'}`,
+        type: msgType,
+        fileUrl: result.url,
+        fileName: result.fileName,
+        fileSize: result.fileSize,
+        duration,
+        timestamp: new Date().toISOString(),
+        readBy: [currentUser.uid],
+      };
+      
+      const { addMessage, updateChatLastMessage } = useChatStore.getState();
+      addMessage(optimisticMsg);
+      updateChatLastMessage(optimisticMsg);
+
       sendMessage({
+        messageId,
         chatId,
         content: `Sent a ${recordingMode === 'video' ? 'video note' : 'voice note'}`,
         type: msgType,
         fileUrl: result.url,
         fileName: result.fileName,
         fileSize: result.fileSize,
+        duration,
         senderName: currentUser?.name || 'Unknown',
         senderAvatar: currentUser?.avatar || ''
       });
@@ -1250,8 +1280,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   const handleActionMouseDown = () => {
-    if (inputText.trim() || isRecording) return;
     isLongPressActive.current = false;
+    if (inputText.trim() || isRecording) return;
     
     holdTimerRef.current = setTimeout(() => {
       isLongPressActive.current = true;

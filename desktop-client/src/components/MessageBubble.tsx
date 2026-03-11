@@ -17,10 +17,10 @@ const getHash = (str: string) => {
   return Math.abs(hash);
 };
 
-const VoiceNotePlayer = ({ fileUrl, isOwn, messageId }: { fileUrl?: string; isOwn: boolean; messageId: string }) => {
+const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileUrl?: string; isOwn: boolean; messageId: string; messageDuration?: number }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(messageDuration || 0);
   const [waveform, setWaveform] = useState<number[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -43,6 +43,12 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId }: { fileUrl?: string; isOw
     const onPause = () => setIsPlaying(false);
     const onTimeUpdate = () => setProgress(audio.currentTime);
     const onLoadedMetadata = () => {
+      // Prioritize duration from message metadata if available
+      if (messageDuration && messageDuration > 0) {
+        setDuration(messageDuration);
+        return;
+      }
+
       let d = audio.duration;
       // WebM/Ogg from MediaRecorder often have Infinity duration until checked
       if (d === Infinity || isNaN(d)) {
@@ -53,7 +59,7 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId }: { fileUrl?: string; isOw
             }
             audio.currentTime = 0;
          }, 50);
-      } else {
+      } else if (d > 0) {
          setDuration(d);
       }
     };
@@ -61,6 +67,10 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId }: { fileUrl?: string; isOw
       setIsPlaying(false);
       setProgress(0);
     };
+
+    if (messageDuration && (!duration || duration === 0)) {
+      setDuration(messageDuration);
+    }
 
     audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', onPause);
@@ -503,7 +513,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
 
       case 'voice_note':
-        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} />;
+        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} messageDuration={message.duration} />;
 
       case 'video_note':
         return (
