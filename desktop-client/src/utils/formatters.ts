@@ -64,28 +64,40 @@ export const getMessagePreview = (msg: {
   callType?: string;
   callStatus?: string;
   callDuration?: number;
+  reactions?: Record<string, string[]>;
 }): string => {
+  let preview = '';
   switch (msg.type) {
-    case 'text': return msg.content;
-    case 'image': return 'Photo';
-    case 'video': return 'Video';
-    case 'audio': return 'Audio message';
-    case 'file': return 'File';
+    case 'text': preview = msg.content; break;
+    case 'image': preview = 'Photo'; break;
+    case 'video': preview = 'Video'; break;
+    case 'audio': preview = 'Audio message'; break;
+    case 'file': preview = 'File'; break;
     case 'call': {
       const kind = msg.callType === 'video' ? 'Video call' : 'Voice call';
-      if (msg.callStatus === 'missed' || msg.callStatus === 'no_answer') return `Missed ${kind.toLowerCase()}`;
-      if (msg.callStatus === 'declined') return `Declined ${kind.toLowerCase()}`;
-      if (msg.callStatus === 'cancelled') return `${kind} cancelled`;
-      if (msg.callDuration && msg.callDuration > 0) {
+      if (msg.callStatus === 'missed' || msg.callStatus === 'no_answer') preview = `Missed ${kind.toLowerCase()}`;
+      else if (msg.callStatus === 'declined') preview = `Declined ${kind.toLowerCase()}`;
+      else if (msg.callStatus === 'cancelled') preview = `${kind} cancelled`;
+      else if (msg.callDuration && msg.callDuration > 0) {
         const m = Math.floor(msg.callDuration / 60);
         const s = msg.callDuration % 60;
         const dur = m > 0 ? `${m}m ${s}s` : `${s}s`;
-        return `${kind} \u00b7 ${dur}`;
+        preview = `${kind} \u00b7 ${dur}`;
+      } else {
+        preview = kind;
       }
-      return kind;
+      break;
     }
-    default: return `[${msg.type}]`;
+    default: preview = `[${msg.type}]`; break;
   }
+
+  // Append first reaction if exists
+  if (msg.reactions && Object.keys(msg.reactions).length > 0) {
+    const emojis = Object.keys(msg.reactions);
+    return `${preview} ${emojis[0]}`;
+  }
+
+  return preview;
 };
 
 /**

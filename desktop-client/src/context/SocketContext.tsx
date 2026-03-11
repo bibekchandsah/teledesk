@@ -197,6 +197,34 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const handlePinsUpdated = ({ chatId, pinnedMessageIds }: { chatId: string; pinnedMessageIds: string[] }) => {
       updateChatPins(chatId, pinnedMessageIds);
     };
+    // ─── Reaction Updated Event ──────────────────────────────────────────────
+    const handleReactionUpdated = (payload: { 
+      messageId: string; 
+      chatId: string; 
+      reactions: Record<string, string[]>;
+      reactorId?: string;
+      emoji?: string;
+      senderId?: string;
+    }) => {
+      updateMessage(payload.messageId, { reactions: payload.reactions });
+
+      // Only notify if someone else reacted to current user's message
+      if (payload.reactorId && payload.reactorId !== currentUser.uid && payload.senderId === currentUser.uid) {
+        const reactorName = nicknames[payload.reactorId] || 'Someone';
+        
+        // Window is minimized/hidden or the reaction is for a different chat
+        const windowHidden = document.hidden || !document.hasFocus();
+        const differentChat = activeChatRef.current?.chatId !== payload.chatId;
+
+        if (differentChat || windowHidden) {
+          showNotification({
+            title: 'Message Reaction',
+            body: `${reactorName} reacted ${payload.emoji} to your message`,
+            chatId: payload.chatId,
+          });
+        }
+      }
+    };
 
     // ─── Saved Messages sync (other device updates) ───────────────────────
     const handleSavedMessageUpdated = (payload: { entry: SavedMessage }) => {
@@ -232,6 +260,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
     socket.on(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
+    socket.on(SOCKET_EVENTS.REACTION_UPDATED, handleReactionUpdated);
     socket.on(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
     socket.on(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
     socket.on(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
@@ -253,6 +282,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
       socket.off(SOCKET_EVENTS.PINS_UPDATED, handlePinsUpdated);
+      socket.off(SOCKET_EVENTS.REACTION_UPDATED, handleReactionUpdated);
       socket.off(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
       socket.off(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
       socket.off(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);

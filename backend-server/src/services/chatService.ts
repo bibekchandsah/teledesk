@@ -457,10 +457,10 @@ export const addReaction = async (
   messageId: string,
   emoji: string,
   uid: string,
-): Promise<{ chatId: string; members: string[]; reactions: Record<string, string[]> } | null> => {
+): Promise<{ chatId: string; senderId: string; members: string[]; reactions: Record<string, string[]> } | null> => {
   const { data: msgData } = await supabase
     .from('messages')
-    .select('chat_id, reactions')
+    .select('chat_id, reactions, sender_id')
     .eq('message_id', messageId)
     .single();
   if (!msgData) return null;
@@ -474,12 +474,24 @@ export const addReaction = async (
 
   const reactions: Record<string, string[]> = (msgData.reactions as Record<string, string[]>) ?? {};
   const current = reactions[emoji] ?? [];
-  if (current.includes(uid)) return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
+  if (current.includes(uid)) {
+    return {
+      chatId: msgData.chat_id as string,
+      senderId: msgData.sender_id as string,
+      members: chatData.members as string[],
+      reactions,
+    };
+  }
 
   reactions[emoji] = [...current, uid];
   await supabase.from('messages').update({ reactions }).eq('message_id', messageId);
   logger.info(`Reaction ${emoji} added to ${messageId} by ${uid}`);
-  return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
+  return {
+    chatId: msgData.chat_id as string,
+    senderId: msgData.sender_id as string,
+    members: chatData.members as string[],
+    reactions,
+  };
 };
 
 export const removeReaction = async (

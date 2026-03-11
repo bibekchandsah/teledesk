@@ -4,6 +4,8 @@ import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
 import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
+import data from '@emoji-mart/data';
+import Picker from '@emoji-mart/react';
 
 interface MessageBubbleProps {
   message: Message;
@@ -33,12 +35,6 @@ interface MessageBubbleProps {
 }
 
 const PRESET_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '👎'];
-const EXTENDED_EMOJIS = [
-  '❤️','👍','😂','😮','😢','👎',
-  '🎉','🔥','👏','🤩','😍','🥺',
-  '😡','💯','✅','🙏','💪','👀',
-  '😎','🤔','😅','😭','🤣','💀',
-];
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
@@ -177,6 +173,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setShowExtended(false);
     setCtxMenu(null);
     onReact?.(message.messageId, emoji);
+  };
+
+  const handleEmojiMartSelect = (emojiData: any) => {
+    handleEmojiClick(emojiData.native);
   };
 
   const handleMouseEnterBubble = () => {
@@ -363,43 +363,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               animation: 'reactionBarSlideUp 0.15s ease-out',
             }}
           >
-            {/* Extended emoji grid */}
+            {/* Emoji Mart Picker */}
             {showExtended && (
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, 1fr)',
-                gap: 4,
-                padding: '8px',
                 backgroundColor: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
                 borderRadius: 12,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
                 backdropFilter: 'blur(12px)',
+                overflow: 'hidden',
               }}>
-                {EXTENDED_EMOJIS.map(em => {
-                  const alreadyReacted = (reactions[em] ?? []).includes(currentUserId ?? '');
-                  return (
-                    <button
-                      key={em}
-                      onClick={() => handleEmojiClick(em)}
-                      title={em}
-                      style={{
-                        background: alreadyReacted ? 'rgba(var(--accent-rgb,99,102,241),0.2)' : 'none',
-                        border: alreadyReacted ? '1px solid var(--accent)' : '1px solid transparent',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        padding: '4px',
-                        fontSize: 20,
-                        lineHeight: 1,
-                        transition: 'transform 0.1s',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
-                      onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                    >
-                      {em}
-                    </button>
-                  );
-                })}
+                <Picker 
+                  data={data} 
+                  onEmojiSelect={handleEmojiMartSelect} 
+                  theme="auto" 
+                  previewPosition="none"
+                  skinTonePosition="none"
+                  navPosition="bottom"
+                />
               </div>
             )}
 
@@ -604,30 +584,30 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     onMouseEnter={() => setTooltipEmoji(emoji)}
                     onMouseLeave={() => setTooltipEmoji(null)}
                     style={{
-                      display: 'inline-flex',
+                      display: 'flex',
                       alignItems: 'center',
                       gap: 4,
-                      padding: '2px 8px',
-                      borderRadius: 12,
-                      border: iMine
-                        ? '1.5px solid var(--accent)'
-                        : '1.5px solid var(--border, rgba(255,255,255,0.12))',
-                      backgroundColor: iMine
-                        ? 'rgba(var(--accent-rgb,99,102,241),0.15)'
-                        : 'var(--bg-secondary)',
+                      padding: '4px 8px',
+                      borderRadius: 16,
+                      backgroundColor: iMine ? 'rgba(var(--accent-rgb, 99, 102, 241), 0.15)' : 'var(--bg-tertiary)',
+                      border: `1px solid ${iMine ? 'rgba(var(--accent-rgb, 99, 102, 241), 0.4)' : 'var(--border)'}`,
                       cursor: 'pointer',
-                      fontSize: 13,
-                      fontWeight: iMine ? 600 : 400,
-                      color: 'var(--text-primary)',
-                      transition: 'transform 0.12s, background-color 0.12s',
-                      lineHeight: 1.4,
-                      animation: 'reactionPop 0.2s ease-out',
+                      userSelect: 'none',
+                      transition: 'transform 0.1s, background-color 0.2s',
                     }}
-                    onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.92)')}
-                    onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.95)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                   >
-                    <span style={{ fontSize: 15 }}>{emoji}</span>
-                    <span style={{ fontSize: 12, opacity: 0.9 }}>{users.length}</span>
+                    <span style={{ fontSize: 13, lineHeight: 1 }}>{emoji}</span>
+                    {users.length > 1 && (
+                      <span style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: iMine ? 'var(--accent)' : 'var(--text-secondary)'
+                      }}>
+                        {users.length}
+                      </span>
+                    )}
                   </button>
                 </div>
               );

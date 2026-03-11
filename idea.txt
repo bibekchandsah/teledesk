@@ -630,6 +630,18 @@ when usesr create account and enter their name then it don't show on the end use
 check if username is available or not during registration and show message
 user should be able to send message themslef too: search, forward
 store save chat history in database and show them when user login from another device
+move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
+enhance online status 
+update calling window as in image
+add calling sound 
+add notification sound for new message
+allow copy and paste and open images in the same window and allow user to send file size limit 100mb
+allow user to send multiple files at once   
+allow user to send voice & video records
+add emoji & sticker support before sending message
+add :emoji name support 
+
+
 
 show mute & unmute status of user during call
     user A mutes themselves → show "You are muted" in the call status area for A, and "User A is muted" for B  

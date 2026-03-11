@@ -124,11 +124,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
   updateMessage: (messageId, updates) =>
     set((state) => {
       const newMessages = { ...state.messages };
+      let updatedMessage: Message | null = null;
+      
       for (const chatId in newMessages) {
-        newMessages[chatId] = newMessages[chatId].map((m) =>
-          m.messageId === messageId ? { ...m, ...updates } : m,
-        );
+        newMessages[chatId] = newMessages[chatId].map((m) => {
+          if (m.messageId === messageId) {
+            updatedMessage = { ...m, ...updates };
+            return updatedMessage;
+          }
+          return m;
+        });
       }
+
+      if (updatedMessage) {
+        const msg = updatedMessage as Message;
+        return {
+          messages: newMessages,
+          chats: state.chats.map((c) =>
+            c.chatId === msg.chatId && c.lastMessage?.messageId === messageId
+              ? { ...c, lastMessage: msg }
+              : c
+          ),
+          activeChat:
+            state.activeChat?.chatId === msg.chatId && state.activeChat.lastMessage?.messageId === messageId
+              ? { ...state.activeChat, lastMessage: msg }
+              : state.activeChat,
+        };
+      }
+
       return { messages: newMessages };
     }),
 
