@@ -254,13 +254,22 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
     switch (message.type) {
       case 'image':
+      case 'gif':
+      case 'sticker':
         return (
           <div className="message-image">
             <img
               src={message.fileUrl}
               alt={message.fileName || 'image'}
-              style={{ maxWidth: 280, maxHeight: 200, borderRadius: 8, cursor: 'pointer' }}
-              onClick={() => window.open(message.fileUrl, '_blank')}
+              style={{ 
+                maxWidth: 280, 
+                maxHeight: 200, 
+                borderRadius: 8, 
+                cursor: message.type === 'image' ? 'pointer' : 'default' 
+              }}
+              onClick={() => {
+                if (message.type === 'image') window.open(message.fileUrl, '_blank');
+              }}
             />
             {message.content && (
               <p className="message-caption">{message.content}</p>

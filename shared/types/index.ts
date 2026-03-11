@@ -41,7 +41,7 @@ export interface Message {
   senderName?: string;
   senderAvatar?: string;
   content: string;
-  type: 'text' | 'file' | 'image' | 'video' | 'audio' | 'call';
+  type: 'text' | 'file' | 'image' | 'video' | 'audio' | 'call' | 'gif' | 'sticker';
   timestamp: string;
   readBy: string[];
   deliveredTo?: string[];  // UIDs whose device has received the message

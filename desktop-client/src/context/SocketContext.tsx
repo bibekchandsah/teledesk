@@ -82,6 +82,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           body:
             message.type === 'text'
               ? (message.content || '').slice(0, 100)
+              : message.type === 'gif'
+              ? 'Sent a GIF'
+              : message.type === 'sticker'
+              ? 'Sent a Sticker'
+              : message.type === 'image'
+              ? 'Sent an image'
+              : message.type === 'video'
+              ? 'Sent a video'
+              : message.type === 'audio'
+              ? 'Sent an audio message'
+              : message.type === 'file'
+              ? `Sent a file: ${message.fileName || 'document'}`
               : `Sent a ${message.type}`,
           icon: message.senderAvatar,
           chatId: message.chatId,

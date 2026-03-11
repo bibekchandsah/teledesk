@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -68,12 +68,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [nicknameInput, setNicknameInput] = useState('');
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [activeMediaTab, setActiveMediaTab] = useState<'emoji' | 'sticker' | 'gif'>('emoji');
   const [gifSearch, setGifSearch] = useState('');
   const [gifs, setGifs] = useState<any[]>([]);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const gifPickerRef = useRef<HTMLDivElement>(null);
+  const [stickerSearch, setStickerSearch] = useState('');
+  const [stickers, setStickers] = useState<any[]>([]);
+  const [isStickerLoading, setIsStickerLoading] = useState(false);
+  const [giphyKey, setGiphyKey] = useState(() => 
+    import.meta.env.VITE_GIPHY_API_KEY || 
+    localStorage.getItem('giphy_api_key') || 
+    '3eP9s8HjP4pht89FvV4Aka0fFfIdF2D5'
+  );
+  const [giphyKeyInput, setGiphyKeyInput] = useState('');
+  const [giphyError, setGiphyError] = useState(false);
+  const mediaPickerRef = useRef<HTMLDivElement>(null);
+
+  
+  // No longer using hardcoded stickers
+
 
   useEffect(() => {
     if (!headerMenu) return;
@@ -261,48 +274,174 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const handleGifSearch = async (query: string) => {
     setGifSearch(query);
     if (!query.trim()) {
-      setGifs([]);
+      handleFetchTrendingGifs();
       return;
     }
     try {
-      // Public beta API key
-      const API_KEY = 'dc6zaTOxFJmzC';
-      const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(query)}&limit=15`);
+      const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${giphyKey}&q=${encodeURIComponent(query)}&limit=12`);
+      if (res.status === 401 || res.status === 403) {
+        setGiphyError(true);
+        setGifs([]);
+        return;
+      }
       const result = await res.json();
-      setGifs(result.data || []);
+      if (result.data && Array.isArray(result.data)) {
+        const mapped = result.data.map((r: any) => ({
+          id: r.id,
+          url: r.images.fixed_height.url,
+          preview: r.images.fixed_height_small.url
+        }));
+        setGifs(mapped);
+        setGiphyError(false);
+      }
     } catch (err) {
       console.error('GIF search error:', err);
+      setGifs([]);
     }
   };
 
-  const handleSendGif = (gif: any) => {
+  const handleFetchTrendingGifs = async () => {
+    try {
+      const res = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${giphyKey}&limit=12`);
+      if (res.status === 401 || res.status === 403) {
+        setGiphyError(true);
+        setGifs([]);
+        return;
+      }
+      const result = await res.json();
+      if (result.data && Array.isArray(result.data)) {
+        const mapped = result.data.map((r: any) => ({
+          id: r.id,
+          url: r.images.fixed_height.url,
+          preview: r.images.fixed_height_small.url
+        }));
+        setGifs(mapped);
+      }
+    } catch (err) {
+      console.error('Fetch trending GIFs error:', err);
+    }
+  };
+
+  const handleStickerSearch = async (query: string) => {
+    setStickerSearch(query);
+    if (!query.trim()) {
+      handleFetchTrendingStickers();
+      return;
+    }
+    setIsStickerLoading(true);
+    try {
+      const res = await fetch(`https://api.giphy.com/v1/stickers/search?api_key=${giphyKey}&q=${encodeURIComponent(query)}&limit=12`);
+      if (res.status === 401 || res.status === 403) {
+        setGiphyError(true);
+        setStickers([]);
+        return;
+      }
+      const result = await res.json();
+      if (result.data && Array.isArray(result.data)) {
+        const mapped = result.data.map((r: any) => ({
+          id: r.id,
+          url: r.images.fixed_height.url,
+          preview: r.images.fixed_height_small.url
+        }));
+        setStickers(mapped);
+      }
+    } catch (err) {
+      console.error('Sticker search error:', err);
+    } finally {
+      setIsStickerLoading(false);
+    }
+  };
+
+  const handleFetchTrendingStickers = async () => {
+    setIsStickerLoading(true);
+    try {
+      const res = await fetch(`https://api.giphy.com/v1/stickers/trending?api_key=${giphyKey}&limit=12`);
+      if (res.status === 401 || res.status === 403) {
+        setGiphyError(true);
+        setStickers([]);
+        return;
+      }
+      const result = await res.json();
+      if (result.data && Array.isArray(result.data)) {
+        const mapped = result.data.map((r: any) => ({
+          id: r.id,
+          url: r.images.fixed_height.url,
+          preview: r.images.fixed_height_small.url
+        }));
+        setStickers(mapped);
+      }
+    } catch (err) {
+      console.error('Fetch trending stickers error:', err);
+    } finally {
+      setIsStickerLoading(false);
+    }
+  };
+
+  // Fetch trending content when the media picker is opened to a tab
+  useEffect(() => {
+    if (showMediaPicker) {
+      if (activeMediaTab === 'sticker' && stickers.length === 0) {
+        handleFetchTrendingStickers();
+      } else if (activeMediaTab === 'gif' && gifs.length === 0) {
+        handleFetchTrendingGifs();
+      }
+    }
+  }, [showMediaPicker, activeMediaTab]);
+
+  const handleSaveGiphyKey = () => {
+    const key = giphyKeyInput.trim();
+    if (key) {
+      setGiphyKey(key);
+      localStorage.setItem('giphy_api_key', key);
+      setGiphyError(false);
+      setGiphyKeyInput('');
+      // Retry search if there was a query
+      if (gifSearch) handleGifSearch(gifSearch);
+    }
+  };
+
+  const handleSendGif = (url: string) => {
     if (!chatId || !currentUser) return;
-    const gifUrl = gif.images.fixed_height.url;
     sendMessage({
       chatId,
-      content: gifUrl,
-      type: 'image'
+      content: '',
+      fileUrl: url,
+      type: 'gif',
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar
     });
-    setShowGifPicker(false);
+    setShowMediaPicker(false);
     setGifSearch('');
     setGifs([]);
   };
+
+  const handleSendSticker = (url: string) => {
+    if (!chatId || !currentUser) return;
+    sendMessage({
+      chatId,
+      content: '',
+      fileUrl: url,
+      type: 'sticker',
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar
+    });
+    setShowMediaPicker(false);
+  };
+
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
       
-      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
-        setShowEmojiPicker(false);
-      }
-      if (showGifPicker && gifPickerRef.current && !gifPickerRef.current.contains(target)) {
-        setShowGifPicker(false);
+      if (showMediaPicker && mediaPickerRef.current && !mediaPickerRef.current.contains(target)) {
+        setShowMediaPicker(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmojiPicker, showGifPicker]);
+  }, [showMediaPicker]);
+
 
   // ─── Join/leave room & load messages ─────────────────────────────────────
   useEffect(() => {
@@ -681,6 +820,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         fileUrl: result.url,
         fileName: result.fileName,
         fileSize: result.fileSize,
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar
       });
     } catch (err) {
       console.error('[Upload] Failed:', err);
@@ -1672,108 +1813,256 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           }}
         />
         
-        {/* GIF Picker */}
+        {/* Unified Media Picker */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <button
-            onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
-            style={{ ...iconBtnStyle, flexShrink: 0, color: showGifPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
-            title="GIFs"
+            onClick={() => setShowMediaPicker(!showMediaPicker)}
+            style={{ ...iconBtnStyle, flexShrink: 0, color: showMediaPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
+            title="Emojis, Stickers & GIFs"
           >
-            <ImageIcon size={20} />
+            <Smile size={22} />
           </button>
           
-          {showGifPicker && (
+          {showMediaPicker && (
             <div 
-              ref={gifPickerRef}
+              ref={mediaPickerRef}
               style={{
                 position: 'absolute',
                 bottom: 'calc(100% + 12px)',
-                right: -40,
-                width: 280,
-                height: 380,
+                right: -10,
+                width: 350,
+                height: 450,
                 backgroundColor: 'var(--bg-secondary)',
                 border: '1px solid var(--border)',
-                borderRadius: 12,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                borderRadius: 16,
+                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
                 zIndex: 1000,
               }}
             >
-              <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="Search GIFs..."
-                  value={gifSearch}
-                  onChange={(e) => handleGifSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    backgroundColor: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                />
+              {/* Tab Content */}
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {activeMediaTab === 'emoji' && (
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <Picker
+                      data={data}
+                      onEmojiSelect={handleEmojiSelect}
+                      theme="dark"
+                      set="native"
+                      previewPosition="none"
+                      width="100%"
+                      height="100%"
+                      skinTonePosition="none"
+                    />
+                  </div>
+                )}
+                
+                {activeMediaTab === 'sticker' && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ position: 'relative' }}>
+                        <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Search Stickers..."
+                          value={stickerSearch}
+                          onChange={(e) => handleStickerSearch(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px 8px 32px',
+                            borderRadius: 20,
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-primary)',
+                            fontSize: 13,
+                            outline: 'none',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                      {isStickerLoading ? (
+                        <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 13 }}>Loading stickers...</div>
+                      ) : (
+                        <>
+                          {stickers.map((sticker) => (
+                            <img
+                              key={sticker.id}
+                              src={sticker.preview}
+                              onClick={() => handleSendSticker(sticker.url)}
+                              style={{ width: '100%', borderRadius: 8, cursor: 'pointer', transition: 'transform 0.1s' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                            />
+                          ))}
+                          {!stickers.length && !isStickerLoading && (
+                            <div style={{ gridColumn: 'span 3', textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 13 }}>No stickers found</div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {activeMediaTab === 'gif' && (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    {giphyError ? (
+                      <div style={{ flex: 1, padding: '20px', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                        <ImageIcon size={40} style={{ color: 'var(--text-secondary)', marginBottom: 8 }} />
+                        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--error, #e74c3c)' }}>Invalid API Key</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                          The current Giphy API key is unauthorized. Please provide a new one.
+                        </div>
+                        <div style={{ width: '100%', marginTop: 8 }}>
+                          <input
+                            type="text"
+                            placeholder="Paste your Giphy API Key"
+                            value={giphyKeyInput}
+                            onChange={(e) => setGiphyKeyInput(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--bg-tertiary)',
+                              color: 'var(--text-primary)',
+                              fontSize: 13,
+                              outline: 'none',
+                              marginBottom: 10
+                            }}
+                          />
+                          <button
+                            onClick={handleSaveGiphyKey}
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              borderRadius: 8,
+                              backgroundColor: 'var(--accent)',
+                              color: '#fff',
+                              border: 'none',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Save & Try Again
+                          </button>
+                        </div>
+                        <a 
+                          href="https://developers.giphy.com/dashboard/" 
+                          target="_blank" 
+                          rel="noreferrer"
+                          style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}
+                        >
+                          Get a free API key here
+                        </a>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
+                          <div style={{ position: 'relative' }}>
+                            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Search GIFs..."
+                              value={gifSearch}
+                              onChange={(e) => handleGifSearch(e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px 8px 32px',
+                                borderRadius: 20,
+                                border: '1px solid var(--border)',
+                                backgroundColor: 'var(--bg-tertiary)',
+                                color: 'var(--text-primary)',
+                                fontSize: 13,
+                                outline: 'none',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                            <button 
+                              onClick={() => setGiphyError(true)}
+                              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                              title="GIF API Settings"
+                            >
+                              <MoreVertical size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                          {gifs.map((gif) => (
+                            <img
+                              key={gif.id}
+                              src={gif.preview}
+                              onClick={() => handleSendGif(gif.url)}
+                              style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', transition: 'transform 0.1s' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                            />
+                          ))}
+                          {!gifs.length && gifSearch && (
+                            <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 13 }}>No GIFs found</div>
+                          )}
+                          {!gifSearch && (
+                            <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 13 }}>Search for GIFs</div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {gifs.map((gif) => (
-                  <img
-                    key={gif.id}
-                    src={gif.images.fixed_height_small.url}
-                    onClick={() => handleSendGif(gif)}
-                    style={{ width: '100%', borderRadius: 6, cursor: 'pointer', transition: 'transform 0.1s' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                  />
-                ))}
-                {!gifs.length && gifSearch && (
-                  <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>No GIFs found</div>
-                )}
-                {!gifSearch && (
-                  <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>Type something to search GIFs</div>
-                )}
+
+              {/* Tabs Footer */}
+              <div style={{ 
+                display: 'flex', 
+                height: 44, 
+                borderTop: '1px solid var(--border)', 
+                backgroundColor: 'var(--bg-tertiary)',
+                padding: '0 4px'
+              }}>
+                <button 
+                  onClick={() => setActiveMediaTab('emoji')}
+                  style={{ 
+                    flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                    color: activeMediaTab === 'emoji' ? 'var(--accent)' : 'var(--text-secondary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderBottom: activeMediaTab === 'emoji' ? '2px solid var(--accent)' : 'none'
+                  }}
+                >
+                  <Smile size={20} />
+                </button>
+                <button 
+                  onClick={() => setActiveMediaTab('sticker')}
+                  style={{ 
+                    flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                    color: activeMediaTab === 'sticker' ? 'var(--accent)' : 'var(--text-secondary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderBottom: activeMediaTab === 'sticker' ? '2px solid var(--accent)' : 'none'
+                  }}
+                >
+                  <Sticker size={20} />
+                </button>
+                <button 
+                  onClick={() => setActiveMediaTab('gif')}
+                  style={{ 
+                    flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                    color: activeMediaTab === 'gif' ? 'var(--accent)' : 'var(--text-secondary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderBottom: activeMediaTab === 'gif' ? '2px solid var(--accent)' : 'none'
+                  }}
+                >
+                  <ImageIcon size={20} />
+                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Emoji Picker */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <button
-            onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
-            style={{ ...iconBtnStyle, flexShrink: 0, color: showEmojiPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
-            title="Emojis"
-          >
-            <Smile size={20} />
-          </button>
-          
-          {showEmojiPicker && (
-            <div 
-              ref={emojiPickerRef}
-              style={{
-                position: 'absolute',
-                bottom: 'calc(100% + 12px)',
-                right: -10,
-                zIndex: 1000,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              }}
-            >
-              <Picker
-                data={data}
-                onEmojiSelect={handleEmojiSelect}
-                theme="dark"
-                set="native"
-                previewPosition="none"
-              />
-            </div>
-          )}
-        </div>
 
         <button
           onClick={handleSend}
