@@ -457,10 +457,17 @@ export const addReaction = async (
   messageId: string,
   emoji: string,
   uid: string,
-): Promise<{ chatId: string; senderId: string; members: string[]; reactions: Record<string, string[]>; readBy: string[] } | null> => {
+): Promise<{ 
+  chatId: string; 
+  senderId: string; 
+  members: string[]; 
+  reactions: Record<string, string[]>; 
+  readBy: string[];
+  content: string;
+} | null> => {
   const { data: msgData } = await supabase
     .from('messages')
-    .select('chat_id, reactions, sender_id, read_by')
+    .select('chat_id, reactions, sender_id, read_by, content, timestamp')
     .eq('message_id', messageId)
     .single();
   if (!msgData) return null;
@@ -481,6 +488,7 @@ export const addReaction = async (
       members: chatData.members as string[],
       reactions,
       readBy: msgData.read_by ?? [],
+      content: msgData.content,
     };
   }
 
@@ -488,28 +496,33 @@ export const addReaction = async (
   const updatedReadBy = [uid];
   await supabase.from('messages').update({ reactions, read_by: updatedReadBy }).eq('message_id', messageId);
 
-  // Update chat's last_message if this is the last message
-  const { data: lastMsgChat } = await supabase
+  // Always update chat's last_message and bump to top (Telegram style)
+  const updatedLastMsg = { 
+    messageId, 
+    chatId: msgData.chat_id, 
+    senderId: msgData.sender_id,
+    content: msgData.content,
+    timestamp: msgData.timestamp, // Keep original message timestamp inside message object
+    reactions, 
+    readBy: updatedReadBy 
+  };
+  
+  await supabase
     .from('chats')
-    .select('last_message')
-    .eq('chat_id', msgData.chat_id)
-    .single();
+    .update({ 
+      last_message: updatedLastMsg, 
+      last_message_at: now() // Use current time for sorting chats list (the "bump")
+    })
+    .eq('chat_id', msgData.chat_id);
 
-  if (lastMsgChat?.last_message?.messageId === messageId) {
-    const updatedLastMsg = { ...lastMsgChat.last_message, reactions, readBy: updatedReadBy };
-    await supabase
-      .from('chats')
-      .update({ last_message: updatedLastMsg })
-      .eq('chat_id', msgData.chat_id);
-  }
-
-  logger.info(`Reaction ${emoji} added to ${messageId} by ${uid}`);
+  logger.info(`Reaction ${emoji} added to ${messageId} by ${uid} (chat bumped)`);
   return {
     chatId: msgData.chat_id as string,
     senderId: msgData.sender_id as string,
     members: chatData.members as string[],
     reactions,
     readBy: updatedReadBy,
+    content: msgData.content,
   };
 };
 

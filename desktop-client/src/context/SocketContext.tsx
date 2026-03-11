@@ -204,8 +204,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reactions: Record<string, string[]>;
       readBy?: string[];
       reactorId?: string;
+      reactorName?: string;
+      reactorUsername?: string;
       emoji?: string;
       senderId?: string;
+      content?: string;
     }) => {
       updateMessage(payload.messageId, { 
         reactions: payload.reactions,
@@ -222,10 +225,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         
         // Only show notification if someone else reacted to current user's message
         if (payload.senderId === currentUser.uid) {
-          const reactorName = nicknames[payload.reactorId] || 'Someone';
+          const displayReactor = payload.reactorName || payload.reactorUsername || 'Someone';
+          const reactorLabel = payload.reactorUsername ? `${displayReactor} | ${payload.reactorUsername}` : displayReactor;
+          const contentSnippet = payload.content ? (payload.content.length > 30 ? payload.content.substring(0, 30) + '...' : payload.content) : 'messaage';
+          
           showNotification({
             title: 'Message Reaction',
-            body: `${reactorName} reacted ${payload.emoji} to your message`,
+            body: `${reactorLabel} reacted ${payload.emoji} to: "${contentSnippet}"`,
             chatId: payload.chatId,
           });
         }

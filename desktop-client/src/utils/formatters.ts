@@ -91,10 +91,10 @@ export const getMessagePreview = (msg: {
     default: preview = `[${msg.type}]`; break;
   }
 
-  // Append first reaction if exists
+  // Append reactions if exist
   if (msg.reactions && Object.keys(msg.reactions).length > 0) {
-    const emojis = Object.keys(msg.reactions);
-    return `${preview} ${emojis[0]}`;
+    const emojis = Object.keys(msg.reactions).join('');
+    return `${preview} ${emojis}`;
   }
 
   return preview;

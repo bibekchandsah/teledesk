@@ -478,14 +478,19 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       try {
         const result = await addReaction(payload.messageId, payload.emoji, uid);
         if (!result) return;
+        
+        const reactor = await getUserById(uid);
         const update = { 
           messageId: payload.messageId, 
           chatId: payload.chatId, 
           reactions: result.reactions,
           readBy: result.readBy,
           reactorId: uid,
+          reactorName: reactor?.name,
+          reactorUsername: reactor?.username,
           emoji: payload.emoji,
-          senderId: result.senderId
+          senderId: result.senderId,
+          content: result.content
         };
         io.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
         for (const memberId of result.members) {
