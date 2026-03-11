@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -148,6 +148,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [isRecording, setIsRecording] = useState(false);
   const [recordingMode, setRecordingMode] = useState<'voice' | 'video'>('voice');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -1029,9 +1031,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
   const handleSendRecordedMedia = async (blob: Blob, duration: number) => {
     if (!chatId || !currentUser) return;
+    const file = new File([blob], `recording_${Date.now()}.${recordingMode === 'video' ? 'webm' : 'ogg'}`, { type: blob.type });
+    
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      setFileError(validation.error || 'Recording exceeds 100MB limit');
+      return;
+    }
+
     try {
       setIsUploading(true);
-      const file = new File([blob], `recording_${Date.now()}.${recordingMode === 'video' ? 'webm' : 'ogg'}`, { type: blob.type });
       const result = await uploadChatFile(file, chatId, (progress) => {
         setUploadProgress(Math.round(progress));
       });
@@ -1080,40 +1089,79 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   // ─── File upload ──────────────────────────────────────────────────────────
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !chatId) return;
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0 || !chatId || !currentUser) return;
 
-    const validation = validateFile(file);
-    if (!validation.valid) {
-      alert(validation.error);
-      return;
+    for (const file of files) {
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        setFileError(validation.error || `File "${file.name}" exceeds 100MB limit`);
+        continue;
+      }
+
+      try {
+        setIsUploading(true);
+        const result = await uploadChatFile(file, chatId, (progress) => {
+          setUploadProgress(Math.round(progress));
+        });
+
+        const msgType = getMessageTypeFromMime(file.type);
+        sendMessage({
+          chatId,
+          content: `Sent a ${msgType}`,
+          type: msgType,
+          fileUrl: result.url,
+          fileName: result.fileName,
+          fileSize: result.fileSize,
+          senderName: currentUser.name || 'Unknown',
+          senderAvatar: currentUser.avatar || ''
+        });
+      } catch (err) {
+        console.error('[Upload] Failed:', err);
+        setFileError(`Failed to upload "${file.name}". Please try again.`);
+      } finally {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
     }
+  };
 
-    try {
-      setIsUploading(true);
-      const result = await uploadChatFile(file, chatId, (progress) => {
-        setUploadProgress(Math.round(progress));
-      });
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    await uploadFiles(files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
-      const msgType = getMessageTypeFromMime(file.type);
-      sendMessage({
-        chatId,
-        content: `Sent a ${msgType}`,
-        type: msgType,
-        fileUrl: result.url,
-        fileName: result.fileName,
-        fileSize: result.fileSize,
-        senderName: currentUser?.name || 'Unknown',
-        senderAvatar: currentUser?.avatar || ''
-      });
-    } catch (err) {
-      console.error('[Upload] Failed:', err);
-      alert('Failed to upload file. Please try again.');
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const files: File[] = [];
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      await uploadFiles(files);
     }
   };
 
@@ -1396,7 +1444,48 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         position: 'relative',
         backgroundColor: 'var(--bg-primary)',
       }}
+      onDragEnter={handleDrag}
+      onDragLeave={handleDrag}
+      onDragOver={handleDrag}
+      onDrop={handleDrop}
     >
+      {dragActive && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          pointerEvents: 'none',
+          animation: 'fadeIn 0.2s ease-out',
+          border: '2px dashed var(--accent)',
+          borderRadius: 12,
+          margin: 10
+        }}>
+          <div style={{
+            width: 80,
+            height: 80,
+            borderRadius: '50%',
+            backgroundColor: 'rgba(var(--accent-rgb), 0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+            color: 'var(--accent)'
+          }}>
+            <Paperclip size={40} />
+          </div>
+          <h2 style={{ color: '#fff', margin: '0 0 8px' }}>Drop files to send</h2>
+          <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0 }}>Maximum file size: 100MB</p>
+        </div>
+      )}
       {/* Header */}
       <div
         style={{
@@ -2096,6 +2185,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           style={{ display: 'none' }}
           onChange={handleFileChange}
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.txt"
@@ -2111,11 +2201,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         <div style={{ flex: 1, position: 'relative' }}>
           {/* Recording UI */}
           {isRecording ? (
-            <div style={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 12, 
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
               padding: '6px 14px',
               backgroundColor: 'var(--bg-tertiary)',
               borderRadius: 20,
@@ -2126,25 +2216,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <div style={{ fontSize: 13, fontWeight: 600, width: 40 }}>
                 {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
               </div>
-              
+
               {recordingMode === 'voice' && (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 24, overflow: 'hidden' }}>
                   {waveformHistory.map((val, i) => (
-                    <div 
-                      key={i} 
-                      style={{ 
+                    <div
+                      key={i}
+                      style={{
                         flex: 1,
                         // Add a base height of 2px for silence, scale up to 24px for loud
-                        height: `${Math.max(2, val * 24)}px`, 
-                        backgroundColor: 'var(--accent)', 
+                        height: `${Math.max(2, val * 24)}px`,
+                        backgroundColor: 'var(--accent)',
                         borderRadius: 2,
                         transition: 'height 0.05s ease'
-                      }} 
+                      }}
                     />
                   ))}
                 </div>
               )}
-              
+
               {recordingMode === 'video' && (
                  <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)' }}>
                     Recording video note...
@@ -2161,7 +2251,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 </button>
               )}
 
-              <button 
+              <button
                 onClick={cancelRecording}
                 style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
                 title="Cancel"
@@ -2221,6 +2311,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 value={inputText}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+
                 placeholder="Write a message..."
                 rows={1}
                 style={{
@@ -2259,13 +2351,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               zIndex: 1001,
               backgroundColor: '#000'
             }}>
-              <video 
-                autoPlay 
-                muted 
+              <video
+                autoPlay
+                muted
                 ref={(el) => { if (el) el.srcObject = stream }}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
+                style={{
+                  width: '100%',
+                  height: '100%',
                   objectFit: 'cover',
                   transform: facingMode === 'user' ? 'scaleX(-1)' : 'none'
                 }}
@@ -2273,7 +2365,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
           )}
         </div>
-        
+
         {/* Unified Action Button */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
           {showHoldToast && (
@@ -2332,9 +2424,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <Smile size={22} />
             </button>
           )}
-          
+
           {showMediaPicker && (
-            <div 
+            <div
               ref={mediaPickerRef}
               style={{
                 position: 'absolute',
@@ -2368,7 +2460,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     />
                   </div>
                 )}
-                
+
                 {activeMediaTab === 'sticker' && (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
@@ -2417,7 +2509,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     </div>
                   </div>
                 )}
-                
+
                 {activeMediaTab === 'gif' && (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     {giphyError ? (
@@ -2461,9 +2553,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                             Save & Try Again
                           </button>
                         </div>
-                        <a 
-                          href="https://developers.giphy.com/dashboard/" 
-                          target="_blank" 
+                        <a
+                          href="https://developers.giphy.com/dashboard/"
+                          target="_blank"
                           rel="noreferrer"
                           style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}
                         >
@@ -2493,7 +2585,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                                 boxSizing: 'border-box'
                               }}
                             />
-                            <button 
+                            <button
                               onClick={() => setGiphyError(true)}
                               style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
                               title="GIF API Settings"
@@ -2528,16 +2620,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </div>
 
               {/* Tabs Footer */}
-              <div style={{ 
-                display: 'flex', 
-                height: 44, 
-                borderTop: '1px solid var(--border)', 
+              <div style={{
+                display: 'flex',
+                height: 44,
+                borderTop: '1px solid var(--border)',
                 backgroundColor: 'var(--bg-tertiary)',
                 padding: '0 4px'
               }}>
-                <button 
+                <button
                   onClick={() => setActiveMediaTab('emoji')}
-                  style={{ 
+                  style={{
                     flex: 1, background: 'none', border: 'none', cursor: 'pointer',
                     color: activeMediaTab === 'emoji' ? 'var(--accent)' : 'var(--text-secondary)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2546,9 +2638,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 >
                   <Smile size={20} />
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveMediaTab('sticker')}
-                  style={{ 
+                  style={{
                     flex: 1, background: 'none', border: 'none', cursor: 'pointer',
                     color: activeMediaTab === 'sticker' ? 'var(--accent)' : 'var(--text-secondary)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2557,9 +2649,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 >
                   <Sticker size={20} />
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveMediaTab('gif')}
-                  style={{ 
+                  style={{
                     flex: 1, background: 'none', border: 'none', cursor: 'pointer',
                     color: activeMediaTab === 'gif' ? 'var(--accent)' : 'var(--text-secondary)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2691,7 +2783,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
           </div>
 
-          
+
 
           {/* Actions */}
           {!peer.isSelf && (
@@ -2789,7 +2881,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 {peer.profile?.name || 'Unknown'}
               </div>
             </div>
-            
+
             {/* Username (only show if user has one) */}
             {peer.profile?.username && peer.profile.username.trim() !== '' && (
               <div style={{ padding: '12px 16px', borderBottom: peer.profile?.createdAt ? '1px solid var(--border)' : 'none' }}>
@@ -3072,6 +3164,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </div>
         </div>
       )}
+      {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
     </div>
   );
 };
@@ -3197,6 +3290,80 @@ const selListItemStyle: React.CSSProperties = {
   textAlign: 'left',
   fontSize: 14,
   color: 'var(--text-primary)',
+};
+
+// ─── Premium UI Components ───
+
+const FileErrorModal: React.FC<{ error: string; onClose: () => void }> = ({ error, onClose }) => {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2000,
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      `}</style>
+      <div style={{
+        width: 340,
+        backgroundColor: 'rgba(30, 30, 30, 0.85)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        borderRadius: 20,
+        padding: '24px',
+        textAlign: 'center',
+        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+        animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+      }}>
+        <div style={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 16px',
+          color: '#ef4444'
+        }}>
+          <AlertCircle size={32} />
+        </div>
+        <h3 style={{ margin: '0 0 8px', fontSize: 18, color: '#fff' }}>Upload Failed</h3>
+        <p style={{ margin: '0 0 24px', fontSize: 14, color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+          {error}
+        </p>
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: 12,
+            backgroundColor: '#ef4444',
+            color: '#fff',
+            border: 'none',
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'filter 0.2s',
+          }}
+          onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
+          onMouseOut={(e) => e.currentTarget.style.filter = 'none'}
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export default ChatWindow;

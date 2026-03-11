@@ -266,38 +266,55 @@ export const uploadFile = (
   onProgress: (progress: UploadProgress) => void,
 ): { cancel: () => void } => {
   const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-  const controller = new AbortController();
-
   const chatId = storagePath.split('/')[1] ?? 'misc';
   const formData = new FormData();
   formData.append('file', file);
   formData.append('chatId', chatId);
 
-  (async () => {
-    onProgress({ progress: 10 });
-    const token = await getIdToken();
+  const xhr = new XMLHttpRequest();
+  
+  xhr.upload.onprogress = (event) => {
+    if (event.lengthComputable) {
+      const percentage = Math.round((event.loaded / event.total) * 100);
+      onProgress({ progress: percentage });
+    }
+  };
+
+  xhr.onload = () => {
     try {
-      onProgress({ progress: 50 });
-      const res = await fetch(`${BASE_URL}/api/files/upload`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        signal: controller.signal,
-      });
-      const data = await res.json();
-      if (data.success && data.data?.url) {
-        onProgress({ progress: 100, downloadURL: data.data.url });
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const data = JSON.parse(xhr.responseText);
+        if (data.success && data.data?.url) {
+          onProgress({ progress: 100, downloadURL: data.data.url });
+        } else {
+          onProgress({ progress: 0, error: new Error(data.error || 'Upload failed') });
+        }
       } else {
-        onProgress({ progress: 0, error: new Error(data.error || 'Upload failed') });
+        onProgress({ progress: 0, error: new Error(`Upload failed with status ${xhr.status}`) });
       }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        onProgress({ progress: 0, error: err as Error });
-      }
+      onProgress({ progress: 0, error: err as Error });
     }
+  };
+
+  xhr.onerror = () => {
+    onProgress({ progress: 0, error: new Error('Network error during upload') });
+  };
+
+  xhr.onabort = () => {
+    onProgress({ progress: 0 });
+  };
+
+  (async () => {
+    const token = await getIdToken();
+    xhr.open('POST', `${BASE_URL}/api/files/upload`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.send(formData);
   })();
 
-  return { cancel: () => controller.abort() };
+  return { cancel: () => xhr.abort() };
 };
 
 
