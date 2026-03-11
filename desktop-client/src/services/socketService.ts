@@ -88,6 +88,7 @@ export const sendMessage = (payload: {
   callStatusReceiver?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined';
   replyTo?: Message['replyTo'];
   duration?: number;
+  mirrored?: boolean;
   forwarded?: boolean;
 }): void => {
   socket?.emit(SOCKET_EVENTS.SEND_MESSAGE, payload);

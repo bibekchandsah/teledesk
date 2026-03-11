@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -147,6 +147,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // ─── Recording state ───
   const [isRecording, setIsRecording] = useState(false);
   const [recordingMode, setRecordingMode] = useState<'voice' | 'video'>('voice');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -885,7 +886,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         video: recordingMode === 'video' ? {
           width: { ideal: 400 },
           height: { ideal: 400 },
-          facingMode: 'user'
+          facingMode: facingMode
         } : false
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -994,6 +995,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
+  const flipCamera = async () => {
+    if (!isRecording || recordingMode !== 'video' || !stream) return;
+
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+
+    try {
+      // Get new video track from different camera
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 400 },
+          height: { ideal: 400 },
+          facingMode: newFacingMode
+        },
+        audio: false // keep existing audio
+      });
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = stream.getVideoTracks()[0];
+
+      // Replace the video track in the existing stream
+      stream.removeTrack(oldVideoTrack);
+      stream.addTrack(newVideoTrack);
+      oldVideoTrack.stop();
+      
+      // Update state to trigger re-render of preview
+      setStream(new MediaStream(stream.getTracks()));
+    } catch (err) {
+      console.error('[Recording] Failed to flip camera:', err);
+    }
+  };
+
   const handleSendRecordedMedia = async (blob: Blob, duration: number) => {
     if (!chatId || !currentUser) return;
     try {
@@ -1034,6 +1067,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         fileName: result.fileName,
         fileSize: result.fileSize,
         duration,
+        mirrored: recordingMode === 'video' && facingMode === 'user',
         senderName: currentUser?.name || 'Unknown',
         senderAvatar: currentUser?.avatar || ''
       });
@@ -1287,7 +1321,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       isLongPressActive.current = true;
       startRecording();
       setShowHoldToast(false);
-    }, 2000);
+    }, 1000);
   };
 
   const handleActionMouseUp = () => {
@@ -2117,6 +2151,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                  </div>
               )}
 
+              {recordingMode === 'video' && (
+                <button
+                  onClick={flipCamera}
+                  style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
+                  title="Flip Camera"
+                >
+                  <RefreshCw size={18} />
+                </button>
+              )}
+
               <button 
                 onClick={cancelRecording}
                 style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
@@ -2219,7 +2263,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 autoPlay 
                 muted 
                 ref={(el) => { if (el) el.srcObject = stream }}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover',
+                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'none'
+                }}
               />
             </div>
           )}
@@ -2244,7 +2293,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               zIndex: 100,
               animation: 'fadeIn 0.2s ease'
             }}>
-              Hold for 2 seconds to start recording
+              Hold for a second to start recording
             </div>
           )}
 

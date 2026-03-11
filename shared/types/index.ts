@@ -38,6 +38,7 @@ export interface Message {
   messageId: string;
   chatId: string;
   senderId: string;
+  mirrored?: boolean;
   senderName?: string;
   senderAvatar?: string;
   content: string;

@@ -533,7 +533,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 muted={false} /* Allow sound for video notes */
                 playsInline
                 controls={false}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover', 
+                  cursor: 'pointer',
+                  transform: message.mirrored ? 'scaleX(-1)' : 'none'
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   const video = e.currentTarget;
