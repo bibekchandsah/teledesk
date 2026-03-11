@@ -139,6 +139,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  // ─── Emoji suggestion state ───
+  const [emojiSuggestions, setEmojiSuggestions] = useState<{ id: string; native: string }[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggestionQuery, setSuggestionQuery] = useState('');
+
+  const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
+    // 1. Update the store (affects liveMsgs)
+    updateMessage(messageId, updates);
+    // 2. Update the local olderMessages state (affects olderFiltered portion of chatMessages)
+    setOlderMessages(prev => prev.map(m => m.messageId === messageId ? { ...m, ...updates } : m));
+  }, [updateMessage]);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -160,7 +172,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // Changes whenever any message's readBy or deliveredTo array grows (drives real-time tick updates)
   const readBySignature = liveMsgs.reduce((s, m) => s + (m.readBy?.length ?? 0) + (m.deliveredTo?.length ?? 0), 0);
   // Changes whenever any message's reactions object changes (keys or users array)
-  const reactionSignature = liveMsgs.reduce((s, m) => s + Object.values(m.reactions || {}).reduce((acc, users) => acc + users.length, 0), 0);
+  const reactionSignature = [...olderMessages, ...liveMsgs].reduce((s, m) => s + Object.values(m.reactions || {}).reduce((acc, users) => acc + users.length, 0), 0);
   
   const chatMessages = useMemo(() => {
     const olderFiltered = olderMessages.filter(
@@ -220,21 +232,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     const onReactionUpdated = (payload: { messageId: string; chatId: string; reactions: Record<string, string[]> }) => {
       if (payload.chatId !== chatId) return;
-      updateMessage(payload.messageId, { reactions: payload.reactions });
+      syncMessageUpdate(payload.messageId, { reactions: payload.reactions });
     };
 
     const onMessageDelivered = (payload: { chatId: string; messageId: string; userId: string }) => {
       if (payload.chatId !== chatId) return;
-      const current = messages[payload.chatId]?.find(m => m.messageId === payload.messageId)?.deliveredTo || [];
-      updateMessage(payload.messageId, {
+      const msg = chatMessages.find(m => m.messageId === payload.messageId);
+      const current = msg?.deliveredTo || [];
+      syncMessageUpdate(payload.messageId, {
         deliveredTo: Array.from(new Set([...current, payload.userId])),
       });
     };
 
     const onMessageRead = (payload: { chatId: string; messageId: string; userId: string }) => {
       if (payload.chatId !== chatId) return;
-      const current = messages[payload.chatId]?.find(m => m.messageId === payload.messageId)?.readBy || [];
-      updateMessage(payload.messageId, {
+      const msg = chatMessages.find(m => m.messageId === payload.messageId);
+      const current = msg?.readBy || [];
+      syncMessageUpdate(payload.messageId, {
         readBy: Array.from(new Set([...current, payload.userId])),
       });
     };
@@ -616,6 +630,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const value = e.target.value;
     setInputText(value);
 
+    // Emoji suggestion logic
+    const cursor = e.target.selectionStart;
+    const textBeforeCursor = value.slice(0, cursor);
+    const match = textBeforeCursor.match(/:([a-zA-Z0-9_]{1,})$/);
+    if (match) {
+      const query = match[1].toLowerCase();
+      setSuggestionQuery(query);
+      const filtered = Object.values((data as any).emojis)
+        .filter((emoji: any) => 
+          emoji.id.toLowerCase().includes(query) || 
+          emoji.keywords?.some((k: string) => k.toLowerCase().includes(query))
+        )
+        .slice(0, 8)
+        .map((emoji: any) => ({
+          id: emoji.id,
+          native: emoji.skins[0].native
+        }));
+      setEmojiSuggestions(filtered);
+      setSuggestionIndex(0);
+    } else {
+      setEmojiSuggestions([]);
+    }
+
     if (!chatId || !currentUser) return;
 
     sendTyping(chatId, true, currentUser.name);
@@ -789,6 +826,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   }, [forwardingMsgs, currentUser, addBookmark, getActiveChatName]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (emojiSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((prev) => (prev + 1) % emojiSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((prev) => (prev - 1 + emojiSuggestions.length) % emojiSuggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selectedEmoji = emojiSuggestions[suggestionIndex];
+        const cursor = e.currentTarget.selectionStart;
+        const textBefore = inputText.slice(0, cursor);
+        const textAfter = inputText.slice(cursor);
+        const newTextBefore = textBefore.replace(/:[a-zA-Z0-9_]{1,}$/, selectedEmoji.native);
+        setInputText(newTextBefore + textAfter);
+        setEmojiSuggestions([]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setEmojiSuggestions([]);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -820,8 +886,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         fileUrl: result.url,
         fileName: result.fileName,
         fileSize: result.fileSize,
-        senderName: currentUser.name,
-        senderAvatar: currentUser.avatar
+        senderName: currentUser?.name || 'Unknown',
+        senderAvatar: currentUser?.avatar || ''
       });
     } catch (err) {
       console.error('[Upload] Failed:', err);
@@ -990,14 +1056,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     async (messageId: string, newContent: string) => {
       if (!chatId) return;
       // Optimistic update
-      updateMessage(messageId, { content: newContent, isEdited: true });
+      syncMessageUpdate(messageId, { content: newContent, isEdited: true });
       try {
         await editMessageApi(chatId, messageId, newContent);
       } catch (err) {
         console.error('[editMessage] Failed:', err);
       }
     },
-    [chatId, updateMessage],
+    [chatId, syncMessageUpdate],
   );
   // ─── Start call ──────────────────────────────────────────────────────────
   const handleReact = (messageId: string, emoji: string) => {
@@ -1009,7 +1075,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const usersWithEmoji = reactions[emoji] || [];
     const hasReacted = usersWithEmoji.includes(currentUser.uid);
 
-    // Optimistic UI update
+    // Optimistic UI update using unified sync function
     const nextReactions = { ...reactions };
     if (hasReacted) {
       nextReactions[emoji] = usersWithEmoji.filter(id => id !== currentUser.uid);
@@ -1019,7 +1085,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       nextReactions[emoji] = [...usersWithEmoji, currentUser.uid];
       sendReaction(messageId, activeChat.chatId, emoji);
     }
-    updateMessage(messageId, { reactions: nextReactions });
+    syncMessageUpdate(messageId, { reactions: nextReactions });
   };
 
   const handleStartCall = async (callType: 'video' | 'voice') => {
@@ -1789,29 +1855,77 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         >
           <Paperclip size={20} />
         </button>
-        <textarea
-          ref={inputRef}
-          value={inputText}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Write a message..."
-          rows={1}
-          style={{
-            flex: 1,
-            padding: '10px 14px',
-            borderRadius: 20,
-            border: '1px solid var(--border)',
-            backgroundColor: 'var(--bg-tertiary)',
-            color: 'var(--text-primary)',
-            fontSize: 14,
-            outline: 'none',
-            resize: 'none',
-            maxHeight: 120,
-            overflowY: 'auto',
-            lineHeight: 1.5,
-            fontFamily: 'inherit',
-          }}
-        />
+        <div style={{ flex: 1, position: 'relative' }}>
+          {emojiSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 10px)',
+              left: 0,
+              width: 220,
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              zIndex: 100,
+              overflow: 'hidden',
+              padding: '4px'
+            }}>
+              {emojiSuggestions.map((emoji, idx) => (
+                <div
+                  key={emoji.id}
+                  onClick={() => {
+                    const cursor = inputRef.current?.selectionStart || 0;
+                    const textBefore = inputText.slice(0, cursor);
+                    const textAfter = inputText.slice(cursor);
+                    const newTextBefore = textBefore.replace(/:[a-zA-Z0-9_]{1,}$/, emoji.native);
+                    setInputText(newTextBefore + textAfter);
+                    setEmojiSuggestions([]);
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                  }}
+                  onMouseEnter={() => setSuggestionIndex(idx)}
+                  style={{
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    borderRadius: 8,
+                    backgroundColor: idx === suggestionIndex ? 'var(--accent)' : 'transparent',
+                    color: idx === suggestionIndex ? '#fff' : 'var(--text-primary)',
+                    transition: 'all 0.1s'
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>{emoji.native}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, opacity: idx === suggestionIndex ? 1 : 0.7 }}>:{emoji.id}:</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Write a message..."
+            rows={1}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: 20,
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              fontSize: 14,
+              outline: 'none',
+              resize: 'none',
+              maxHeight: 120,
+              overflowY: 'auto',
+              lineHeight: 1.5,
+              fontFamily: 'inherit',
+              display: 'block'
+            }}
+          />
+        </div>
         
         {/* Unified Media Picker */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>

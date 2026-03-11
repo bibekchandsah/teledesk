@@ -84,6 +84,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       if (!menuRef.current?.contains(e.target as Node)) {
         setCtxMenu(null);
         setAdjustedPos(null);
+        setShowExtended(false);
       }
     };
     document.addEventListener('mousedown', close);
@@ -112,7 +113,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     const x = Math.min(ctxMenu.x, vw - w - MARGIN);
     const y = Math.min(ctxMenu.y, vh - h - MARGIN);
     setAdjustedPos({ x: Math.max(MARGIN, x), y: Math.max(MARGIN, y) });
-  }, [ctxMenu]);
+  }, [ctxMenu, showExtended]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (!onDelete) return;
@@ -176,7 +177,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   const handleEmojiMartSelect = (emojiData: any) => {
-    handleEmojiClick(emojiData.native);
+    if (emojiData?.native) {
+      handleEmojiClick(emojiData.native);
+    }
   };
 
   const handleMouseEnterBubble = () => {
@@ -626,7 +629,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
     </div>
 
-    {/* ─── Right-click context menu ────────────────────────────────────── */}
     {ctxMenu && (
       <div
         ref={menuRef}
@@ -642,8 +644,82 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
           overflow: 'hidden',
           minWidth: 170,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
+        {/* ─ React option (Moved to Top) ─ */}
+        {!message.deleted && onReact && (
+          <>
+            <div style={{ padding: '8px 12px 6px', display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {PRESET_EMOJIS.map(em => (
+                  <button
+                    key={em}
+                    onClick={() => handleEmojiClick(em)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 20,
+                      lineHeight: 1,
+                      padding: '2px',
+                      borderRadius: '50%',
+                      transition: 'transform 0.1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowExtended(!showExtended);
+                }}
+                title="More reactions"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: showExtended ? 'var(--accent)' : 'var(--text-secondary)',
+                  borderRadius: '50%',
+                  transition: 'background-color 0.2s',
+                }}
+              >
+                <SmilePlus size={20} />
+              </button>
+            </div>
+            
+            {showExtended && (
+              <div style={{ padding: '0 8px 8px' }}>
+                <div style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: 12,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  overflow: 'hidden',
+                }}>
+                  <Picker 
+                    data={data} 
+                    onEmojiSelect={handleEmojiMartSelect} 
+                    theme="auto" 
+                    previewPosition="none"
+                    skinTonePosition="none"
+                    navPosition="bottom"
+                    width="100%"
+                  />
+                </div>
+              </div>
+            )}
+            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+          </>
+        )}
+
         {onCloseChat && (
           <>
             <button onClick={() => { setCtxMenu(null); onCloseChat(); }} style={menuItemStyle}>
@@ -660,33 +736,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
           </>
         )}
-        {/* ─ React option ─ */}
-        {!message.deleted && onReact && (
-          <>
-            <div style={{ padding: '6px 12px 4px', display: 'flex', gap: 6, alignItems: 'center' }}>
-              {PRESET_EMOJIS.map(em => (
-                <button
-                  key={em}
-                  onClick={() => handleEmojiClick(em)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 18,
-                    padding: '2px',
-                    borderRadius: '50%',
-                    transition: 'transform 0.1s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
-                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                >
-                  {em}
-                </button>
-              ))}
-            </div>
-            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
-          </>
-        )}
+        
         {isOwn && !message.deleted && message.type === 'text' && (
           <button onClick={handleStartEdit} style={menuItemStyle}>
             <Pencil size={14} style={{ marginRight: 6 }} />Edit message
