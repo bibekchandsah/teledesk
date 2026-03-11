@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 
 interface MessageBubbleProps {
@@ -27,7 +27,18 @@ interface MessageBubbleProps {
   isHighlighted?: boolean;
   currentUserShowMessageStatus?: boolean;
   otherUserShowMessageStatus?: boolean;
+  onReact?: (messageId: string, emoji: string) => void;
+  currentUserId?: string;
+  getUserName?: (uid: string) => string;
 }
+
+const PRESET_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '👎'];
+const EXTENDED_EMOJIS = [
+  '❤️','👍','😂','😮','😢','👎',
+  '🎉','🔥','👏','🤩','😍','🥺',
+  '😡','💯','✅','🙏','💪','👀',
+  '😎','🤔','😅','😭','🤣','💀',
+];
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
@@ -51,6 +62,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   isHighlighted = false,
   currentUserShowMessageStatus = true,
   otherUserShowMessageStatus = true,
+  onReact,
+  currentUserId,
+  getUserName,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -61,6 +75,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   // ─── Bookmark state ───────────────────────────────────────────────────────
   const { isBookmarked, addBookmark, removeBookmark } = useBookmarkStore();
   const bookmarked = isBookmarked(message.messageId);
+  // ─── Reaction bar state ───────────────────────────────────────────────────
+  const [showEmojiBar, setShowEmojiBar] = useState(false);
+  const [showExtended, setShowExtended] = useState(false);
+  const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
+  const emojiBarRef = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!ctxMenu) return;
     const close = (e: MouseEvent) => {
@@ -72,6 +93,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [ctxMenu]);
+
+  // Close extended emoji picker on outside click
+  useEffect(() => {
+    if (!showExtended) return;
+    const close = (e: MouseEvent) => {
+      if (!emojiBarRef.current?.contains(e.target as Node)) {
+        setShowExtended(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showExtended]);
 
   // Clamp the menu position so it never overflows the viewport
   useLayoutEffect(() => {
@@ -88,7 +121,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleContextMenu = (e: React.MouseEvent) => {
     if (!onDelete) return;
     e.preventDefault();
-    setAdjustedPos(null); // reset so menu starts invisible until clamped
+    setAdjustedPos(null);
     setCtxMenu({ x: e.clientX, y: e.clientY });
   };
 
@@ -138,8 +171,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setCtxMenu(null);
     if (!message.deleted) onPin?.(message, isPinned ? 'unpin' : 'pin');
   };
+
+  const handleEmojiClick = (emoji: string) => {
+    setShowEmojiBar(false);
+    setShowExtended(false);
+    setCtxMenu(null);
+    onReact?.(message.messageId, emoji);
+  };
+
+  const handleMouseEnterBubble = () => {
+    if (message.deleted) return;
+    hoverTimerRef.current = setTimeout(() => setShowEmojiBar(true), 150);
+  };
+
+  const handleMouseLeaveBubble = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    // Small delay so user can move mouse from bubble to emoji bar
+    setTimeout(() => {
+      if (!emojiBarRef.current?.matches(':hover')) {
+        setShowEmojiBar(false);
+        setShowExtended(false);
+      }
+    }, 120);
+  };
+
+  const reactions = message.reactions ?? {};
+  const reactionEntries = Object.entries(reactions).filter(([, users]) => users.length > 0);
+
   const renderContent = () => {
-    // Deleted for everyone — show placeholder
     if (message.deleted) {
       return (
         <p style={{ margin: 0, fontStyle: 'italic', opacity: 0.6, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -148,9 +207,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       );
     }
 
-    // Call message
     if (message.type === 'call') {
-      // Caller (isOwn) sees callStatus; receiver sees callStatusReceiver (falls back to callStatus)
       const viewerStatus = isOwn
         ? message.callStatus
         : (message.callStatusReceiver ?? message.callStatus);
@@ -172,7 +229,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       } else if (viewerStatus === 'declined') {
         label = `${typeName} call declined`;
       } else {
-        // cancelled
         label = `${typeName} call cancelled`;
       }
 
@@ -192,7 +248,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               <div style={{ fontSize: 12, opacity: 0.7 }}>{dStr}</div>
             )}
           </div>
-
         </div>
       );
     }
@@ -270,22 +325,144 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         flexDirection: isOwn ? 'row-reverse' : 'row',
         alignItems: 'flex-end',
         gap: 8,
-        marginBottom: 4,
+        marginBottom: reactionEntries.length > 0 ? 8 : 4,
         padding: '0 16px',
+        position: 'relative',
       }}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
+      onMouseEnter={handleMouseEnterBubble}
+      onMouseLeave={handleMouseLeaveBubble}
     >
       {!isOwn && showSender && (
         <UserAvatar name={senderName || 'User'} avatar={senderAvatar} size={28} />
       )}
 
-      <div style={{ maxWidth: '65%' }}>
+      <div style={{ maxWidth: '65%', position: 'relative' }}>
         {showSender && !isOwn && senderName && (
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', marginBottom: 2, paddingLeft: 2 }}>
             {senderName}
           </div>
         )}
+
+        {/* ─── Hovering Emoji Quick-Bar ──────────────────────────────────── */}
+        {showEmojiBar && !message.deleted && onReact && (
+          <div
+            ref={emojiBarRef}
+            onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); }}
+            style={{
+              position: 'absolute',
+              [isOwn ? 'right' : 'left']: 0,
+              bottom: '100%',
+              marginBottom: 6,
+              zIndex: 200,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: isOwn ? 'flex-end' : 'flex-start',
+              gap: 4,
+              animation: 'reactionBarSlideUp 0.15s ease-out',
+            }}
+          >
+            {/* Extended emoji grid */}
+            {showExtended && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 1fr)',
+                gap: 4,
+                padding: '8px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(12px)',
+              }}>
+                {EXTENDED_EMOJIS.map(em => {
+                  const alreadyReacted = (reactions[em] ?? []).includes(currentUserId ?? '');
+                  return (
+                    <button
+                      key={em}
+                      onClick={() => handleEmojiClick(em)}
+                      title={em}
+                      style={{
+                        background: alreadyReacted ? 'rgba(var(--accent-rgb,99,102,241),0.2)' : 'none',
+                        border: alreadyReacted ? '1px solid var(--accent)' : '1px solid transparent',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        padding: '4px',
+                        fontSize: 20,
+                        lineHeight: 1,
+                        transition: 'transform 0.1s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
+                      onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                    >
+                      {em}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Quick preset bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              padding: '4px 8px',
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 24,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+              backdropFilter: 'blur(12px)',
+            }}>
+              {PRESET_EMOJIS.map(em => {
+                const alreadyReacted = (reactions[em] ?? []).includes(currentUserId ?? '');
+                return (
+                  <button
+                    key={em}
+                    onClick={() => handleEmojiClick(em)}
+                    title={em}
+                    style={{
+                      background: alreadyReacted ? 'rgba(var(--accent-rgb,99,102,241),0.15)' : 'none',
+                      border: 'none',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      fontSize: 20,
+                      lineHeight: 1,
+                      transition: 'transform 0.12s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    {em}
+                  </button>
+                );
+              })}
+              {/* More emojis button */}
+              <button
+                onClick={() => setShowExtended(v => !v)}
+                title="More reactions"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  padding: '4px 6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--text-secondary, #aaa)',
+                  transition: 'transform 0.12s, color 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary, #aaa)'; }}
+              >
+                <SmilePlus size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+
         <div
           className={`message-bubble ${isOwn ? 'bubble-own' : 'bubble-other'}`}
           style={{
@@ -380,6 +557,83 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
           </div>
         </div>
+
+        {/* ─── Reaction Pill Badges ──────────────────────────────────────── */}
+        {reactionEntries.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 4,
+              marginTop: 4,
+              justifyContent: isOwn ? 'flex-end' : 'flex-start',
+            }}
+          >
+            {reactionEntries.map(([emoji, users]) => {
+              const iMine = currentUserId ? users.includes(currentUserId) : false;
+              const isHovered = tooltipEmoji === emoji;
+              const names = getUserName
+                ? users.map(id => getUserName(id)).filter(Boolean).join(', ')
+                : `${users.length} ${users.length === 1 ? 'person' : 'people'}`;
+              return (
+                <div key={emoji} style={{ position: 'relative', display: 'inline-flex' }}>
+                  {/* Tooltip */}
+                  {isHovered && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '110%',
+                      [isOwn ? 'right' : 'left']: 0,
+                      backgroundColor: 'rgba(0,0,0,0.85)',
+                      color: '#fff',
+                      fontSize: 11,
+                      padding: '4px 8px',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none',
+                      zIndex: 300,
+                      backdropFilter: 'blur(4px)',
+                      maxWidth: 200,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {names}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => onReact?.(message.messageId, emoji)}
+                    onMouseEnter={() => setTooltipEmoji(emoji)}
+                    onMouseLeave={() => setTooltipEmoji(null)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      border: iMine
+                        ? '1.5px solid var(--accent)'
+                        : '1.5px solid var(--border, rgba(255,255,255,0.12))',
+                      backgroundColor: iMine
+                        ? 'rgba(var(--accent-rgb,99,102,241),0.15)'
+                        : 'var(--bg-secondary)',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: iMine ? 600 : 400,
+                      color: 'var(--text-primary)',
+                      transition: 'transform 0.12s, background-color 0.12s',
+                      lineHeight: 1.4,
+                      animation: 'reactionPop 0.2s ease-out',
+                    }}
+                    onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.92)')}
+                    onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    <span style={{ fontSize: 15 }}>{emoji}</span>
+                    <span style={{ fontSize: 12, opacity: 0.9 }}>{users.length}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
 
@@ -414,6 +668,33 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             <button onClick={() => { setCtxMenu(null); onEnterSelect(message.messageId); }} style={menuItemStyle}>
               <CheckSquare size={14} style={{ marginRight: 6 }} />Select
             </button>
+            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
+          </>
+        )}
+        {/* ─ React option ─ */}
+        {!message.deleted && onReact && (
+          <>
+            <div style={{ padding: '6px 12px 4px', display: 'flex', gap: 6, alignItems: 'center' }}>
+              {PRESET_EMOJIS.map(em => (
+                <button
+                  key={em}
+                  onClick={() => handleEmojiClick(em)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 18,
+                    padding: '2px',
+                    borderRadius: '50%',
+                    transition: 'transform 0.1s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
             <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
           </>
         )}
@@ -461,6 +742,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
       </div>
     )}
+
+    {/* ─── Reaction animation keyframes ─────────────────────────────────── */}
+    <style>{`
+      @keyframes reactionBarSlideUp {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes reactionPop {
+        0%   { transform: scale(0.6); opacity: 0; }
+        70%  { transform: scale(1.15); }
+        100% { transform: scale(1);   opacity: 1; }
+      }
+    `}</style>
     </>
   );
 };

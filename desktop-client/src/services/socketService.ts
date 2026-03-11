@@ -104,6 +104,14 @@ export const sendReadReceipt = (chatId: string, messageId: string): void => {
   socket?.emit(SOCKET_EVENTS.MESSAGE_READ, { chatId, messageId });
 };
 
+export const sendReaction = (messageId: string, chatId: string, emoji: string): void => {
+  socket?.emit(SOCKET_EVENTS.REACTION_ADDED, { messageId, chatId, emoji });
+};
+
+export const removeReaction = (messageId: string, chatId: string, emoji: string): void => {
+  socket?.emit(SOCKET_EVENTS.REACTION_REMOVED, { messageId, chatId, emoji });
+};
+
 // ─── Call Signaling ────────────────────────────────────────────────────────
 export const callUser = (payload: {
   targetUserId: string;

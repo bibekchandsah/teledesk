@@ -526,8 +526,99 @@ react messaages
     When the user selects an emoji, it adds that reaction to the message in the backend and updates the UI to show the reaction count below the message (e.g. "😀 3")
     ❤️👍😊😂🥲👏🔥🙏🤔👌
 
+    Key Features:
+    ✅ Hover over messages shows reaction button (smiley face icon)
+    ✅ Click opens emoji picker with popular emojis (❤️👍😊😂🥲👏🔥🙏🤔👌)
+    ✅ Support for custom emojis through full emoji picker
+    ✅ Reaction counts displayed below messages
+    ✅ Click reactions to add/remove your own reactions
+    ✅ Real-time updates across all connected clients
+    ✅ Optimistic UI updates with error rollback
+    Shows the 10 most popular emojis you requested (❤️👍😊😂🥲👏🔥🙏🤔👌)
+    Has a "More emojis..." button that allows custom emoji input
+    Uses native browser emojis so it's lightweight and compatible
+    Maintains the same API as the original component
+
+    2-Second Hover → Shows horizontal emoji bar with 40+ emojis
+        Pill-shaped design appears above message
+        Horizontal scroll with mouse wheel
+        Includes "+" button for full picker
+    Right-Click → Quick emoji picker with 6 popular emojis
+        Shows: ❤️👍😊😂🔥👏 + "+" button
+        Compact circular design
+        Shift+Right-click for normal context menu
+    "+" Button → Full categorized emoji picker
+        150+ emojis in 5 categories
+        Professional organization
+        Scrollable interface
+    Removed the old hover button - no more smiley icon on hover
+    2-second hover delay - prevents accidental triggers
+    Horizontal scrolling - mouse wheel scrolls emojis horizontally
+    Smart positioning - all pickers stay within viewport
+    Categorized emojis - organized by type for easy browsing
+    Fallback access - Shift+Right-click for normal context menu
+
+    Pill-Shaped Design:
+        Dark glassmorphism background (bg-gray-800/95 backdrop-blur-sm)
+        Rounded-full shape with subtle borders
+        Enhanced shadows for depth
+    Horizontal Layout:
+        Single row of emojis (no more grid)
+        Proper spacing between emoji buttons
+        Clean separator line before "+" button
+    Better Positioning:
+        Hover bar appears closer to message bubble
+        Improved centering and viewport detection
+        More natural positioning
+    Enhanced Interactions:
+        Larger emoji buttons (40px × 40px)
+        Scale animations on hover (110%)
+        Smooth transitions and glow effects
+    Consistent Styling:
+        Both hover bar and right-click picker use same design
+        Modern glassmorphism throughout
+        Professional dark theme
+    
+    Fixed Styling Issues:
+        Replaced Tailwind Classes with inline styles to ensure compatibility
+        Pill-Shaped Design with proper rounded borders (borderRadius: '50px')
+        Glassmorphism Effect using rgba colors and backdropFilter: 'blur(8px)'
+        Proper Shadows with multiple shadow layers for depth
+        Hover Effects with inline event handlers for scale and background changes
+    Key Visual Features:
+        Dark Semi-Transparent Background: rgba(31, 41, 55, 0.95)
+        Blur Effect: backdropFilter: 'blur(8px)'
+        Rounded Pill Shape: borderRadius: '50px'
+        Subtle Border: rgba(75, 85, 99, 0.5)
+        Enhanced Shadows: Multiple shadow layers for depth
+        Smooth Animations: 150ms transitions with scale effects
+        Larger Emoji Buttons: 40px × 40px for better touch targets
+    
+    ✅ Hover Bar (2-second hover):
+        Fewer Emojis: Reduced from 20 to 7 popular emojis (❤️👍😊😂🔥👏🙏)
+        Smaller Buttons: 32px × 32px (down from 40px × 40px)
+        Smaller Font: 16px emoji size (down from 20px)
+        Reduced Padding: 6px 12px (down from 8px 16px)
+        Smaller Gap: 4px between emojis (down from 8px)
+        Max Width: 200px (down from 320px)
+    ✅ Right-Click Quick Picker:
+        Same Size Reductions: Consistent with hover bar
+        Compact Layout: Tighter spacing and margins
+        Smaller Separator: 20px height (down from 24px)
+    ✅ Better Proportions:
+        Reduced Shadow: Less dramatic shadow for subtlety
+        Tighter Margins: Better integration with message bubbles
+        Viewport Aware: Smarter positioning calculations
+    The emoji bars should now appear much more compact and proportional to your message text, similar to the reference image you showed where they appear as a neat, small horizontal pill above the message!
+
 lock chat for specific user
-set app lock & if forgot enter registered email and verify it with link to get code
+    for first time it ask to set pin (6 digit) and store it in database so that it can be used across the device
+    when user set pin then selected chat is moved to lock chat
+    when user click on lock icon on nav bar or for smaller devices show lock icon above archieve 
+    while opening lock chat folder it ask pin and checks whether it matches with database
+    if matched then open or show wrong pin and also show forgot option so that user can enter 6 digit code which has received in their account created email and user will set new pin .
+set app lock & if forgot enter registered email and verify it with 6 digit code
+
 allow multiple account to login and switch between them without logout
 show logged in devices and allow user to logout from specific device
 check network connection status (

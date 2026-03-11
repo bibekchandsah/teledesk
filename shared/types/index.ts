@@ -66,6 +66,7 @@ export interface Message {
   callDuration?: number;         // seconds, 0 = missed/cancelled
   callStatus?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined'; // sender's view
   callStatusReceiver?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined'; // receiver's view
+  reactions?: Record<string, string[]>; // emoji → array of userIds who reacted
 }
 
 // Saved Messages / Bookmarks (stored per-user, synced across devices)

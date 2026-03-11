@@ -127,3 +127,7 @@ end $$;
 -- Create index
 create index if not exists users_username_idx on public.users (username);
 alter table public.messages add column if not exists delivered_to text[] not null default '{}';
+
+-- ─── Message Reactions ────────────────────────────────────────────────────────
+-- Stores per-message reactions as { "emoji": ["uid1", "uid2", ...] }
+alter table public.messages add column if not exists reactions jsonb not null default '{}';

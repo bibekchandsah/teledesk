@@ -60,6 +60,11 @@ export const SOCKET_EVENTS = {
   // Saved Messages / Bookmarks sync (per-user)
   SAVED_MESSAGE_UPDATED: 'saved_message_updated',
 
+  // Message reactions (Telegram-style)
+  REACTION_ADDED:   'reaction_added',    // client → server: { messageId, chatId, emoji }
+  REACTION_REMOVED: 'reaction_removed',  // client → server: { messageId, chatId, emoji }
+  REACTION_UPDATED: 'reaction_updated',  // server → client: { messageId, chatId, reactions }
+
   // Device session management
   SESSION_REVOKED: 'session_revoked',
   FORCE_LOGOUT: 'force_logout',

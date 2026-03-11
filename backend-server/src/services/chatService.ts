@@ -49,6 +49,7 @@ type MessageRow = {
   call_status: string | null;
   call_status_receiver: string | null;
   delivered_to: string[];
+  reactions: Record<string, string[]> | null;
 };
 
 const rowToMessage = (r: MessageRow): Message => ({
@@ -75,6 +76,7 @@ const rowToMessage = (r: MessageRow): Message => ({
   ...(r.call_duration !== null && { callDuration: r.call_duration }),
   ...(r.call_status !== null && { callStatus: r.call_status as Message['callStatus'] }),
   ...(r.call_status_receiver !== null && { callStatusReceiver: r.call_status_receiver as Message['callStatusReceiver'] }),
+  reactions: r.reactions ?? {},
 });
 
 
@@ -187,6 +189,7 @@ export const saveMessage = async (message: Message): Promise<Message> => {
     call_duration: message.callDuration ?? null,
     call_status: message.callStatus ?? null,
     call_status_receiver: message.callStatusReceiver ?? null,
+    reactions: message.reactions ?? {},
   });
   if (msgErr) throw new Error(msgErr.message);
 
@@ -446,4 +449,67 @@ export const unpinMessage = async (
   await supabase.from('chats').update({ pinned_message_ids: updated }).eq('chat_id', chatId);
   logger.info(`Message ${messageId} unpinned in chat ${chatId} by ${uid}`);
   return { pinnedMessageIds: updated, members: chat.members };
+};
+
+// ─── Message Reactions ────────────────────────────────────────────────────
+
+export const addReaction = async (
+  messageId: string,
+  emoji: string,
+  uid: string,
+): Promise<{ chatId: string; members: string[]; reactions: Record<string, string[]> } | null> => {
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('chat_id, reactions')
+    .eq('message_id', messageId)
+    .single();
+  if (!msgData) return null;
+
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('members')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+  if (!chatData || !(chatData.members as string[]).includes(uid)) return null;
+
+  const reactions: Record<string, string[]> = (msgData.reactions as Record<string, string[]>) ?? {};
+  const current = reactions[emoji] ?? [];
+  if (current.includes(uid)) return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
+
+  reactions[emoji] = [...current, uid];
+  await supabase.from('messages').update({ reactions }).eq('message_id', messageId);
+  logger.info(`Reaction ${emoji} added to ${messageId} by ${uid}`);
+  return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
+};
+
+export const removeReaction = async (
+  messageId: string,
+  emoji: string,
+  uid: string,
+): Promise<{ chatId: string; members: string[]; reactions: Record<string, string[]> } | null> => {
+  const { data: msgData } = await supabase
+    .from('messages')
+    .select('chat_id, reactions')
+    .eq('message_id', messageId)
+    .single();
+  if (!msgData) return null;
+
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('members')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+  if (!chatData || !(chatData.members as string[]).includes(uid)) return null;
+
+  const reactions: Record<string, string[]> = (msgData.reactions as Record<string, string[]>) ?? {};
+  const current = reactions[emoji] ?? [];
+  const filtered = current.filter((id) => id !== uid);
+  if (filtered.length === 0) {
+    delete reactions[emoji];
+  } else {
+    reactions[emoji] = filtered;
+  }
+  await supabase.from('messages').update({ reactions }).eq('message_id', messageId);
+  logger.info(`Reaction ${emoji} removed from ${messageId} by ${uid}`);
+  return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
 };

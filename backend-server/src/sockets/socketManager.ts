@@ -2,7 +2,7 @@ import { Server as SocketServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { authenticateSocket } from '../middleware/authMiddleware';
 import { updatePresence, getUserById, updateActiveStatusSetting } from '../services/userService';
-import { saveMessage, getChatById, markMessageDelivered, getUndeliveredMessagesForUser } from '../services/chatService';
+import { saveMessage, getChatById, markMessageDelivered, getUndeliveredMessagesForUser, addReaction, removeReaction } from '../services/chatService';
 import { Message } from '../../../shared/types';
 import { generateId, now, sanitizeString, extractClientIP } from '../utils/helpers';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
@@ -471,6 +471,35 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       }).catch(() => {});
       // Notify all other connected clients so they can update their UI in real-time
       socket.broadcast.emit(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, { userId: uid, showMessageStatus: newVal });
+    });
+
+    // ─── Message Reactions ─────────────────────────────────────────────────
+    socket.on(SOCKET_EVENTS.REACTION_ADDED, async (payload: { messageId: string; chatId: string; emoji: string }) => {
+      try {
+        const result = await addReaction(payload.messageId, payload.emoji, uid);
+        if (!result) return;
+        const update = { messageId: payload.messageId, chatId: payload.chatId, reactions: result.reactions };
+        io.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
+        for (const memberId of result.members) {
+          io.to(`user:${memberId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
+        }
+      } catch (err) {
+        logger.error(`reaction_added error: ${(err as Error).message}`);
+      }
+    });
+
+    socket.on(SOCKET_EVENTS.REACTION_REMOVED, async (payload: { messageId: string; chatId: string; emoji: string }) => {
+      try {
+        const result = await removeReaction(payload.messageId, payload.emoji, uid);
+        if (!result) return;
+        const update = { messageId: payload.messageId, chatId: payload.chatId, reactions: result.reactions };
+        io.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
+        for (const memberId of result.members) {
+          io.to(`user:${memberId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
+        }
+      } catch (err) {
+        logger.error(`reaction_removed error: ${(err as Error).message}`);
+      }
     });
 
     // ─── Heartbeat ─────────────────────────────────────────────────────────

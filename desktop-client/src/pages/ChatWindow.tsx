@@ -11,7 +11,7 @@ import MessageBubble from '../components/MessageBubble';
 import TypingIndicator from '../components/TypingIndicator';
 import UserAvatar from '../components/UserAvatar';
 import { listenToMessages } from '../services/firebaseService';
-import { sendMessage, sendTyping, sendLiveTyping, sendReadReceipt, joinChatRoom, leaveChatRoom } from '../services/socketService';
+import { sendMessage, sendTyping, sendLiveTyping, sendReadReceipt, joinChatRoom, leaveChatRoom, sendReaction, removeReaction, getSocket } from '../services/socketService';
 import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../services/fileService';
 import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi } from '../services/apiService';
 import { Message } from '@shared/types';
@@ -138,13 +138,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const editedSignature = liveMsgs.reduce((s, m) => m.isEdited ? s + (m.content?.length ?? 0) : s, 0);
   // Changes whenever any message's readBy or deliveredTo array grows (drives real-time tick updates)
   const readBySignature = liveMsgs.reduce((s, m) => s + (m.readBy?.length ?? 0) + (m.deliveredTo?.length ?? 0), 0);
+  // Changes whenever any message's reactions object changes (keys or users array)
+  const reactionSignature = liveMsgs.reduce((s, m) => s + Object.values(m.reactions || {}).reduce((acc, users) => acc + users.length, 0), 0);
+  
   const chatMessages = useMemo(() => {
     const olderFiltered = olderMessages.filter(
       (o) => !liveMsgs.some((l) => l.messageId === o.messageId),
     );
     return [...olderFiltered, ...liveMsgs];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [olderMessages, liveMsgs.length, deletedCount, editedSignature, readBySignature, chatId]);
+  }, [olderMessages, liveMsgs.length, deletedCount, editedSignature, readBySignature, reactionSignature, chatId]);
 
   const typingList = typingUsers[chatId!] || [];
   const liveTexts = liveTypingTexts?.[chatId!] || [];
@@ -182,11 +185,49 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (searchMatchIndices.length === 0) return;
     const targetIdx = searchMatchIndices[searchMatchIdx];
     const el = scrollContainerRef.current;
-    if (!el) return;
-    // Find the nth message element by data-msg-idx attribute
-    const target = el.querySelector<HTMLElement>(`[data-msg-idx="${targetIdx}"]`);
-    if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (el) {
+      const target = el.querySelector<HTMLElement>(`[data-msg-idx="${targetIdx}"]`);
+      if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   }, [searchMatchIdx, searchMatchIndices]);
+
+  // ─── Socket Event Listeners ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!chatId) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onReactionUpdated = (payload: { messageId: string; chatId: string; reactions: Record<string, string[]> }) => {
+      if (payload.chatId !== chatId) return;
+      updateMessage(payload.messageId, { reactions: payload.reactions });
+    };
+
+    const onMessageDelivered = (payload: { chatId: string; messageId: string; userId: string }) => {
+      if (payload.chatId !== chatId) return;
+      const current = messages[payload.chatId]?.find(m => m.messageId === payload.messageId)?.deliveredTo || [];
+      updateMessage(payload.messageId, {
+        deliveredTo: Array.from(new Set([...current, payload.userId])),
+      });
+    };
+
+    const onMessageRead = (payload: { chatId: string; messageId: string; userId: string }) => {
+      if (payload.chatId !== chatId) return;
+      const current = messages[payload.chatId]?.find(m => m.messageId === payload.messageId)?.readBy || [];
+      updateMessage(payload.messageId, {
+        readBy: Array.from(new Set([...current, payload.userId])),
+      });
+    };
+
+    socket.on('reaction_updated', onReactionUpdated);
+    socket.on('message_delivered', onMessageDelivered);
+    socket.on('message_read_receipt', onMessageRead);
+
+    return () => {
+      socket.off('reaction_updated', onReactionUpdated);
+      socket.off('message_delivered', onMessageDelivered);
+      socket.off('message_read_receipt', onMessageRead);
+    };
+  }, [chatId, updateMessage, messages]);
 
   const handleSearchPrev = () => {
     if (searchMatchIndices.length === 0) return;
@@ -757,11 +798,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     [chatId, updateMessage],
   );
   // ─── Start call ──────────────────────────────────────────────────────────
-  const handleStartCall = async (type: 'video' | 'voice') => {
+  const handleReact = (messageId: string, emoji: string) => {
+    if (!activeChat || !currentUser) return;
+    const msg = chatMessages.find(m => m.messageId === messageId);
+    if (!msg) return;
+
+    const reactions = msg.reactions || {};
+    const usersWithEmoji = reactions[emoji] || [];
+    const hasReacted = usersWithEmoji.includes(currentUser.uid);
+
+    // Optimistic UI update
+    const nextReactions = { ...reactions };
+    if (hasReacted) {
+      nextReactions[emoji] = usersWithEmoji.filter(id => id !== currentUser.uid);
+      if (nextReactions[emoji].length === 0) delete nextReactions[emoji];
+      removeReaction(messageId, activeChat.chatId, emoji);
+    } else {
+      nextReactions[emoji] = [...usersWithEmoji, currentUser.uid];
+      sendReaction(messageId, activeChat.chatId, emoji);
+    }
+    updateMessage(messageId, { reactions: nextReactions });
+  };
+
+  const handleStartCall = async (callType: 'video' | 'voice') => {
     if (!peer) return;
     // In Electron mode the call window captures its own stream; no pre-capture needed.
     // In non-Electron fallback the stream is captured inside startCall() itself.
-    startCall(peer.uid, peer.profile?.name || 'User', type, peer.profile?.avatar);
+    startCall(peer.uid, peer.profile?.name || 'User', callType, peer.profile?.avatar);
   };
 
   if (!activeChat) {
@@ -1323,6 +1386,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       : msg.senderId;
                     return otherUserId ? userProfiles[otherUserId]?.showMessageStatus !== false : true;
                   })()}
+                  onReact={selectionMode ? undefined : handleReact}
+                  currentUserId={currentUser?.uid}
+                  getUserName={(uid: string) => uid === currentUser?.uid ? 'You' : (userProfiles[uid]?.name || 'Unknown')}
                 />
                 </div>
               </div>
