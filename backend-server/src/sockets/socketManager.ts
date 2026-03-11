@@ -482,6 +482,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           messageId: payload.messageId, 
           chatId: payload.chatId, 
           reactions: result.reactions,
+          readBy: result.readBy,
           reactorId: uid,
           emoji: payload.emoji,
           senderId: result.senderId

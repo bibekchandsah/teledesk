@@ -104,6 +104,9 @@ const AppInner: React.FC = () => {
     const uid = currentUser?.uid;
     if (!uid) return;
     useBookmarkStore.getState().initializeForUser(uid).catch(() => {});
+    
+    // Request notification permission
+    import('./services/notificationService').then(m => m.requestNotificationPermission());
   }, [isAuthenticated, currentUser?.uid]);
 
   // ─── Popup window mode (bypass loading screen — auth resolves inside) ────

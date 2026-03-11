@@ -202,21 +202,27 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       messageId: string; 
       chatId: string; 
       reactions: Record<string, string[]>;
+      readBy?: string[];
       reactorId?: string;
       emoji?: string;
       senderId?: string;
     }) => {
-      updateMessage(payload.messageId, { reactions: payload.reactions });
+      updateMessage(payload.messageId, { 
+        reactions: payload.reactions,
+        ...(payload.readBy && { readBy: payload.readBy })
+      });
 
-      // Only notify if someone else reacted to current user's message
-      if (payload.reactorId && payload.reactorId !== currentUser.uid && payload.senderId === currentUser.uid) {
-        const reactorName = nicknames[payload.reactorId] || 'Someone';
+      // Window is minimized/hidden or the reaction is for a different chat
+      const windowHidden = document.hidden || !document.hasFocus();
+      const differentChat = activeChatRef.current?.chatId !== payload.chatId;
+
+      // Increment unread if someone else reacted and user is not looking at it
+      if (payload.reactorId && payload.reactorId !== currentUser.uid && (differentChat || windowHidden)) {
+        incrementUnread(payload.chatId);
         
-        // Window is minimized/hidden or the reaction is for a different chat
-        const windowHidden = document.hidden || !document.hasFocus();
-        const differentChat = activeChatRef.current?.chatId !== payload.chatId;
-
-        if (differentChat || windowHidden) {
+        // Only show notification if someone else reacted to current user's message
+        if (payload.senderId === currentUser.uid) {
+          const reactorName = nicknames[payload.reactorId] || 'Someone';
           showNotification({
             title: 'Message Reaction',
             body: `${reactorName} reacted ${payload.emoji} to your message`,
@@ -287,7 +293,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
       socket.off(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
     };
-  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate]);
+  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
 
   // ─── Notification reply (Electron only) ──────────────────────────────────
   useEffect(() => {

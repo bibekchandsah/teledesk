@@ -457,10 +457,10 @@ export const addReaction = async (
   messageId: string,
   emoji: string,
   uid: string,
-): Promise<{ chatId: string; senderId: string; members: string[]; reactions: Record<string, string[]> } | null> => {
+): Promise<{ chatId: string; senderId: string; members: string[]; reactions: Record<string, string[]>; readBy: string[] } | null> => {
   const { data: msgData } = await supabase
     .from('messages')
-    .select('chat_id, reactions, sender_id')
+    .select('chat_id, reactions, sender_id, read_by')
     .eq('message_id', messageId)
     .single();
   if (!msgData) return null;
@@ -480,17 +480,36 @@ export const addReaction = async (
       senderId: msgData.sender_id as string,
       members: chatData.members as string[],
       reactions,
+      readBy: msgData.read_by ?? [],
     };
   }
 
   reactions[emoji] = [...current, uid];
-  await supabase.from('messages').update({ reactions }).eq('message_id', messageId);
+  const updatedReadBy = [uid];
+  await supabase.from('messages').update({ reactions, read_by: updatedReadBy }).eq('message_id', messageId);
+
+  // Update chat's last_message if this is the last message
+  const { data: lastMsgChat } = await supabase
+    .from('chats')
+    .select('last_message')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+
+  if (lastMsgChat?.last_message?.messageId === messageId) {
+    const updatedLastMsg = { ...lastMsgChat.last_message, reactions, readBy: updatedReadBy };
+    await supabase
+      .from('chats')
+      .update({ last_message: updatedLastMsg })
+      .eq('chat_id', msgData.chat_id);
+  }
+
   logger.info(`Reaction ${emoji} added to ${messageId} by ${uid}`);
   return {
     chatId: msgData.chat_id as string,
     senderId: msgData.sender_id as string,
     members: chatData.members as string[],
     reactions,
+    readBy: updatedReadBy,
   };
 };
 
@@ -522,6 +541,22 @@ export const removeReaction = async (
     reactions[emoji] = filtered;
   }
   await supabase.from('messages').update({ reactions }).eq('message_id', messageId);
+
+  // Update chat's last_message if this is the last message
+  const { data: lastMsgChat } = await supabase
+    .from('chats')
+    .select('last_message')
+    .eq('chat_id', msgData.chat_id)
+    .single();
+
+  if (lastMsgChat?.last_message?.messageId === messageId) {
+    const updatedLastMsg = { ...lastMsgChat.last_message, reactions };
+    await supabase
+      .from('chats')
+      .update({ last_message: updatedLastMsg })
+      .eq('chat_id', msgData.chat_id);
+  }
+
   logger.info(`Reaction ${emoji} removed from ${messageId} by ${uid}`);
   return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
 };
