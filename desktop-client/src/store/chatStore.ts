@@ -46,7 +46,7 @@ interface ChatState {
   setUserShowMessageStatus: (userId: string, showMessageStatus: boolean) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
-  updateChatLastMessage: (message: Message) => void;
+  updateChatLastMessage: (message: Message, lastMessageAt?: string) => void;
   removeChat: (chatId: string) => void;
   removeMessage: (chatId: string, messageId: string) => void;
   markMessageDeleted: (chatId: string, messageId: string) => void;
@@ -260,11 +260,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { unreadCounts: updated };
     }),
 
-  updateChatLastMessage: (message) =>
+  updateChatLastMessage: (message: Message, lastMessageAt?: string) =>
     set((state) => ({
       chats: state.chats.map((c) =>
         c.chatId === message.chatId
-          ? { ...c, lastMessage: message, lastMessageAt: message.timestamp }
+          ? { ...c, lastMessage: message, lastMessageAt: lastMessageAt || message.timestamp }
           : c,
       ),
     })),

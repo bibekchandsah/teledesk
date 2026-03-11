@@ -464,6 +464,7 @@ export const addReaction = async (
   reactions: Record<string, string[]>; 
   readBy: string[];
   content: string;
+  timestamp: string;
 } | null> => {
   const { data: msgData } = await supabase
     .from('messages')
@@ -489,6 +490,7 @@ export const addReaction = async (
       reactions,
       readBy: msgData.read_by ?? [],
       content: msgData.content,
+      timestamp: msgData.timestamp,
     };
   }
 
@@ -523,6 +525,7 @@ export const addReaction = async (
     reactions,
     readBy: updatedReadBy,
     content: msgData.content,
+    timestamp: msgData.timestamp,
   };
 };
 

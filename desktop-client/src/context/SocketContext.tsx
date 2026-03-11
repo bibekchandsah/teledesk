@@ -206,14 +206,31 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reactorId?: string;
       reactorName?: string;
       reactorUsername?: string;
+      reactorAvatar?: string;
       emoji?: string;
       senderId?: string;
       content?: string;
+      timestamp?: string;
     }) => {
-      updateMessage(payload.messageId, { 
+      const updates = { 
         reactions: payload.reactions,
         ...(payload.readBy && { readBy: payload.readBy })
-      });
+      };
+      updateMessage(payload.messageId, updates);
+
+      // Explicitly update chat's last message to "bump" it in the sidebar
+      if (payload.content) {
+        updateChatLastMessage({
+          messageId: payload.messageId,
+          chatId: payload.chatId,
+          content: payload.content,
+          senderId: payload.senderId || '',
+          timestamp: payload.timestamp || new Date().toISOString(),
+          reactions: payload.reactions,
+          readBy: payload.readBy || [],
+          type: 'text' // fallback, most are text or image which both have content
+        } as Message, new Date().toISOString());
+      }
 
       // Window is minimized/hidden or the reaction is for a different chat
       const windowHidden = document.hidden || !document.hasFocus();
@@ -232,6 +249,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           showNotification({
             title: 'Message Reaction',
             body: `${reactorLabel} reacted ${payload.emoji} to: "${contentSnippet}"`,
+            icon: payload.reactorAvatar,
             chatId: payload.chatId,
           });
         }

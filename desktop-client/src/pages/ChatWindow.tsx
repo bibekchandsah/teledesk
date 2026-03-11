@@ -20,11 +20,13 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
+import data from '@emoji-mart/data';
+import Picker from '@emoji-mart/react';
+
 interface ChatWindowProps {
-  /** When provided (e.g. rendered in-call sidebar), skips useParams and disables nav. */
   chatId?: string;
   /** Called when the mobile back button is pressed while embedded (e.g. in-call chat panel). */
   onBack?: () => void;
@@ -66,6 +68,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [nicknameInput, setNicknameInput] = useState('');
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearch, setGifSearch] = useState('');
+  const [gifs, setGifs] = useState<any[]>([]);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const gifPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!headerMenu) return;
@@ -242,6 +250,59 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     setSearchQuery('');
     setSearchMatchIdx(0);
   };
+
+  // ─── Emoji & GIF Handlers ──────────────────────────────────────────────
+  const handleEmojiSelect = (emoji: any) => {
+    setInputText((prev) => prev + emoji.native);
+    // Keep picker open or close? Typically Telegram keeps it open but let's close for now or toggle
+    // setShowEmojiPicker(false);
+  };
+
+  const handleGifSearch = async (query: string) => {
+    setGifSearch(query);
+    if (!query.trim()) {
+      setGifs([]);
+      return;
+    }
+    try {
+      // Public beta API key
+      const API_KEY = 'dc6zaTOxFJmzC';
+      const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(query)}&limit=15`);
+      const result = await res.json();
+      setGifs(result.data || []);
+    } catch (err) {
+      console.error('GIF search error:', err);
+    }
+  };
+
+  const handleSendGif = (gif: any) => {
+    if (!chatId || !currentUser) return;
+    const gifUrl = gif.images.fixed_height.url;
+    sendMessage({
+      chatId,
+      content: gifUrl,
+      type: 'image'
+    });
+    setShowGifPicker(false);
+    setGifSearch('');
+    setGifs([]);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      
+      if (showEmojiPicker && emojiPickerRef.current && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
+      if (showGifPicker && gifPickerRef.current && !gifPickerRef.current.contains(target)) {
+        setShowGifPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker, showGifPicker]);
 
   // ─── Join/leave room & load messages ─────────────────────────────────────
   useEffect(() => {
@@ -1610,6 +1671,110 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             fontFamily: 'inherit',
           }}
         />
+        
+        {/* GIF Picker */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <button
+            onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+            style={{ ...iconBtnStyle, flexShrink: 0, color: showGifPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
+            title="GIFs"
+          >
+            <ImageIcon size={20} />
+          </button>
+          
+          {showGifPicker && (
+            <div 
+              ref={gifPickerRef}
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 12px)',
+                right: -40,
+                width: 280,
+                height: 380,
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                zIndex: 1000,
+              }}
+            >
+              <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Search GIFs..."
+                  value={gifSearch}
+                  onChange={(e) => handleGifSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {gifs.map((gif) => (
+                  <img
+                    key={gif.id}
+                    src={gif.images.fixed_height_small.url}
+                    onClick={() => handleSendGif(gif)}
+                    style={{ width: '100%', borderRadius: 6, cursor: 'pointer', transition: 'transform 0.1s' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.03)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                  />
+                ))}
+                {!gifs.length && gifSearch && (
+                  <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>No GIFs found</div>
+                )}
+                {!gifSearch && (
+                  <div style={{ gridColumn: 'span 2', textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 13 }}>Type something to search GIFs</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Emoji Picker */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <button
+            onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+            style={{ ...iconBtnStyle, flexShrink: 0, color: showEmojiPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
+            title="Emojis"
+          >
+            <Smile size={20} />
+          </button>
+          
+          {showEmojiPicker && (
+            <div 
+              ref={emojiPickerRef}
+              style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 12px)',
+                right: -10,
+                zIndex: 1000,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              <Picker
+                data={data}
+                onEmojiSelect={handleEmojiSelect}
+                theme="dark"
+                set="native"
+                previewPosition="none"
+              />
+            </div>
+          )}
+        </div>
+
         <button
           onClick={handleSend}
           disabled={!inputText.trim() || isUploading}

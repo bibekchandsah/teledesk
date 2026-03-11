@@ -488,9 +488,11 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           reactorId: uid,
           reactorName: reactor?.name,
           reactorUsername: reactor?.username,
+          reactorAvatar: reactor?.avatar,
           emoji: payload.emoji,
           senderId: result.senderId,
-          content: result.content
+          content: result.content,
+          timestamp: result.timestamp
         };
         io.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.REACTION_UPDATED, update);
         for (const memberId of result.members) {

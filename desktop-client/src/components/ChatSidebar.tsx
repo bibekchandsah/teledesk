@@ -182,7 +182,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       .sort((a, b) => {
         const aP = pinnedChatIds.includes(a.chatId) ? 0 : 1;
         const bP = pinnedChatIds.includes(b.chatId) ? 0 : 1;
-        return aP - bP;
+        if (aP !== bP) return aP - bP;
+        
+        const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bt - at;
       });
   }, [chats, searchQuery, getChatDisplayInfo, pinnedChatIds, archivedChatIds]);
 
