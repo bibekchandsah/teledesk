@@ -640,7 +640,11 @@ allow user to send multiple files at once
 during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
 allow user to send voice & video records show voice frequency for voice messaage 
 add emoji & sticker support before sending message
-add :emoji name support 
+add :emoji name support
+for touch screen devices add long press to record voice & video
+for touch screen devices add single tap to show right click menu in chat window
+show sidebar menu inside view port
+flip the camera while taking video note
 
 
 

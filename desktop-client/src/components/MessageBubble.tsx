@@ -7,10 +7,21 @@ import { useBookmarkStore } from '../store/bookmarkStore';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 
-const VoiceNotePlayer = ({ fileUrl, isOwn }: { fileUrl?: string; isOwn: boolean }) => {
+// Simple deterministic hash to generate stable waveforms
+const getHash = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const VoiceNotePlayer = ({ fileUrl, isOwn, messageId }: { fileUrl?: string; isOwn: boolean; messageId: string }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [waveform, setWaveform] = useState<number[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const togglePlay = useCallback((e: React.MouseEvent) => {
@@ -66,6 +77,57 @@ const VoiceNotePlayer = ({ fileUrl, isOwn }: { fileUrl?: string; isOwn: boolean 
     };
   }, []);
 
+  // Generate real waveform by decoding the audio file
+  useEffect(() => {
+    if (!fileUrl) return;
+
+    let isMounted = true;
+    const fetchAndDecodeWaveform = async () => {
+      try {
+        const response = await fetch(fileUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // We initialize AudioContext here so it doesn't fail on older browsers
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        const rawData = audioBuffer.getChannelData(0); // Take first channel
+        const samples = 40; // Number of bars to display
+        const blockSize = Math.floor(rawData.length / samples);
+        
+        const filteredData = [];
+        for (let i = 0; i < samples; i++) {
+          const blockStart = blockSize * i;
+          let sum = 0;
+          for (let j = 0; j < Math.min(blockSize, rawData.length - blockStart); j++) {
+            sum += Math.abs(rawData[blockStart + j]);
+          }
+          filteredData.push(sum / blockSize);
+        }
+
+        // Normalize
+        const multiplier = Math.pow(Math.max(...filteredData) || 1, -1);
+        const normalized = filteredData.map(n => Math.min(1, n * multiplier));
+        
+        if (isMounted) setWaveform(normalized);
+      } catch (err) {
+        console.warn('[Waveform] Failed to decode audio, using stable fallback (likely CORS issue):', err);
+        if (isMounted) {
+          const fallback = Array.from({ length: 40 }).map((_, i) => 
+             (((getHash(messageId) * (i + 1)) % 13) + 4) / 16
+          );
+          setWaveform(fallback);
+        }
+      }
+    };
+
+    fetchAndDecodeWaveform();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fileUrl]);
+
   const formatSecs = (s: number) => {
     if (!s || isNaN(s) || s === Infinity) return '0:00';
     const mins = Math.floor(s / 60);
@@ -103,22 +165,37 @@ const VoiceNotePlayer = ({ fileUrl, isOwn }: { fileUrl?: string; isOwn: boolean 
       </button>
       
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 20 }}>
-            {/* Simple static waveform visualization */}
-            {Array.from({ length: 30 }).map((_, i) => (
-              <div 
-                key={i} 
-                style={{ 
-                  flex: 1, 
-                  height: 4 + Math.random() * 12, 
-                  backgroundColor: (progress / (duration || 1)) > (i / 30) 
-                    ? (isOwn ? '#fff' : 'var(--accent)') 
-                    : (isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)'), 
-                  borderRadius: 2,
-                  transition: 'background-color 0.1s'
-                }} 
-              />
-            ))}
+         <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 24 }}>
+            {/* Real waveform visualization */}
+            {waveform.length > 0 ? (
+               waveform.map((val, i) => (
+                 <div 
+                   key={i} 
+                   style={{ 
+                     flex: 1, 
+                     height: `${Math.max(2, val * 24)}px`, 
+                     backgroundColor: (progress / (duration || 1)) > (i / waveform.length) 
+                       ? (isOwn ? '#fff' : 'var(--accent)') 
+                       : (isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)'), 
+                     borderRadius: 2,
+                     transition: 'background-color 0.1s'
+                   }} 
+                 />
+               ))
+            ) : (
+               /* Fallback while generating waveform */
+               Array.from({ length: 40 }).map((_, i) => (
+                 <div 
+                   key={i} 
+                   style={{ 
+                     flex: 1, 
+                     height: '2px', 
+                     backgroundColor: isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)', 
+                     borderRadius: 2
+                   }} 
+                 />
+               ))
+            )}
          </div>
          <div style={{ fontSize: 10, opacity: 0.8, color: isOwn ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)' }}>
            {formatSecs(progress)} / {formatSecs(duration)}
@@ -426,7 +503,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         );
 
       case 'voice_note':
-        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} />;
+        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} />;
 
       case 'video_note':
         return (

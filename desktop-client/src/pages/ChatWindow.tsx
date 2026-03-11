@@ -153,7 +153,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const [frequencies, setFrequencies] = useState<Uint8Array>(new Uint8Array(0));
+  // We keep a history for a rolling waveform (e.g., last 40 samples)
+  const [waveformHistory, setWaveformHistory] = useState<number[]>(Array(40).fill(0));
+  const [showHoldToast, setShowHoldToast] = useState(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressActive = useRef(false);
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -900,27 +904,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         stream.getTracks().forEach(track => track.stop());
       };
 
-      // Audio analysis for visualizer
+      // Audio analysis for rolling waveform visualizer
       if (recordingMode === 'voice') {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         const source = audioContext.createMediaStreamSource(stream);
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 64;
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.5; // less smoothing for snappier waveform
         source.connect(analyser);
         audioCtxRef.current = audioContext;
         analyserRef.current = analyser;
 
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-        const updateFrequencies = () => {
+        const updateWaveform = () => {
           if (analyserRef.current) {
             analyserRef.current.getByteFrequencyData(dataArray);
-            setFrequencies(new Uint8Array(dataArray));
-            requestAnimationFrame(updateFrequencies);
+            
+            // Calculate average volume (RMS) to represent a single 'bar' for the current moment
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+               sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            const normalized = Math.min(1, avg / 128); // Approx 0 to 1
+
+            setWaveformHistory(prev => {
+               const next = [...prev, normalized];
+               if (next.length > 40) next.shift(); // keep last 40 samples
+               return next;
+            });
+            
+            // Schedule next sample ~100ms apart to create the timeline
+            setTimeout(() => requestAnimationFrame(updateWaveform), 50);
           }
         };
-        updateFrequencies();
+        // Start after a tiny delay
+        setTimeout(updateWaveform, 100);
       }
 
       mediaRecorder.start();
@@ -1227,6 +1247,41 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     // In Electron mode the call window captures its own stream; no pre-capture needed.
     // In non-Electron fallback the stream is captured inside startCall() itself.
     startCall(peer.uid, peer.profile?.name || 'User', callType, peer.profile?.avatar);
+  };
+
+  const handleActionMouseDown = () => {
+    if (inputText.trim() || isRecording) return;
+    isLongPressActive.current = false;
+    
+    holdTimerRef.current = setTimeout(() => {
+      isLongPressActive.current = true;
+      startRecording();
+      setShowHoldToast(false);
+    }, 2000);
+  };
+
+  const handleActionMouseUp = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const handleActionClick = () => {
+    if (isLongPressActive.current) {
+      isLongPressActive.current = false;
+      return;
+    }
+
+    if (inputText.trim()) {
+      handleSend();
+    } else if (isRecording) {
+      stopRecording();
+    } else {
+      setRecordingMode(prev => prev === 'voice' ? 'video' : 'voice');
+      setShowHoldToast(true);
+      setTimeout(() => setShowHoldToast(false), 3000);
+    }
   };
 
   if (!activeChat) {
@@ -2009,13 +2064,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </div>
               
               {recordingMode === 'voice' && (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 2, height: 20, paddingBottom: 2 }}>
-                  {Array.from({ length: 20 }).map((_, i) => (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 24, overflow: 'hidden' }}>
+                  {waveformHistory.map((val, i) => (
                     <div 
                       key={i} 
                       style={{ 
-                        width: 3, 
-                        height: Math.max(2, (frequencies[i * 1] || 0) / 4), 
+                        flex: 1,
+                        // Add a base height of 2px for silence, scale up to 24px for loud
+                        height: `${Math.max(2, val * 24)}px`, 
                         backgroundColor: 'var(--accent)', 
                         borderRadius: 2,
                         transition: 'height 0.05s ease'
@@ -2139,66 +2195,53 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           )}
         </div>
         
-        {/* Unified Media Picker / Recording Button */}
+        {/* Unified Action Button */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
-          {!isRecording && !inputText.trim() && (
-            <button
-               onClick={() => setRecordingMode(recordingMode === 'voice' ? 'video' : 'voice')}
-               style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
-               title={recordingMode === 'voice' ? 'Switch to Video Mode' : 'Switch to Voice Mode'}
-            >
-               {recordingMode === 'voice' ? <Video size={20} /> : <Mic size={20} />}
-            </button>
+          {showHoldToast && (
+            <div style={{
+              position: 'absolute',
+              bottom: '100%',
+              right: 0,
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              marginBottom: '10px',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              border: '1px solid var(--border)',
+              zIndex: 100,
+              animation: 'fadeIn 0.2s ease'
+            }}>
+              Hold for 2 seconds to start recording
+            </div>
           )}
 
-          {isRecording ? (
-            <button
-              onClick={stopRecording}
-              style={{
-                ...iconBtnStyle,
-                backgroundColor: 'var(--accent)',
-                color: '#fff',
-                borderRadius: '50%',
-                width: 40,
-                height: 40,
-              }}
-              title="Stop and Send"
-            >
-              <Send size={16} />
-            </button>
-          ) : (
-            <>
-              {inputText.trim() ? (
-                <button
-                  onClick={handleSend}
-                  style={{
-                    ...iconBtnStyle,
-                    backgroundColor: 'var(--accent)',
-                    color: '#fff',
-                    borderRadius: '50%',
-                    width: 40,
-                    height: 40,
-                  }}
-                  title="Send"
-                >
-                  <Send size={16} />
-                </button>
-              ) : (
-                <button
-                  onClick={startRecording}
-                  style={{
-                    ...iconBtnStyle,
-                    color: 'var(--text-secondary)',
-                    width: 40,
-                    height: 40,
-                  }}
-                  title={recordingMode === 'voice' ? 'Record Voice Note' : 'Record Video Note'}
-                >
-                  {recordingMode === 'voice' ? <Mic size={22} /> : <Video size={22} />}
-                </button>
-              )}
-            </>
-          )}
+          <button
+            onClick={handleActionClick}
+            onMouseDown={handleActionMouseDown}
+            onMouseUp={handleActionMouseUp}
+            onMouseLeave={handleActionMouseUp}
+            onTouchStart={handleActionMouseDown}
+            onTouchEnd={handleActionMouseUp}
+            style={{
+              ...iconBtnStyle,
+              backgroundColor: (inputText.trim() || isRecording) ? 'var(--accent)' : 'transparent',
+              color: (inputText.trim() || isRecording) ? '#fff' : 'var(--text-secondary)',
+              borderRadius: '50%',
+              width: 40,
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: isRecording ? 'scale(1.1)' : 'scale(1)'
+            }}
+            title={inputText.trim() ? "Send" : (isRecording ? "Stop and Send" : (recordingMode === 'voice' ? 'Hold to Record Voice / Click to Toggle' : 'Hold to Record Video / Click to Toggle'))}
+          >
+            {inputText.trim() ? <Send size={18} /> : (isRecording ? <Send size={18} /> : (recordingMode === 'voice' ? <Mic size={22} /> : <Video size={22} />))}
+          </button>
 
           {/* Media Picker Button (Emojis, Stickers, GIFs) */}
           {!isRecording && (
@@ -2450,27 +2493,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
           )}
         </div>
-
-
-        <button
-          onClick={handleSend}
-          disabled={!inputText.trim() || isUploading}
-          style={{
-            ...iconBtnStyle,
-            backgroundColor: inputText.trim() ? 'var(--accent)' : 'var(--border)',
-            color: '#fff',
-            borderRadius: '50%',
-            width: 40,
-            height: 40,
-            flexShrink: 0,
-            fontSize: 16,
-            transition: 'background-color 0.2s',
-          }}
-          title="Send"
-        >
-          <Send size={16} />
-        </button>
       </div>
+
 
       {/* ── Profile panel (Telegram-style right drawer) ─────────────── */}
       {showProfile && peer && (
@@ -2961,7 +2985,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <button
                 onClick={() => handleDeleteChat('both')}
                 disabled={chatDeleting}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, backgroundColor: 'var(--error, #e74c3c)', color: '#fff' }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, backgroundColor: '#f87171', color: '#fff' }}
               >
                 {chatDeleting ? 'Deleting…' : 'Delete for everyone'}
               </button>
@@ -2974,6 +2998,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 };
 
 // ─── Date separator helpers ──────────────────────────────────────────────────
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 const getDateKey = (timestamp: string): string => {
   const d = new Date(timestamp);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
