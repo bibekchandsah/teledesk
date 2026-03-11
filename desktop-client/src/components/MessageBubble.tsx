@@ -1,11 +1,134 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+
+const VoiceNotePlayer = ({ fileUrl, isOwn }: { fileUrl?: string; isOwn: boolean }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent message bubble click
+    if (!audioRef.current || !fileUrl) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(console.error);
+    }
+  }, [isPlaying, fileUrl]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTimeUpdate = () => setProgress(audio.currentTime);
+    const onLoadedMetadata = () => {
+      let d = audio.duration;
+      // WebM/Ogg from MediaRecorder often have Infinity duration until checked
+      if (d === Infinity || isNaN(d)) {
+         audio.currentTime = 1e101;
+         setTimeout(() => {
+            if (audio.duration !== Infinity && !isNaN(audio.duration)) {
+               setDuration(audio.duration);
+            }
+            audio.currentTime = 0;
+         }, 50);
+      } else {
+         setDuration(d);
+      }
+    };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+    };
+
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  const formatSecs = (s: number) => {
+    if (!s || isNaN(s) || s === Infinity) return '0:00';
+    const mins = Math.floor(s / 60);
+    const secs = Math.floor(s % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="message-voice-note" style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: 12, 
+      padding: '8px 4px',
+      minWidth: 240
+    }}>
+      <button
+         style={{
+           width: 36,
+           height: 36,
+           borderRadius: '50%',
+           backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : 'var(--accent)',
+           border: 'none',
+           display: 'flex',
+           alignItems: 'center',
+           justifyContent: 'center',
+           color: '#fff',
+           cursor: fileUrl ? 'pointer' : 'default',
+           opacity: fileUrl ? 1 : 0.5
+         }}
+         onClick={togglePlay}
+         disabled={!fileUrl}
+         title={isPlaying ? "Pause" : "Play"}
+      >
+         {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginLeft: 2 }} />}
+      </button>
+      
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 20 }}>
+            {/* Simple static waveform visualization */}
+            {Array.from({ length: 30 }).map((_, i) => (
+              <div 
+                key={i} 
+                style={{ 
+                  flex: 1, 
+                  height: 4 + Math.random() * 12, 
+                  backgroundColor: (progress / (duration || 1)) > (i / 30) 
+                    ? (isOwn ? '#fff' : 'var(--accent)') 
+                    : (isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)'), 
+                  borderRadius: 2,
+                  transition: 'background-color 0.1s'
+                }} 
+              />
+            ))}
+         </div>
+         <div style={{ fontSize: 10, opacity: 0.8, color: isOwn ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)' }}>
+           {formatSecs(progress)} / {formatSecs(duration)}
+         </div>
+      </div>
+
+      {fileUrl && <audio ref={audioRef} src={fileUrl} style={{ display: 'none' }} preload="metadata" />}
+    </div>
+  );
+};
 
 interface MessageBubbleProps {
   message: Message;
@@ -294,7 +417,51 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       case 'audio':
         return (
           <div className="message-audio">
-            <audio src={message.fileUrl} controls style={{ width: 240 }} />
+            {message.fileUrl ? (
+              <audio src={message.fileUrl} controls style={{ width: 240 }} />
+            ) : (
+              <div style={{ padding: 8, fontStyle: 'italic', opacity: 0.7 }}>Audio unavailable</div>
+            )}
+          </div>
+        );
+
+      case 'voice_note':
+        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} />;
+
+      case 'video_note':
+        return (
+          <div className="message-video-note" style={{
+            width: 240,
+            height: 240,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '2px solid rgba(255,255,255,0.1)',
+            position: 'relative',
+            backgroundColor: '#000'
+          }}>
+            {message.fileUrl ? (
+              <video
+                src={message.fileUrl}
+                loop
+                muted={false} /* Allow sound for video notes */
+                playsInline
+                controls={false}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const video = e.currentTarget;
+                  if (video.paused) {
+                    video.play().catch(console.error);
+                  } else {
+                    video.pause();
+                  }
+                }}
+              />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
+                Video unavailable
+              </div>
+            )}
           </div>
         );
 

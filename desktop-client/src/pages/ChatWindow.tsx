@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -143,6 +143,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [emojiSuggestions, setEmojiSuggestions] = useState<{ id: string; native: string }[]>([]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [suggestionQuery, setSuggestionQuery] = useState('');
+
+  // ─── Recording state ───
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<'voice' | 'video'>('voice');
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const [frequencies, setFrequencies] = useState<Uint8Array>(new Uint8Array(0));
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -858,6 +869,129 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  // ─── Recording Handlers ───────────────────────────────────────────────────
+  const startRecording = async () => {
+    try {
+      const constraints = {
+        audio: true,
+        video: recordingMode === 'video' ? {
+          width: { ideal: 400 },
+          height: { ideal: 400 },
+          facingMode: 'user'
+        } : false
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(stream);
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: recordingMode === 'video' ? 'video/webm;codecs=vp8' : 'audio/webm'
+      });
+      
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+        if (recordingDuration > 1) { // Min 1s recording
+          handleSendRecordedMedia(blob);
+        }
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      // Audio analysis for visualizer
+      if (recordingMode === 'voice') {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 64;
+        source.connect(analyser);
+        audioCtxRef.current = audioContext;
+        analyserRef.current = analyser;
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const updateFrequencies = () => {
+          if (analyserRef.current) {
+            analyserRef.current.getByteFrequencyData(dataArray);
+            setFrequencies(new Uint8Array(dataArray));
+            requestAnimationFrame(updateFrequencies);
+          }
+        };
+        updateFrequencies();
+      }
+
+      mediaRecorder.start();
+      setRecorder(mediaRecorder);
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error('[Recording] Failed:', err);
+      alert('Could not access microphone/camera');
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    clearInterval(recordingTimerRef.current!);
+    setIsRecording(false);
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+      analyserRef.current = null;
+    }
+  };
+
+  const cancelRecording = () => {
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null; // Don't trigger send
+      recorder.stop();
+    }
+    stream?.getTracks().forEach(track => track.stop());
+    clearInterval(recordingTimerRef.current!);
+    setIsRecording(false);
+    setStream(null);
+    setRecorder(null);
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close();
+      audioCtxRef.current = null;
+      analyserRef.current = null;
+    }
+  };
+
+  const handleSendRecordedMedia = async (blob: Blob) => {
+    if (!chatId || !currentUser) return;
+    try {
+      setIsUploading(true);
+      const file = new File([blob], `recording_${Date.now()}.${recordingMode === 'video' ? 'webm' : 'ogg'}`, { type: blob.type });
+      const result = await uploadChatFile(file, chatId, (progress) => {
+        setUploadProgress(Math.round(progress));
+      });
+
+      const msgType = recordingMode === 'video' ? 'video_note' : 'voice_note';
+      sendMessage({
+        chatId,
+        content: `Sent a ${recordingMode === 'video' ? 'video note' : 'voice note'}`,
+        type: msgType,
+        fileUrl: result.url,
+        fileName: result.fileName,
+        fileSize: result.fileSize,
+        senderName: currentUser?.name || 'Unknown',
+        senderAvatar: currentUser?.avatar || ''
+      });
+    } catch (err) {
+      console.error('[Upload] Recording failed:', err);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1856,86 +1990,226 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           <Paperclip size={20} />
         </button>
         <div style={{ flex: 1, position: 'relative' }}>
-          {emojiSuggestions.length > 0 && (
+          {/* Recording UI */}
+          {isRecording ? (
+            <div style={{ 
+              flex: 1, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 12, 
+              padding: '6px 14px',
+              backgroundColor: 'var(--bg-tertiary)',
+              borderRadius: 20,
+              height: 40,
+              color: '#f87171'
+            }}>
+              <StopCircle size={18} className="recording-blink" />
+              <div style={{ fontSize: 13, fontWeight: 600, width: 40 }}>
+                {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
+              </div>
+              
+              {recordingMode === 'voice' && (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 2, height: 20, paddingBottom: 2 }}>
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      style={{ 
+                        width: 3, 
+                        height: Math.max(2, (frequencies[i * 1] || 0) / 4), 
+                        backgroundColor: 'var(--accent)', 
+                        borderRadius: 2,
+                        transition: 'height 0.05s ease'
+                      }} 
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {recordingMode === 'video' && (
+                 <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Recording video note...
+                 </div>
+              )}
+
+              <button 
+                onClick={cancelRecording}
+                style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
+                title="Cancel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ) : (
+            <>
+              {emojiSuggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 10px)',
+                  left: 0,
+                  width: 220,
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  zIndex: 100,
+                  overflow: 'hidden',
+                  padding: '4px'
+                }}>
+                  {emojiSuggestions.map((emoji, idx) => (
+                    <div
+                      key={emoji.id}
+                      onClick={() => {
+                        const cursor = inputRef.current?.selectionStart || 0;
+                        const textBefore = inputText.slice(0, cursor);
+                        const textAfter = inputText.slice(cursor);
+                        const newTextBefore = textBefore.replace(/:[a-zA-Z0-9_]{1,}$/, emoji.native);
+                        setInputText(newTextBefore + textAfter);
+                        setEmojiSuggestions([]);
+                        setTimeout(() => inputRef.current?.focus(), 0);
+                      }}
+                      onMouseEnter={() => setSuggestionIndex(idx)}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        borderRadius: 8,
+                        backgroundColor: idx === suggestionIndex ? 'var(--accent)' : 'transparent',
+                        color: idx === suggestionIndex ? '#fff' : 'var(--text-primary)',
+                        transition: 'all 0.1s'
+                      }}
+                    >
+                      <span style={{ fontSize: 20 }}>{emoji.native}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, opacity: idx === suggestionIndex ? 1 : 0.7 }}>:{emoji.id}:</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <textarea
+                ref={inputRef}
+                value={inputText}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Write a message..."
+                rows={1}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 20,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  outline: 'none',
+                  resize: 'none',
+                  maxHeight: 120,
+                  overflowY: 'auto',
+                  lineHeight: 1.5,
+                  fontFamily: 'inherit',
+                  display: 'block'
+                }}
+              />
+            </>
+          )}
+
+          {/* Video Note Circle Preview Overlay */}
+          {isRecording && recordingMode === 'video' && stream && (
             <div style={{
               position: 'absolute',
-              bottom: 'calc(100% + 10px)',
-              left: 0,
-              width: 220,
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              zIndex: 100,
+              bottom: 'calc(100% + 60px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 200,
+              height: 200,
+              borderRadius: '50%',
               overflow: 'hidden',
-              padding: '4px'
+              border: '4px solid var(--accent)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              zIndex: 1001,
+              backgroundColor: '#000'
             }}>
-              {emojiSuggestions.map((emoji, idx) => (
-                <div
-                  key={emoji.id}
-                  onClick={() => {
-                    const cursor = inputRef.current?.selectionStart || 0;
-                    const textBefore = inputText.slice(0, cursor);
-                    const textAfter = inputText.slice(cursor);
-                    const newTextBefore = textBefore.replace(/:[a-zA-Z0-9_]{1,}$/, emoji.native);
-                    setInputText(newTextBefore + textAfter);
-                    setEmojiSuggestions([]);
-                    setTimeout(() => inputRef.current?.focus(), 0);
-                  }}
-                  onMouseEnter={() => setSuggestionIndex(idx)}
-                  style={{
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    borderRadius: 8,
-                    backgroundColor: idx === suggestionIndex ? 'var(--accent)' : 'transparent',
-                    color: idx === suggestionIndex ? '#fff' : 'var(--text-primary)',
-                    transition: 'all 0.1s'
-                  }}
-                >
-                  <span style={{ fontSize: 20 }}>{emoji.native}</span>
-                  <span style={{ fontSize: 12, fontWeight: 500, opacity: idx === suggestionIndex ? 1 : 0.7 }}>:{emoji.id}:</span>
-                </div>
-              ))}
+              <video 
+                autoPlay 
+                muted 
+                ref={(el) => { if (el) el.srcObject = stream }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </div>
           )}
-          <textarea
-            ref={inputRef}
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Write a message..."
-            rows={1}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              borderRadius: 20,
-              border: '1px solid var(--border)',
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              outline: 'none',
-              resize: 'none',
-              maxHeight: 120,
-              overflowY: 'auto',
-              lineHeight: 1.5,
-              fontFamily: 'inherit',
-              display: 'block'
-            }}
-          />
         </div>
         
-        {/* Unified Media Picker */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <button
-            onClick={() => setShowMediaPicker(!showMediaPicker)}
-            style={{ ...iconBtnStyle, flexShrink: 0, color: showMediaPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
-            title="Emojis, Stickers & GIFs"
-          >
-            <Smile size={22} />
-          </button>
+        {/* Unified Media Picker / Recording Button */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+          {!isRecording && !inputText.trim() && (
+            <button
+               onClick={() => setRecordingMode(recordingMode === 'voice' ? 'video' : 'voice')}
+               style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
+               title={recordingMode === 'voice' ? 'Switch to Video Mode' : 'Switch to Voice Mode'}
+            >
+               {recordingMode === 'voice' ? <Video size={20} /> : <Mic size={20} />}
+            </button>
+          )}
+
+          {isRecording ? (
+            <button
+              onClick={stopRecording}
+              style={{
+                ...iconBtnStyle,
+                backgroundColor: 'var(--accent)',
+                color: '#fff',
+                borderRadius: '50%',
+                width: 40,
+                height: 40,
+              }}
+              title="Stop and Send"
+            >
+              <Send size={16} />
+            </button>
+          ) : (
+            <>
+              {inputText.trim() ? (
+                <button
+                  onClick={handleSend}
+                  style={{
+                    ...iconBtnStyle,
+                    backgroundColor: 'var(--accent)',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                  }}
+                  title="Send"
+                >
+                  <Send size={16} />
+                </button>
+              ) : (
+                <button
+                  onClick={startRecording}
+                  style={{
+                    ...iconBtnStyle,
+                    color: 'var(--text-secondary)',
+                    width: 40,
+                    height: 40,
+                  }}
+                  title={recordingMode === 'voice' ? 'Record Voice Note' : 'Record Video Note'}
+                >
+                  {recordingMode === 'voice' ? <Mic size={22} /> : <Video size={22} />}
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Media Picker Button (Emojis, Stickers, GIFs) */}
+          {!isRecording && (
+            <button
+              onClick={() => setShowMediaPicker(!showMediaPicker)}
+              style={{ ...iconBtnStyle, color: showMediaPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
+              title="Emojis, Stickers & GIFs"
+            >
+              <Smile size={22} />
+            </button>
+          )}
           
           {showMediaPicker && (
             <div 
