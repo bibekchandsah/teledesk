@@ -2381,22 +2381,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         >
           <Paperclip size={20} />
         </button>
-        <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'flex-end', minWidth: 0 }}>
           {/* Recording UI / Preview UI / Text Input */}
           {isRecording ? (
             <div style={{
               flex: 1,
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              padding: '6px 14px',
+              gap: 8,
+              padding: '6px 10px',
               backgroundColor: 'var(--bg-tertiary)',
               borderRadius: 20,
               height: 40,
-              color: '#f87171'
+              color: '#f87171',
+              minWidth: 0
             }}>
-              <StopCircle size={18} className="recording-blink" />
-              <div style={{ fontSize: 13, fontWeight: 600, width: 40 }}>
+              <StopCircle size={18} className="recording-blink" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: 13, fontWeight: 600, minWidth: 40, flexShrink: 0 }}>
                 {Math.floor(recordingDuration / 60)}:{String(recordingDuration % 60).padStart(2, '0')}
               </div>
 
@@ -2419,7 +2420,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               )}
 
               {recordingMode === 'video' && (
-                 <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)' }}>
+                 <div style={{ flex: 1, fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     Recording video note...
                  </div>
               )}
@@ -2427,7 +2428,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               {recordingMode === 'video' && (
                 <button
                   onClick={flipCamera}
-                  style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
+                  style={{ ...iconBtnStyle, color: 'var(--text-secondary)', flexShrink: 0 }}
                   title="Flip Camera"
                 >
                   <RefreshCw size={18} />
@@ -2436,7 +2437,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
               <button
                 onClick={cancelRecording}
-                style={{ ...iconBtnStyle, color: 'var(--text-secondary)' }}
+                style={{ ...iconBtnStyle, color: 'var(--text-secondary)', flexShrink: 0 }}
                 title="Cancel"
               >
                 <X size={18} />
@@ -2447,16 +2448,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               flex: 1,
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
-              padding: '6px 14px',
+              gap: 8,
+              padding: '6px 10px',
               backgroundColor: 'var(--bg-tertiary)',
               borderRadius: 20,
               height: 40,
-              animation: 'fadeIn 0.2s ease-out'
+              animation: 'fadeIn 0.2s ease-out',
+              minWidth: 0
             }}>
               <button
                 onClick={togglePreviewPlayback}
-                style={{ ...iconBtnStyle, color: 'var(--accent)', padding: 0 }}
+                style={{ ...iconBtnStyle, color: 'var(--accent)', padding: 0, flexShrink: 0 }}
                 title={isPreviewPlaying ? "Pause" : "Play"}
               >
                 {isPreviewPlaying ? <Pause size={18} /> : <Play size={18} />}
@@ -2475,7 +2477,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 />
               )}
 
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 40 }}>
                 {recordedMode === 'video' ? 'Video Note' : 'Voice Note'} • {Math.floor(recordingDurationSecondsRef.current / 60)}:{String(recordingDurationSecondsRef.current % 60).padStart(2, '0')}
               </div>
               
@@ -2500,14 +2502,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
               <button
                 onClick={handleDiscardRecording}
-                style={{ ...iconBtnStyle, color: '#f87171' }}
+                style={{ ...iconBtnStyle, color: '#f87171', flexShrink: 0 }}
                 title="Discard"
               >
                 <Trash2 size={18} />
               </button>
               <button
                 onClick={handleConfirmSend}
-                style={{ ...iconBtnStyle, color: '#22c55e' }}
+                style={{ ...iconBtnStyle, color: '#22c55e', flexShrink: 0 }}
                 title="Send"
               >
                 <Send size={18} />
@@ -2658,7 +2660,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         </div>
 
         {/* Unified Action Button */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {showHoldToast && (
             <div style={{
               position: 'absolute',
