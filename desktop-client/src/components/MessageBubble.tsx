@@ -547,7 +547,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       case 'video_note':
         return (
           <div className="message-video-note" style={{
-            width: 'min(240px, 100%)',
+            width: 240,
+            maxWidth: '100%',
             aspectRatio: '1/1',
             borderRadius: '50%',
             overflow: 'hidden',
@@ -773,8 +774,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             width: 'fit-content',
             minWidth: 0,
             maxWidth: '100%',
-            alignSelf: 'inherit',
-            alignItems: isOwn ? 'flex-end' : 'flex-start'
+            alignSelf: isOwn ? 'flex-end' : 'flex-start'
           }}
         >
           {/* Forwarded indicator */}
