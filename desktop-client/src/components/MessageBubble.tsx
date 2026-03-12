@@ -249,6 +249,146 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
   );
 };
 
+// ==========================================
+// Video Note Bubble Component
+// ==========================================
+const VideoNoteBubble = ({ message }: { message: Message }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [progress, setProgress] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // SVG Ring calculation
+  const radius = 116; // 240 / 2 - 4 (stroke width)
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - progress * circumference;
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(console.error);
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  };
+
+  return (
+    <div className="message-video-note" style={{
+      width: 240,
+      maxWidth: '100%',
+      aspectRatio: '1/1',
+      borderRadius: '50%',
+      position: 'relative',
+      backgroundColor: '#000',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }} onClick={togglePlay}>
+      
+      {/* Premium Circular Playback Ring */}
+      <svg 
+         style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            transform: 'rotate(-90deg)', 
+            pointerEvents: 'none',
+            zIndex: 10
+         }}
+      >
+        {/* Background track */}
+        <circle
+          cx="120"
+          cy="120"
+          r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.15)"
+          strokeWidth="6"
+        />
+        {/* Progress track */}
+        <circle
+          cx="120"
+          cy="120"
+          r={radius}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+        />
+      </svg>
+
+      <div style={{
+         width: 'calc(100% - 12px)',
+         height: 'calc(100% - 12px)',
+         borderRadius: '50%',
+         overflow: 'hidden',
+         position: 'relative'
+      }}>
+        {message.fileUrl ? (
+          <video
+            ref={videoRef}
+            src={message.fileUrl}
+            loop
+            muted={false}
+            playsInline
+            controls={false}
+            onTimeUpdate={() => {
+              if (videoRef.current) {
+                const perc = videoRef.current.currentTime / (videoRef.current.duration || 1);
+                setProgress(Math.min(1, Math.max(0, perc)));
+              }
+            }}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => {
+              setIsPlaying(false);
+              setProgress(0);
+            }}
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              transform: message.mirrored ? 'scaleX(-1)' : 'none'
+            }}
+          />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
+            Video unavailable
+          </div>
+        )}
+      </div>
+
+      {!isPlaying && message.fileUrl && (
+         <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 48,
+            height: 48,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backdropFilter: 'blur(4px)',
+            pointerEvents: 'none',
+            zIndex: 11
+         }}>
+             <Play size={24} color="#fff" style={{ marginLeft: 4 }} />
+         </div>
+      )}
+    </div>
+  );
+};
+
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
@@ -545,48 +685,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} messageDuration={message.duration} />;
 
       case 'video_note':
-        return (
-          <div className="message-video-note" style={{
-            width: 240,
-            maxWidth: '100%',
-            aspectRatio: '1/1',
-            borderRadius: '50%',
-            overflow: 'hidden',
-            border: '2px solid rgba(255,255,255,0.1)',
-            position: 'relative',
-            backgroundColor: '#000'
-          }}>
-            {message.fileUrl ? (
-              <video
-                src={message.fileUrl}
-                loop
-                muted={false} /* Allow sound for video notes */
-                playsInline
-                controls={false}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  objectFit: 'cover', 
-                  cursor: 'pointer',
-                  transform: message.mirrored ? 'scaleX(-1)' : 'none'
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const video = e.currentTarget;
-                  if (video.paused) {
-                    video.play().catch(console.error);
-                  } else {
-                    video.pause();
-                  }
-                }}
-              />
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
-                Video unavailable
-              </div>
-            )}
-          </div>
-        );
+        return <VideoNoteBubble message={message} />;
 
       case 'file':
         return (
@@ -823,30 +922,41 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           <div
             style={{
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: 4,
               marginTop: 4,
               opacity: 0.7,
               fontSize: 11,
             }}
           >
-            {isPinned && !message.deleted && (
-              <Pin size={11} style={{ opacity: 0.8, flexShrink: 0 }} />
-            )}
-            <span>{formatTime(message.timestamp)}</span>
-            {message.isEdited && !message.deleted && (
-              <span style={{ fontSize: 10, opacity: 0.65, fontStyle: 'italic' }}>edited</span>
-            )}
-            {isOwn && !message.deleted && currentUserShowMessageStatus && otherUserShowMessageStatus && (
-              <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
-                {message.readBy.length > 1
-                  ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
-                  : (message.deliveredTo ?? []).length > 0
-                    ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
-                    : <Check size={13} style={{ opacity: 0.65 }} />}
-              </span>
-            )}
+            {/* Left side (e.g. video note duration) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+               {message.type === 'video_note' && message.duration !== undefined && (
+                  <span style={{ fontWeight: 600 }}>
+                     {Math.floor(message.duration / 60)}:{String(message.duration % 60).padStart(2, '0')}
+                  </span>
+               )}
+            </div>
+
+            {/* Right side (timestamp, pinned, status) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {isPinned && !message.deleted && (
+                <Pin size={11} style={{ opacity: 0.8, flexShrink: 0 }} />
+              )}
+              <span>{formatTime(message.timestamp)}</span>
+              {message.isEdited && !message.deleted && (
+                <span style={{ fontSize: 10, opacity: 0.65, fontStyle: 'italic' }}>edited</span>
+              )}
+              {isOwn && !message.deleted && currentUserShowMessageStatus && otherUserShowMessageStatus && (
+                <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
+                  {message.readBy.length > 1
+                    ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
+                    : (message.deliveredTo ?? []).length > 0
+                      ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
+                      : <Check size={13} style={{ opacity: 0.65 }} />}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
