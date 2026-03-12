@@ -635,10 +635,11 @@ enhance online status
 update calling window as in image
 add calling sound 
 add notification sound for new message
-allow copy and paste and open images in the same window and allow user to send file size limit 100mb
-allow user to send multiple files at once   
 during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
 show sidebar menu inside view port
+allow user to import and export chat history
+allow copy and paste and open images in the same window and allow user to send file size limit 100mb
+allow user to send multiple files at once   
 allow user to send voice & video records show voice frequency for voice messaage 
 add emoji & sticker support before sending message
 add :emoji name support

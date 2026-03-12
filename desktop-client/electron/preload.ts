@@ -105,6 +105,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   acceptIncomingCallFromWindow: () => ipcRenderer.send('incoming-call:accept'),
   /** Reject the incoming call from the notification window */
   rejectIncomingCallFromWindow: () => ipcRenderer.send('incoming-call:reject'),
+
+  // Copy image to clipboard natively (bypasses CORS)
+  copyImageToClipboard: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke('copy-image-to-clipboard', url),
+
+  // Download file natively
+  downloadFile: (url: string, fileName?: string): Promise<boolean> =>
+    ipcRenderer.invoke('download-file', { url, fileName }),
+
+  // Fetch audio data natively (bypasses CORS)
+  fetchAudioData: (url: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke('fetch-audio-data', url),
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -170,6 +182,9 @@ export interface ElectronAPI {
   acceptIncomingCallFromWindow?: () => void;
   rejectIncomingCallFromWindow?: () => void;
   closeIncomingCallWindow?: () => void;
+  copyImageToClipboard: (url: string) => Promise<boolean>;
+  downloadFile: (url: string, fileName?: string) => Promise<boolean>;
+  fetchAudioData: (url: string) => Promise<Uint8Array>;
 }
 
 declare global {

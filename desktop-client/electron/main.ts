@@ -10,6 +10,7 @@ import {
   Tray,
   session,
   desktopCapturer,
+  clipboard,
 } from 'electron';
 import path from 'path';
 import { execFileSync } from 'child_process';
@@ -216,6 +217,38 @@ ipcMain.on('window-close', () => mainWindow?.hide());
 
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// Copy image to clipboard natively (bypasses CORS)
+ipcMain.handle('copy-image-to-clipboard', async (_event, url: string) => {
+  if (!url || !url.startsWith('http')) return false;
+  try {
+    const res = await net.fetch(url);
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return false;
+    clipboard.writeImage(img);
+    return true;
+  } catch (err) {
+    console.error('[IPC] Failed to copy image to clipboard:', err);
+    return false;
+  }
+});
+
+// Download file natively
+ipcMain.handle('download-file', async (_event, { url, fileName }: { url: string; fileName?: string }) => {
+  if (!url || !url.startsWith('http')) return false;
+  try {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    if (!win) return false;
+    // This triggers the Electron download manager
+    win.webContents.downloadURL(url);
+    return true;
+  } catch (err) {
+    console.error('[IPC] Failed to start download:', err);
+    return false;
+  }
+});
 
 // Desktop screen/window sources for screen share
 ipcMain.handle(
@@ -451,6 +484,20 @@ app.whenReady().then(() => {
 
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
     return allowedPermissions.includes(permission);
+  });
+
+  // Fetch audio data natively (bypasses CORS)
+  ipcMain.handle('fetch-audio-data', async (_event, url: string) => {
+    if (!url || !url.startsWith('http')) throw new Error('Invalid URL');
+    try {
+      const res = await net.fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const buf = await res.arrayBuffer();
+      return new Uint8Array(buf);
+    } catch (err) {
+      console.error('[IPC] Failed to fetch audio data:', err);
+      throw err;
+    }
   });
 
   // Allow getUserMedia / enumerateDevices unconditionally in the renderer

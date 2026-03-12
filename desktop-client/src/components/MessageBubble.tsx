@@ -87,72 +87,103 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
     };
   }, []);
 
-  // Generate real waveform by decoding the audio file
-  useEffect(() => {
-    if (!fileUrl) return;
+    // Generate real waveform by decoding the audio file
+    useEffect(() => {
+      if (!fileUrl) return;
 
-    let isMounted = true;
-    const fetchAndDecodeWaveform = async () => {
-      try {
-        const response = await fetch(fileUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        
-        // We initialize AudioContext here so it doesn't fail on older browsers
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        
-        const rawData = audioBuffer.getChannelData(0); // Take first channel
-        const samples = 40; // Number of bars to display
-        const blockSize = Math.floor(rawData.length / samples);
-        
-        const filteredData = [];
-        for (let i = 0; i < samples; i++) {
-          const blockStart = blockSize * i;
-          let sum = 0;
-          for (let j = 0; j < Math.min(blockSize, rawData.length - blockStart); j++) {
-            sum += Math.abs(rawData[blockStart + j]);
+      let isMounted = true;
+      const fetchAndDecodeWaveform = async () => {
+        try {
+          let arrayBuffer: ArrayBuffer;
+
+          // Use native Electron fetcher if available to bypass CORS
+          if (window.electronAPI?.fetchAudioData) {
+            const uint8Array = await window.electronAPI.fetchAudioData(fileUrl);
+            arrayBuffer = uint8Array.buffer as ArrayBuffer;
+          } else {
+            const response = await fetch(fileUrl);
+            if (!response.ok) throw new Error('Fetch failed');
+            arrayBuffer = await response.arrayBuffer();
           }
-          filteredData.push(sum / blockSize);
-        }
+          
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          
+          const rawData = audioBuffer.getChannelData(0); 
+          const samples = 40; 
+          const blockSize = Math.floor(rawData.length / samples);
+          
+          const filteredData = [];
+          for (let i = 0; i < samples; i++) {
+            const blockStart = blockSize * i;
+            let sum = 0;
+            for (let j = 0; j < Math.min(blockSize, rawData.length - blockStart); j++) {
+              sum += Math.abs(rawData[blockStart + j]);
+            }
+            filteredData.push(sum / Math.max(1, blockSize));
+          }
 
-        // Normalize
-        const multiplier = Math.pow(Math.max(...filteredData) || 1, -1);
-        const normalized = filteredData.map(n => Math.min(1, n * multiplier));
-        
-        if (isMounted) setWaveform(normalized);
-      } catch (err) {
-        console.warn('[Waveform] Failed to decode audio, using stable fallback (likely CORS issue):', err);
-        if (isMounted) {
-          const fallback = Array.from({ length: 40 }).map((_, i) => 
-             (((getHash(messageId) * (i + 1)) % 13) + 4) / 16
-          );
-          setWaveform(fallback);
+          const maxVal = Math.max(...filteredData) || 0.1;
+          const normalized = filteredData.map(n => Math.min(1, n / maxVal));
+          
+          if (isMounted) {
+            setWaveform(normalized);
+            // Also update duration if it's still 0
+            if (!duration || duration === 0) {
+              setDuration(audioBuffer.duration);
+            }
+          }
+        } catch (err) {
+          console.warn('[Waveform] Fallback triggered:', err);
+          if (isMounted) {
+            const hash = getHash(messageId || 'default');
+            const fallback = Array.from({ length: 40 }).map((_, i) => 
+               (((hash * (i + 1)) % 13) + 4) / 16
+            );
+            setWaveform(fallback);
+          }
         }
-      }
+      };
+
+      fetchAndDecodeWaveform();
+      return () => { isMounted = false; };
+    }, [fileUrl, messageId]);
+
+    useEffect(() => {
+      const audio = audioRef.current;
+      if (!audio || duration > 0) return;
+      
+      const checkDuration = () => {
+        if (audio.duration && audio.duration !== Infinity && !isNaN(audio.duration)) {
+          setDuration(audio.duration);
+        }
+      };
+      
+      audio.addEventListener('durationchange', checkDuration);
+      audio.addEventListener('loadeddata', checkDuration);
+      return () => {
+        audio.removeEventListener('durationchange', checkDuration);
+        audio.removeEventListener('loadeddata', checkDuration);
+      };
+    }, [duration]);
+
+    const formatSecs = (s: number) => {
+      if (!s || isNaN(s) || s === Infinity) return '0:00';
+      const mins = Math.floor(s / 60);
+      const secs = Math.floor(s % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    fetchAndDecodeWaveform();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [fileUrl]);
-
-  const formatSecs = (s: number) => {
-    if (!s || isNaN(s) || s === Infinity) return '0:00';
-    const mins = Math.floor(s / 60);
-    const secs = Math.floor(s % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <div className="message-voice-note" style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: 12, 
-      padding: '8px 4px',
-      minWidth: 240
-    }}>
+    return (
+      <div className="message-voice-note" style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 12, 
+        padding: '8px 4px',
+        width: 'fit-content',
+        maxWidth: '100%',
+        minWidth: 'min(240px, 100%)'
+      }}>
       <button
          style={{
            width: 36,
@@ -184,7 +215,8 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
                    style={{ 
                      flex: 1, 
                      height: `${Math.max(2, val * 24)}px`, 
-                     backgroundColor: (progress / (duration || 1)) > (i / waveform.length) 
+                     minWidth: 2,
+                     backgroundColor: (progress / (duration || 0.1)) > (i / waveform.length) 
                        ? (isOwn ? '#fff' : 'var(--accent)') 
                        : (isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)'), 
                      borderRadius: 2,
@@ -212,7 +244,7 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
          </div>
       </div>
 
-      {fileUrl && <audio ref={audioRef} src={fileUrl} style={{ display: 'none' }} preload="metadata" />}
+      {fileUrl && <audio ref={audioRef} src={fileUrl} style={{ display: 'none' }} preload="auto" />}
     </div>
   );
 };
@@ -239,7 +271,8 @@ interface MessageBubbleProps {
   isHighlighted?: boolean;
   currentUserShowMessageStatus?: boolean;
   otherUserShowMessageStatus?: boolean;
-  onReact?: (messageId: string, emoji: string) => void;
+  onMessageReaction?: (messageId: string, emoji: string) => void;
+  onPreview?: (message: Message) => void;
   currentUserId?: string;
   getUserName?: (uid: string) => string;
 }
@@ -268,7 +301,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   isHighlighted = false,
   currentUserShowMessageStatus = true,
   otherUserShowMessageStatus = true,
-  onReact,
+  onMessageReaction,
+  onPreview,
   currentUserId,
   getUserName,
 }) => {
@@ -383,7 +417,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setShowEmojiBar(false);
     setShowExtended(false);
     setCtxMenu(null);
-    onReact?.(message.messageId, emoji);
+    onMessageReaction?.(message.messageId, emoji);
   };
 
   const handleEmojiMartSelect = (emojiData: any) => {
@@ -475,13 +509,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               src={message.fileUrl}
               alt={message.fileName || 'image'}
               style={{ 
-                maxWidth: 280, 
-                maxHeight: 200, 
+                maxWidth: '100%', 
+                maxHeight: 320, 
                 borderRadius: 8, 
-                cursor: message.type === 'image' ? 'pointer' : 'default' 
+                cursor: 'pointer',
+                objectFit: 'contain'
               }}
               onClick={() => {
-                if (message.type === 'image') window.open(message.fileUrl, '_blank');
+                if (onPreview) {
+                  onPreview(message);
+                } else {
+                  window.open(message.fileUrl, '_blank');
+                }
               }}
             />
             {message.content && (
@@ -492,34 +531,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       case 'video':
         return (
-          <div className="message-video">
+          <div className="message-video" onClick={() => onPreview?.(message)} style={{ cursor: onPreview ? 'pointer' : 'default' }}>
             <video
               src={message.fileUrl}
-              controls
-              style={{ maxWidth: 280, borderRadius: 8 }}
+              controls={!onPreview}
+              style={{ maxWidth: '100%', borderRadius: 8, pointerEvents: onPreview ? 'none' : 'auto' }}
             />
           </div>
         );
 
       case 'audio':
-        return (
-          <div className="message-audio">
-            {message.fileUrl ? (
-              <audio src={message.fileUrl} controls style={{ width: 240 }} />
-            ) : (
-              <div style={{ padding: 8, fontStyle: 'italic', opacity: 0.7 }}>Audio unavailable</div>
-            )}
-          </div>
-        );
-
       case 'voice_note':
         return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} messageDuration={message.duration} />;
 
       case 'video_note':
         return (
           <div className="message-video-note" style={{
-            width: 240,
-            height: 240,
+            width: 'min(240px, 100%)',
+            aspectRatio: '1/1',
             borderRadius: '50%',
             overflow: 'hidden',
             border: '2px solid rgba(255,255,255,0.1)',
@@ -560,12 +589,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       case 'file':
         return (
-          <a
-            href={message.fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <div
+            onClick={() => onPreview?.(message)}
             className="message-file"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
           >
             <Paperclip size={18} className="file-icon" />
             <div>
@@ -578,7 +605,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 </div>
               )}
             </div>
-          </a>
+          </div>
         );
 
       default:
@@ -610,7 +637,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         <UserAvatar name={senderName || 'User'} avatar={senderAvatar} size={28} />
       )}
 
-      <div style={{ maxWidth: '65%', position: 'relative' }}>
+      <div className="message-bubble-content" style={{ 
+        maxWidth: '85%', 
+        width: 'fit-content', 
+        minWidth: 0, 
+        position: 'relative', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: isOwn ? 'flex-end' : 'flex-start'
+      }}>
         {showSender && !isOwn && senderName && (
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', marginBottom: 2, paddingLeft: 2 }}>
             {senderName}
@@ -618,7 +653,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
 
         {/* ─── Hovering Emoji Quick-Bar ──────────────────────────────────── */}
-        {showEmojiBar && !message.deleted && onReact && (
+        {showEmojiBar && !message.deleted && onMessageReaction && (
           <div
             ref={emojiBarRef}
             onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); }}
@@ -733,6 +768,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             boxShadow: isHighlighted ? '0 0 0 4px rgba(var(--accent-rgb, 99,102,241), 0.25)' : undefined,
             transition: 'opacity 0.15s, box-shadow 0.3s, outline 0.3s',
             opacity: replyFlash ? 0.5 : 1,
+            display: 'flex',
+            flexDirection: 'column',
+            width: 'fit-content',
+            minWidth: 0,
+            maxWidth: '100%',
+            alignSelf: 'inherit',
+            alignItems: isOwn ? 'flex-end' : 'flex-start'
           }}
         >
           {/* Forwarded indicator */}
@@ -754,15 +796,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
           {/* Reply quote */}
           {message.replyTo && !message.deleted && (
-            <div
-              onClick={() => onScrollToMessage?.(message.replyTo!.messageId)}
-              style={{
+              <div style={{
                 borderLeft: `3px solid ${isOwn ? 'rgba(255,255,255,0.5)' : 'var(--accent)'}`,
                 paddingLeft: 8,
                 marginBottom: 6,
                 opacity: 0.8,
                 fontSize: 12,
-                maxWidth: 240,
+                maxWidth: '100%',
                 cursor: onScrollToMessage ? 'pointer' : 'default',
                 borderRadius: '0 4px 4px 0',
                 backgroundColor: isOwn ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.06)',
@@ -852,7 +892,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </div>
                   )}
                   <button
-                    onClick={() => onReact?.(message.messageId, emoji)}
+                    onClick={() => onMessageReaction?.(message.messageId, emoji)}
                     onMouseEnter={() => setTooltipEmoji(emoji)}
                     onMouseLeave={() => setTooltipEmoji(null)}
                     style={{
@@ -909,7 +949,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         }}
       >
         {/* ─ React option (Moved to Top) ─ */}
-        {!message.deleted && onReact && (
+        {!message.deleted && onMessageReaction && (
           <>
             <div style={{ padding: '8px 12px 6px', display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -1052,6 +1092,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         0%   { transform: scale(0.6); opacity: 0; }
         70%  { transform: scale(1.15); }
         100% { transform: scale(1);   opacity: 1; }
+      }
+      @media (max-width: 600px) {
+        .message-bubble-content { maxWidth: 88% !important; }
+        .bubble-own, .bubble-other { padding: 6px 10px !important; font-size: 13.5px !important; }
+        .message-bubble-wrapper { padding: 0 8px !important; }
       }
     `}</style>
     </>
