@@ -162,7 +162,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [showHoldToast, setShowHoldToast] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressActive = useRef(false);
-  const recordingDurationRef = useRef(0);
+  const [recordingDurationRef, setRecordingDurationRef] = useState(0); // For UI display
+  const recordingDurationSecondsRef = useRef(0); // For internal tracking
+
+  const [recordedMediaBlob, setRecordedMediaBlob] = useState<Blob | null>(null);
+  const [recordedMediaUrl, setRecordedMediaUrl] = useState<string | null>(null);
+  const [isPreviewingRecording, setIsPreviewingRecording] = useState(false);
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const previewMediaRef = useRef<HTMLMediaElement | null>(null);
+  const [recordedMode, setRecordedMode] = useState<'voice' | 'video'>('voice');
+  const [recordedWaveform, setRecordedWaveform] = useState<number[]>([]);
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -903,11 +912,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-        const finalDuration = recordingDurationRef.current;
+        const finalDuration = recordingDurationSecondsRef.current;
+        
         if (finalDuration >= 1) { // Min 1s recording
-          handleSendRecordedMedia(blob, finalDuration);
+          setRecordedMediaBlob(blob);
+          setRecordedMediaUrl(URL.createObjectURL(blob));
+          setIsPreviewingRecording(true);
+          setRecordedMode(recordingMode);
+          if (recordingMode === 'voice') {
+            setRecordedWaveform([...waveformHistory]);
+          }
+        } else {
+          // Toast or ignore? For now just cleanup
+          stream.getTracks().forEach(track => track.stop());
+          setStream(null);
         }
-        stream.getTracks().forEach(track => track.stop());
       };
 
       // Audio analysis for rolling waveform visualizer
@@ -953,11 +972,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       setRecorder(mediaRecorder);
       setIsRecording(true);
       setRecordingDuration(0);
-      recordingDurationRef.current = 0;
+      recordingDurationSecondsRef.current = 0;
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration(prev => {
           const next = prev + 1;
-          recordingDurationRef.current = next;
+          recordingDurationSecondsRef.current = next;
           return next;
         });
       }, 1000);
@@ -1012,38 +1031,64 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const flipCamera = async () => {
     if (!isRecording || recordingMode !== 'video' || !stream) return;
 
-    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
-    setFacingMode(newFacingMode);
-
     try {
-      // Get new video track from different camera
+      const currentVideoTrack = stream.getVideoTracks()[0];
+      const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+      
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 400 },
           height: { ideal: 400 },
           facingMode: newFacingMode
-        },
-        audio: false // keep existing audio
+        }
       });
-
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = stream.getVideoTracks()[0];
-
-      // Replace the video track in the existing stream
-      stream.removeTrack(oldVideoTrack);
-      stream.addTrack(newVideoTrack);
-      oldVideoTrack.stop();
       
-      // Update state to trigger re-render of preview
-      setStream(new MediaStream(stream.getTracks()));
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      
+      // Replace track on the existing stream being recorded
+      stream.removeTrack(currentVideoTrack);
+      currentVideoTrack.stop();
+      stream.addTrack(newVideoTrack);
+      
+      setFacingMode(newFacingMode);
     } catch (err) {
-      console.error('[Recording] Failed to flip camera:', err);
+      console.error('Failed to flip camera:', err);
     }
+  };
+
+  const handleDiscardRecording = () => {
+    if (recordedMediaUrl) URL.revokeObjectURL(recordedMediaUrl);
+    setRecordedMediaBlob(null);
+    setRecordedMediaUrl(null);
+    setIsPreviewingRecording(false);
+    setIsPreviewPlaying(false);
+    setStream(null);
+    setRecorder(null);
+  };
+
+  const togglePreviewPlayback = () => {
+    const media = previewMediaRef.current;
+    if (!media) return;
+    
+    if (media.paused) {
+      media.play();
+      setIsPreviewPlaying(true);
+    } else {
+      media.pause();
+      setIsPreviewPlaying(false);
+    }
+  };
+   
+  const handleConfirmSend = () => {
+    if (recordedMediaBlob) {
+      handleSendRecordedMedia(recordedMediaBlob, recordingDurationSecondsRef.current);
+    }
+    handleDiscardRecording();
   };
 
   const handleSendRecordedMedia = async (blob: Blob, duration: number) => {
     if (!chatId || !currentUser) return;
-    const file = new File([blob], `recording_${Date.now()}.${recordingMode === 'video' ? 'webm' : 'ogg'}`, { type: blob.type });
+    const file = new File([blob], `recording_${Date.now()}.${recordedMode === 'video' ? 'webm' : 'ogg'}`, { type: blob.type });
     
     const validation = validateFile(file);
     if (!validation.valid) {
@@ -1057,7 +1102,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         setUploadProgress(Math.round(progress));
       });
 
-      const msgType = recordingMode === 'video' ? 'video_note' : 'voice_note';
+      const msgType = recordedMode === 'video' ? 'video_note' : 'voice_note';
       const messageId = genId();
       const optimisticMsg: Message = {
         messageId,
@@ -1065,7 +1110,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         senderId: currentUser.uid,
         senderName: currentUser.name,
         senderAvatar: currentUser.avatar,
-        content: `Sent a ${recordingMode === 'video' ? 'video note' : 'voice note'}`,
+        content: `Sent a ${recordedMode === 'video' ? 'video note' : 'voice note'}`,
         type: msgType,
         fileUrl: result.url,
         fileName: result.fileName,
@@ -1082,13 +1127,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       sendMessage({
         messageId,
         chatId,
-        content: `Sent a ${recordingMode === 'video' ? 'video note' : 'voice note'}`,
+        content: `Sent a ${recordedMode === 'video' ? 'video note' : 'voice note'}`,
         type: msgType,
         fileUrl: result.url,
         fileName: result.fileName,
         fileSize: result.fileSize,
         duration,
-        mirrored: recordingMode === 'video' && facingMode === 'user',
+        mirrored: recordedMode === 'video' && facingMode === 'user',
         senderName: currentUser?.name || 'Unknown',
         senderAvatar: currentUser?.avatar || ''
       });
@@ -2190,7 +2235,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           display: 'flex',
           alignItems: 'flex-end',
           gap: 8,
-          padding: '12px 16px',
+          padding: (isRecording || isPreviewingRecording) ? '12px 16px' : '12px 16px',
           borderTop: (replyingTo || editingMsg) ? 'none' : '1px solid var(--border)',
           backgroundColor: 'var(--bg-secondary)',
         }}
@@ -2211,8 +2256,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         >
           <Paperclip size={20} />
         </button>
-        <div style={{ flex: 1, position: 'relative' }}>
-          {/* Recording UI */}
+        <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
+          {/* Recording UI / Preview UI / Text Input */}
           {isRecording ? (
             <div style={{
               flex: 1,
@@ -2270,6 +2315,77 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 title="Cancel"
               >
                 <X size={18} />
+              </button>
+            </div>
+          ) : isPreviewingRecording && recordedMediaUrl ? (
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '6px 14px',
+              backgroundColor: 'var(--bg-tertiary)',
+              borderRadius: 20,
+              height: 40,
+              animation: 'fadeIn 0.2s ease-out'
+            }}>
+              <button
+                onClick={togglePreviewPlayback}
+                style={{ ...iconBtnStyle, color: 'var(--accent)', padding: 0 }}
+                title={isPreviewPlaying ? "Pause" : "Play"}
+              >
+                {isPreviewPlaying ? <Pause size={18} /> : <Play size={18} />}
+              </button>
+              
+              {recordedMode === 'voice' && (
+                <audio
+                  ref={el => {
+                    previewMediaRef.current = el;
+                  }}
+                  src={recordedMediaUrl}
+                  onEnded={() => setIsPreviewPlaying(false)}
+                  onPause={() => setIsPreviewPlaying(false)}
+                  onPlay={() => setIsPreviewPlaying(true)}
+                  style={{ display: 'none' }}
+                />
+              )}
+
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                {recordedMode === 'video' ? 'Video Note' : 'Voice Note'} • {Math.floor(recordingDurationSecondsRef.current / 60)}:{String(recordingDurationSecondsRef.current % 60).padStart(2, '0')}
+              </div>
+              
+              {recordedMode === 'voice' && (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 16, overflow: 'hidden', padding: '0 8px' }}>
+                  {recordedWaveform.map((val, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1,
+                        height: `${Math.max(2, val * 16)}px`,
+                        backgroundColor: 'var(--accent)',
+                        borderRadius: 1,
+                        opacity: 0.6
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              <div style={recordedMode === 'video' ? { flex: 1 } : {}} />
+
+              <button
+                onClick={handleDiscardRecording}
+                style={{ ...iconBtnStyle, color: '#f87171' }}
+                title="Discard"
+              >
+                <Trash2 size={18} />
+              </button>
+              <button
+                onClick={handleConfirmSend}
+                style={{ ...iconBtnStyle, color: '#22c55e' }}
+                title="Send"
+              >
+                <Send size={18} />
               </button>
             </div>
           ) : (
@@ -2348,6 +2464,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </>
           )}
 
+          {/* Recording Preview Overlay (Video Circle) */}
+          {isPreviewingRecording && recordedMode === 'video' && recordedMediaUrl && (
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 40px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 180,
+              height: 180,
+              borderRadius: '50%',
+              overflow: 'hidden',
+              border: '4px solid var(--accent)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              zIndex: 1001,
+              backgroundColor: '#000',
+              animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            }}>
+              <video
+                ref={el => {
+                  if (recordedMode === 'video') previewMediaRef.current = el;
+                }}
+                src={recordedMediaUrl}
+                autoPlay
+                loop
+                muted={false}
+                onEnded={() => setIsPreviewPlaying(false)}
+                onPause={() => setIsPreviewPlaying(false)}
+                onPlay={() => setIsPreviewPlaying(true)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
+              />
+            </div>
+          )}
+
           {/* Video Note Circle Preview Overlay */}
           {isRecording && recordingMode === 'video' && stream && (
             <div style={{
@@ -2402,33 +2555,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
           )}
 
-          <button
-            onClick={handleActionClick}
-            onMouseDown={handleActionMouseDown}
-            onMouseUp={handleActionMouseUp}
-            onMouseLeave={handleActionMouseUp}
-            onTouchStart={handleActionMouseDown}
-            onTouchEnd={handleActionMouseUp}
-            style={{
-              ...iconBtnStyle,
-              backgroundColor: (inputText.trim() || isRecording) ? 'var(--accent)' : 'transparent',
-              color: (inputText.trim() || isRecording) ? '#fff' : 'var(--text-secondary)',
-              borderRadius: '50%',
-              width: 40,
-              height: 40,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: isRecording ? 'scale(1.1)' : 'scale(1)'
-            }}
-            title={inputText.trim() ? "Send" : (isRecording ? "Stop and Send" : (recordingMode === 'voice' ? 'Hold to Record Voice / Click to Toggle' : 'Hold to Record Video / Click to Toggle'))}
-          >
-            {inputText.trim() ? <Send size={18} /> : (isRecording ? <Send size={18} /> : (recordingMode === 'voice' ? <Mic size={22} /> : <Video size={22} />))}
-          </button>
+          {!isPreviewingRecording && (
+             <button
+               onClick={handleActionClick}
+               onMouseDown={handleActionMouseDown}
+               onMouseUp={handleActionMouseUp}
+               onMouseLeave={handleActionMouseUp}
+               onTouchStart={handleActionMouseDown}
+               onTouchEnd={handleActionMouseUp}
+               style={{
+                 ...iconBtnStyle,
+                 backgroundColor: (inputText.trim() || isRecording) ? 'var(--accent)' : 'transparent',
+                 color: (inputText.trim() || isRecording) ? '#fff' : 'var(--text-secondary)',
+                 borderRadius: '50%',
+                 width: 40,
+                 height: 40,
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                 transform: isRecording ? 'scale(1.1)' : 'scale(1)'
+               }}
+               title={inputText.trim() ? "Send" : (isRecording ? "Stop Recording" : (recordingMode === 'voice' ? 'Hold to Record Voice / Click to Toggle' : 'Hold to Record Video / Click to Toggle'))}
+             >
+               {inputText.trim() ? <Send size={18} /> : (isRecording ? <StopCircle size={22} /> : (recordingMode === 'voice' ? <Mic size={22} /> : <Video size={22} />))}
+             </button>
+          )}
 
           {/* Media Picker Button (Emojis, Stickers, GIFs) */}
-          {!isRecording && (
+          {!isRecording && !isPreviewingRecording && (
             <button
               onClick={() => setShowMediaPicker(!showMediaPicker)}
               style={{ ...iconBtnStyle, color: showMediaPicker ? 'var(--accent)' : 'var(--text-secondary)' }}
@@ -3313,7 +3468,7 @@ const FilePreviewer: React.FC<{ message: Message; onClose: () => void }> = ({ me
   const textExtensions = ['.txt', '.md', '.log', '.json', '.js', '.ts', '.py', '.html', '.css', '.xml', '.c', '.cpp', '.h', '.sql', '.yaml', '.yml'];
   const isText = textExtensions.some(ext => message.fileName?.toLowerCase().endsWith(ext));
   const isCsv = message.fileName?.toLowerCase().endsWith('.csv');
-  const isVoice = message.type === 'voice';
+  const isVoice = message.type === 'audio' || message.type === 'voice_note';
 
   // Image zoom/pan state
   const [zoom, setZoom] = useState(1);
