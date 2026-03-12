@@ -52,6 +52,7 @@ export const SOCKET_EVENTS = {
   MESSAGE_DELETED: 'message_deleted',
   MESSAGE_EDITED: 'message_edited',
   PINS_UPDATED: 'pins_updated',
+  USER_UPDATED: 'user_updated',
 
   // Live typing preview
   LIVE_TYPING: 'live_typing',

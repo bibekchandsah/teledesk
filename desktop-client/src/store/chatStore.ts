@@ -294,7 +294,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const existing = state.messages[chatId] || [];
       const updatedMessages = existing.map((m) =>
-        m.messageId === messageId ? { ...m, deleted: true, content: '' } : m
+        m.messageId === messageId ? { 
+          ...m, 
+          deleted: true, 
+          content: 'This message was deleted',
+          fileUrl: undefined,
+          fileName: undefined,
+          fileSize: undefined,
+          reactions: {},
+          isEdited: false
+        } : m
       );
       
       const updatedChatMsg = updatedMessages.find(m => m.messageId === messageId);

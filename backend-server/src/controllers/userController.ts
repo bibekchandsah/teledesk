@@ -1,8 +1,15 @@
 import { Request, Response } from 'express';
 import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames } from '../services/userService';
+import { getUserChats } from '../services/chatService';
+import { SOCKET_EVENTS } from '../../../shared/constants/events';
+import { Chat, User as SharedUser } from '../../../shared/types';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client, R2_BUCKET, R2_PUBLIC_URL } from '../config/r2';
 import logger from '../utils/logger';
+import { Server } from 'socket.io';
+
+let _io: Server | null = null;
+export const setIo = (io: Server) => { _io = io; };
 
 /**
  * POST /api/auth/sync
@@ -37,12 +44,29 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
     const { name, avatar, showActiveStatus, showMessageStatus } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean };
-    const updates: Partial<import('../../../shared/types').User> = {};
+    const updates: Partial<SharedUser> = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
     if (avatar !== undefined) updates.avatar = String(avatar);
     if (showActiveStatus !== undefined) updates.showActiveStatus = Boolean(showActiveStatus);
     if (showMessageStatus !== undefined) updates.showMessageStatus = Boolean(showMessageStatus);
+    
     const user = await upsertUser(uid, updates);
+
+    // Notify peers that our profile (avatar/name) has changed
+    if (_io) {
+      const chats = await getUserChats(uid);
+      const members = new Set<string>();
+      chats.forEach((c: Chat) => {
+        c.members.forEach((mId: string) => {
+          if (mId !== uid) members.add(mId);
+        });
+      });
+      
+      members.forEach((mId: string) => {
+        _io!.to(`user:${mId}`).emit(SOCKET_EVENTS.USER_UPDATED, user);
+      });
+    }
+
     res.json({ success: true, data: user });
   } catch (error) {
     logger.error(`updateMe error: ${(error as Error).message}`);
@@ -270,6 +294,22 @@ export const updateUsername = async (req: Request, res: Response): Promise<void>
 
     // Update username (stored as lowercase for consistency)
     const user = await upsertUser(uid, { username: username.toLowerCase() });
+
+    // Notify peers
+    if (_io) {
+      const chats = await getUserChats(uid);
+      const members = new Set<string>();
+      chats.forEach((c: Chat) => {
+        c.members.forEach((mId: string) => {
+          if (mId !== uid) members.add(mId);
+        });
+      });
+      
+      members.forEach((mId: string) => {
+        _io!.to(`user:${mId}`).emit(SOCKET_EVENTS.USER_UPDATED, user);
+      });
+    }
+
     res.json({ success: true, data: user });
   } catch (error) {
     logger.error(`updateUsername error: ${(error as Error).message}`);

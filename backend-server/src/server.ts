@@ -14,6 +14,7 @@ import fileRoutes from './routes/fileRoutes';
 import savedMessagesRoutes from './routes/savedMessagesRoutes';
 import deviceSessionRoutes from './routes/deviceSessionRoutes';
 import { initializeSocket } from './sockets/socketManager';
+import { setIo as setUserIo } from './controllers/userController';
 import { setIo } from './controllers/chatController';
 import logger from './utils/logger';
 import fs from 'fs';
@@ -82,6 +83,7 @@ app.use(errorHandler);
 // ─── Socket.io Initialization ─────────────────────────────────────────────
 const io = initializeSocket(httpServer);
 setIo(io);
+setUserIo(io);
 
 // ─── Start Server ──────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 3001;

@@ -8,7 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAuth } from './AuthContext';
 import { useUIStore } from '../store/uiStore';
 import { showNotification } from '../services/notificationService';
-import { Message, SavedMessage } from '@shared/types';
+import { Message, SavedMessage, User } from '@shared/types';
 import { useBookmarkStore } from '../store/bookmarkStore';
 
 interface SocketContextValue {
@@ -18,7 +18,7 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
+  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
@@ -95,7 +95,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               : message.type === 'file'
               ? `Sent a file: ${message.fileName || 'document'}`
               : `Sent a ${message.type}`,
-          icon: message.senderAvatar,
+          icon: message.senderAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[message.senderId] || message.senderName || 'U')}&background=6366f1&color=fff`,
           chatId: message.chatId,
         });
       }
@@ -185,7 +185,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       showNotification({
         title: `Incoming ${data.callType} call`,
         body: `${nicknames[data.callerId] || data.callerName} is calling...`,
-        icon: data.callerAvatar,
+        icon: data.callerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[data.callerId] || data.callerName || 'C')}&background=6366f1&color=fff`,
       });
     };
 
@@ -261,7 +261,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           showNotification({
             title: 'Message Reaction',
             body: `${reactorLabel} reacted ${payload.emoji} to: "${contentSnippet}"`,
-            icon: payload.reactorAvatar,
+            icon: payload.reactorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(payload.reactorName || payload.reactorUsername || 'R')}&background=6366f1&color=fff`,
             chatId: payload.chatId,
           });
         }
@@ -288,6 +288,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Force logout from this device
       logout();
     };
+
+    const handleUserUpdated = (user: User) => {
+      setUserProfile(user);
+    };
+
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
     socket.on(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
     socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
@@ -306,6 +311,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
     socket.on(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
     socket.on(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
+    socket.on(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
 
     isConnectedRef.current = socket.connected;
 
@@ -328,6 +334,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.SAVED_MESSAGE_UPDATED, handleSavedMessageUpdated);
       socket.off(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
       socket.off(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
+      socket.off(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
 

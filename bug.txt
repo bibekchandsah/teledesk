@@ -1,4 +1,11 @@
-instantly it don't show updated profile picture of opposite person in chat window until refreshed or reload 
-it don't show avatar in notification only shows user name if profile picture is not present
-it don't show reaction row on grid image layout
-when grid photo is deleted then it show reactions there but it should not show on deleted photo should remain same as before on that place
+(fixed) instantly it don't show updated profile picture of opposite person in chat window until refreshed or reload 
+(fixed) it don't show avatar in notification only shows user name if profile picture is not present
+(fixed) it don't show reaction row on grid image layout
+(fixed) when grid photo is deleted then it show reactions there but it should not show on deleted photo should remain same as before on that place
+allow user to remove their profile picture 
+show border-radius on grid image layout individually
+while downloading it redirect to new tab instead of it should download directly 
+copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
+in grid layout right click replace "copy link" with "copy image" which will copy image and show toast notification about copied image
+hovering on grid layout isn't showing any reaction row
+caption isn't attached with files, it shows on another message bubble
