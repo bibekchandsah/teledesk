@@ -1314,8 +1314,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      setPendingUploadFiles(files);
-      setUploadCaption('');
+      setPendingUploadFiles(prev =>
+        prev.length > 0 ? [...prev, ...files] : files
+      );
+      // Only reset caption when starting fresh (not adding more)
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
