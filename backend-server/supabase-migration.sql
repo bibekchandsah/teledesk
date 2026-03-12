@@ -131,3 +131,7 @@ alter table public.messages add column if not exists delivered_to text[] not nul
 -- ─── Message Reactions ────────────────────────────────────────────────────────
 -- Stores per-message reactions as { "emoji": ["uid1", "uid2", ...] }
 alter table public.messages add column if not exists reactions jsonb not null default '{}';
+
+-- ─── Message Groups (Telegram-style grid layout) ─────────────────────────
+-- Groups multiple files uploaded together so they render as a single message bubble grid
+alter table public.messages add column if not exists group_id text;

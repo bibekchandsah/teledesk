@@ -50,6 +50,7 @@ type MessageRow = {
   call_status_receiver: string | null;
   delivered_to: string[];
   reactions: Record<string, string[]> | null;
+  group_id: string | null;
 };
 
 const rowToMessage = (r: MessageRow): Message => ({
@@ -77,6 +78,7 @@ const rowToMessage = (r: MessageRow): Message => ({
   ...(r.call_status !== null && { callStatus: r.call_status as Message['callStatus'] }),
   ...(r.call_status_receiver !== null && { callStatusReceiver: r.call_status_receiver as Message['callStatusReceiver'] }),
   reactions: r.reactions ?? {},
+  ...(r.group_id !== null && { groupId: r.group_id }),
 });
 
 
@@ -190,6 +192,7 @@ export const saveMessage = async (message: Message): Promise<Message> => {
     call_status: message.callStatus ?? null,
     call_status_receiver: message.callStatusReceiver ?? null,
     reactions: message.reactions ?? {},
+    group_id: message.groupId ?? null,
   });
   if (msgErr) throw new Error(msgErr.message);
 

@@ -69,6 +69,7 @@ export interface Message {
   callStatusReceiver?: 'completed' | 'missed' | 'cancelled' | 'no_answer' | 'declined'; // receiver's view
   reactions?: Record<string, string[]>; // emoji → array of userIds who reacted
   duration?: number;         // seconds, for voice/video notes or calls
+  groupId?: string;          // set on all messages in a multi-file batch to render as a grid
 }
 
 // Saved Messages / Bookmarks (stored per-user, synced across devices)

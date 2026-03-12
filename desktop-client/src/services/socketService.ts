@@ -90,6 +90,7 @@ export const sendMessage = (payload: {
   duration?: number;
   mirrored?: boolean;
   forwarded?: boolean;
+  groupId?: string;
 }): void => {
   socket?.emit(SOCKET_EVENTS.SEND_MESSAGE, payload);
 };

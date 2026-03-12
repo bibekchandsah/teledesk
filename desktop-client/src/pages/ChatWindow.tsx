@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck } from 'lucide-react';
 import { formatTime } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -150,7 +150,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [previewFile, setPreviewFile] = useState<Message | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ messages: Message[]; initialIndex: number } | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -1277,6 +1277,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0 || !chatId || !currentUser) return;
 
+    // Generate a shared groupId for batch uploads (multi-file grid rendering)
+    const batchGroupId = files.length > 1
+      ? `grp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      : undefined;
+
     for (const file of files) {
       const validation = validateFile(file);
       if (!validation.valid) {
@@ -1299,7 +1304,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           fileName: result.fileName,
           fileSize: result.fileSize,
           senderName: currentUser.name || 'Unknown',
-          senderAvatar: currentUser.avatar || ''
+          senderAvatar: currentUser.avatar || '',
+          ...(batchGroupId ? { groupId: batchGroupId } : {})
         });
       } catch (err) {
         console.error('[Upload] Failed:', err);
@@ -2095,131 +2101,286 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             No messages yet. Say hello!
           </div>
         )}
-        {chatMessages.map((msg, idx) => {
-          const prevMsg = chatMessages[idx - 1];
-          const showDatePill =
-            !prevMsg ||
-            getDateKey(msg.timestamp) !== getDateKey(prevMsg.timestamp);
-          const isSearchMatch = searchMatchIndices.includes(idx);
-          const isActiveMatch = searchMatchIndices[searchMatchIdx] === idx;
-          return (
-            <React.Fragment key={msg.messageId}>
-              {showDatePill && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    padding: '10px 0 6px',
-                  }}
-                >
-                  <span
-                    style={{
-                      backgroundColor: 'var(--bg-secondary)',
-                      color: 'var(--text-secondary)',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '4px 12px',
-                      borderRadius: 20,
-                      border: '1px solid var(--border)',
-                      letterSpacing: '0.03em',
-                      userSelect: 'none',
-                    }}
-                  >
-                    {formatDateLabel(msg.timestamp)}
-                  </span>
-                </div>
-              )}
-              <div data-msg-idx={idx} data-msg-id={msg.messageId}
-                style={{ display: 'flex', alignItems: 'center' }}
-              >
-                {/* Checkbox in selection mode */}
-                {selectionMode && (
-                  <div
-                    onClick={() => toggleSelectMessage(msg.messageId)}
-                    style={{
-                      flexShrink: 0,
-                      width: 36,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      paddingLeft: 8,
-                    }}
-                  >
-                    <div style={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      border: `2px solid ${selectedIds.has(msg.messageId) ? 'var(--accent)' : 'var(--border)'}`,
-                      backgroundColor: selectedIds.has(msg.messageId) ? 'var(--accent)' : 'transparent',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.15s',
-                      flexShrink: 0,
-                    }}>
-                      {selectedIds.has(msg.messageId) && (
-                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
+        {(() => {
+          // ── Build render items: collapse consecutive same-groupId messages into one group node ──
+          type RenderItem =
+            | { kind: 'single'; msg: Message; idx: number }
+            | { kind: 'group'; msgs: Message[]; firstIdx: number; lastIdx: number };
+
+          const renderItems: RenderItem[] = [];
+          let i = 0;
+          while (i < chatMessages.length) {
+            const msg = chatMessages[i];
+            
+            // If message has a groupId, peek ahead to see if there are consecutive messages with the exact same groupId
+            if (msg.groupId) {
+              const groupMsgs: Message[] = [msg];
+              let j = i + 1;
+              while (j < chatMessages.length && chatMessages[j].groupId === msg.groupId) {
+                groupMsgs.push(chatMessages[j]);
+                j++;
+              }
+              
+              if (groupMsgs.length > 1) {
+                renderItems.push({ kind: 'group', msgs: groupMsgs, firstIdx: i, lastIdx: j - 1 });
+                i = j; // skip over all grouped messages
+                continue;
+              }
+            }
+            
+            // Single message (either no groupId, or only one message with this groupId)
+            renderItems.push({ kind: 'single', msg, idx: i });
+            i++;
+          }
+
+          return renderItems.map((item) => {
+            if (item.kind === 'group') {
+              const { msgs, firstIdx } = item;
+              const firstMsg = msgs[0];
+              const lastMsg = msgs[msgs.length - 1];
+              const isOwn = firstMsg.senderId === currentUser?.uid;
+              const prevMsg = chatMessages[firstIdx - 1];
+              const showDatePill =
+                !prevMsg ||
+                getDateKey(firstMsg.timestamp) !== getDateKey(prevMsg.timestamp);
+
+              // Telegram supports up to 10 in a block before capping, but we will show max 9 in the grid
+              const MAX_SHOWN = Math.min(msgs.length, 9);
+              const shown = msgs.slice(0, MAX_SHOWN);
+              const overflow = msgs.length - MAX_SHOWN;
+
+              // Compute Telegram style layout
+              // 1 = 1x1 full
+              // 2 = 1x2 half half
+              // 3 = 1x3 row
+              // 4 = 2x2 square
+              // 5 = 2 top, 3 bottom (or similar) -> we'll use a responsive 6-col grid to cheat spans
+              // 6 = 3x2
+              // 7 = 3 top, 4 bottom -> 3x3 with empty spots? Telegram uses complex masonry, we'll use 3 columns auto-flow
+              // 8 = 3, 3, 2
+              // 9 = 3x3
+              
+              const is2Col = msgs.length === 2 || msgs.length === 4;
+              
+              return (
+                <React.Fragment key={`group_${firstMsg.groupId}`}>
+                  {showDatePill && (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
+                      <span style={{
+                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+                        fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20,
+                        border: '1px solid var(--border)', letterSpacing: '0.03em', userSelect: 'none',
+                      }}>
+                        {formatDateLabel(firstMsg.timestamp)}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+                    <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(6, 1fr)',
+                        gridAutoRows: msgs.length === 1 ? undefined : '110px', // Fixed height for masonry-lite cells
+                        gap: 3,
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        maxWidth: 340,
+                        width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined
+                      }}>
+                        {shown.map((m, ci) => {
+                          const isLast = ci === shown.length - 1;
+                          const isLastAndHasOverflow = isLast && overflow > 0;
+                          
+                          // Determine grid spans for masonry-like layouts using a 6-col underlying grid
+                          let colSpan = 'span 2'; // Default: 3 items per row (6 / 3 = 2)
+                          
+                          if (msgs.length === 1) colSpan = 'span 6';
+                          else if (msgs.length === 2 || msgs.length === 4) {
+                            colSpan = 'span 3'; // 2 items per row
+                          } else if (msgs.length === 5) {
+                            if (ci < 2) colSpan = 'span 3'; // top 2
+                            else colSpan = 'span 2'; // bottom 3
+                          } else if (msgs.length === 7) {
+                            if (ci < 3) colSpan = 'span 2'; // top 3
+                            else colSpan = ci === 3 || ci === 6 ? 'span 2' : 'span 2'; // wait, 4 items = 6/4 = 1.5. Subgrids are hard. Let's do 3 top, 4 bottom by using flex? No, grid is easier. Let's just use spans: 
+                            // for 7: top 3 (span 2), bottom 4.. wait, 4 doesn't divide 6 cleanly. Let's do top 4 (span 1.5 doesn't work). Top 2 (span 3), middle 2 (span 3), bottom 3 (span 2) -> 2+2+3 = 7.
+                            if (ci < 4) colSpan = 'span 3'; // first 4 in 2 rows of 2
+                            else colSpan = 'span 2'; // last 3 in 1 row of 3
+                          } else if (msgs.length === 8) {
+                            // 2 rows of 3, 1 row of 2?
+                            if (ci < 6) colSpan = 'span 2'; // first 6 in 2 rows of 3
+                            else colSpan = 'span 3'; // next 2 in 1 row of 2
+                          }
+                          
+                          // Actually, a simpler approach for Telegram style 5-grid:
+                          // We'll leave it as auto-flow for now, but adjust aspect ratio based on grid position
+                          let cellAspectRatio = msgs.length === 1 ? 'auto' : '1/1';
+                          
+                          return (
+                            <div
+                              key={m.messageId}
+                              style={{ 
+                                position: 'relative', 
+                                gridColumn: colSpan,
+                                overflow: 'hidden', 
+                                cursor: 'pointer', 
+                                backgroundColor: '#111',
+                                maxHeight: msgs.length === 1 ? 320 : undefined,
+                              }}
+                              onClick={() => {
+                                if (isLastAndHasOverflow) {
+                                  // Clicking the +N overlay opens gallery at the first hidden item
+                                  setPreviewFile({ messages: msgs, initialIndex: MAX_SHOWN });
+                                } else {
+                                  setPreviewFile({ messages: msgs, initialIndex: ci });
+                                }
+                              }}
+                            >
+                              {m.type === 'image' || m.type === 'gif' ? (
+                                <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : m.type === 'video' ? (
+                                <video src={m.fileUrl} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                                  <Paperclip size={24} color="var(--text-secondary)" />
+                                </div>
+                              )}
+                              {isLastAndHasOverflow && (
+                                <div style={{
+                                  position: 'absolute', inset: 0,
+                                  backgroundColor: 'rgba(0,0,0,0.55)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#fff', fontSize: 24, fontWeight: 700,
+                                }}>
+                                  +{overflow}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Timestamp row */}
+                      <div style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', marginTop: 4, fontSize: 11, opacity: 0.6, gap: 4 }}>
+                        <span>{formatTime(lastMsg.timestamp)}</span>
+                        {isOwn && (
+                          <span style={{ display: 'flex', alignItems: 'center' }}>
+                            {lastMsg.readBy.length > 1
+                              ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
+                              : (lastMsg.deliveredTo ?? []).length > 0
+                                ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
+                                : <Check size={13} style={{ opacity: 0.65 }} />}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                </React.Fragment>
+              );
+            }
+
+            // ── Single message ──
+            const { msg, idx } = item;
+            const prevMsg = chatMessages[idx - 1];
+            const showDatePill =
+              !prevMsg ||
+              getDateKey(msg.timestamp) !== getDateKey(prevMsg.timestamp);
+            const isSearchMatch = searchMatchIndices.includes(idx);
+            const isActiveMatch = searchMatchIndices[searchMatchIdx] === idx;
+            return (
+              <React.Fragment key={msg.messageId}>
+                {showDatePill && (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
+                    <span style={{
+                      backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+                      fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20,
+                      border: '1px solid var(--border)', letterSpacing: '0.03em', userSelect: 'none',
+                    }}>
+                      {formatDateLabel(msg.timestamp)}
+                    </span>
+                  </div>
                 )}
-                <div
-                  style={{ flex: 1, minWidth: 0 }}
-                  onClick={selectionMode ? () => toggleSelectMessage(msg.messageId) : undefined}
+                <div data-msg-idx={idx} data-msg-id={msg.messageId}
+                  style={{ display: 'flex', alignItems: 'center' }}
                 >
-                <MessageBubble
-                  message={msg}
-                  isOwn={msg.senderId === currentUser?.uid}
-                  senderName={msg.senderId === currentUser?.uid ? currentUser?.name : userProfiles[msg.senderId]?.name}
-                  senderAvatar={msg.senderId === currentUser?.uid ? currentUser?.avatar : userProfiles[msg.senderId]?.avatar}
-                  showSender={activeChat.type === 'group'}
-                  onDelete={selectionMode ? undefined : handleDeleteMessage}
-                  onPreview={(msg) => setPreviewFile(msg)}
-                  onStartEdit={selectionMode ? undefined : (msg) => {
-                    setEditingMsg(msg);
-                    setReplyingTo(null);
-                    setInputText(msg.content ?? '');
-                    setTimeout(() => {
-                      if (inputRef.current) {
-                        inputRef.current.focus();
-                        inputRef.current.style.height = 'auto';
-                        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
-                        const len = inputRef.current.value.length;
-                        inputRef.current.setSelectionRange(len, len);
-                      }
-                    }, 0);
-                  }}
-                  onCall={msg.type === 'call' ? handleStartCall : undefined}
-                  onReply={selectionMode ? undefined : handleReply}
-                  onForward={selectionMode ? undefined : handleForward}
-                  onBookmark={selectionMode ? undefined : handleBookmarkMessage}
-                  onPin={selectionMode ? undefined : handlePin}
-                  isPinned={(activeChat.pinnedMessageIds ?? []).includes(msg.messageId)}
-                  onScrollToMessage={handleScrollToMessage}
-                  onCloseChat={selectionMode ? undefined : (() => { setActiveChat(null); navigate('/chats'); })}
-                  onEnterSelect={selectionMode ? undefined : enterSelectionMode}
-                  searchQuery={isSearchMatch ? searchQuery : undefined}
-                  isActiveSearchMatch={isActiveMatch}
-                  isHighlighted={highlightedMsgId === msg.messageId}
-                  currentUserShowMessageStatus={currentUser?.showMessageStatus !== false}
-                  otherUserShowMessageStatus={(() => {
-                    const otherUserId = msg.senderId === currentUser?.uid 
-                      ? activeChat.members.find(m => m !== currentUser?.uid) 
-                      : msg.senderId;
-                    return otherUserId ? userProfiles[otherUserId]?.showMessageStatus !== false : true;
-                  })()}
-                  onMessageReaction={selectionMode ? undefined : handleReact}
-                  currentUserId={currentUser?.uid}
-                  getUserName={(uid: string) => uid === currentUser?.uid ? 'You' : (userProfiles[uid]?.name || 'Unknown')}
-                />
+                  {/* Checkbox in selection mode */}
+                  {selectionMode && (
+                    <div
+                      onClick={() => toggleSelectMessage(msg.messageId)}
+                      style={{
+                        flexShrink: 0, width: 36, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', cursor: 'pointer', paddingLeft: 8,
+                      }}
+                    >
+                      <div style={{
+                        width: 20, height: 20, borderRadius: '50%',
+                        border: `2px solid ${selectedIds.has(msg.messageId) ? 'var(--accent)' : 'var(--border)'}`,
+                        backgroundColor: selectedIds.has(msg.messageId) ? 'var(--accent)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.15s', flexShrink: 0,
+                      }}>
+                        {selectedIds.has(msg.messageId) && (
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    style={{ flex: 1, minWidth: 0 }}
+                    onClick={selectionMode ? () => toggleSelectMessage(msg.messageId) : undefined}
+                  >
+                  <MessageBubble
+                    message={msg}
+                    isOwn={msg.senderId === currentUser?.uid}
+                    senderName={msg.senderId === currentUser?.uid ? currentUser?.name : userProfiles[msg.senderId]?.name}
+                    senderAvatar={msg.senderId === currentUser?.uid ? currentUser?.avatar : userProfiles[msg.senderId]?.avatar}
+                    showSender={activeChat.type === 'group'}
+                    onDelete={selectionMode ? undefined : handleDeleteMessage}
+                    onPreview={(msg) => setPreviewFile({ messages: [msg], initialIndex: 0 })}
+                    onStartEdit={selectionMode ? undefined : (msg) => {
+                      setEditingMsg(msg);
+                      setReplyingTo(null);
+                      setInputText(msg.content ?? '');
+                      setTimeout(() => {
+                        if (inputRef.current) {
+                          inputRef.current.focus();
+                          inputRef.current.style.height = 'auto';
+                          inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+                          const len = inputRef.current.value.length;
+                          inputRef.current.setSelectionRange(len, len);
+                        }
+                      }, 0);
+                    }}
+                    onCall={msg.type === 'call' ? handleStartCall : undefined}
+                    onReply={selectionMode ? undefined : handleReply}
+                    onForward={selectionMode ? undefined : handleForward}
+                    onBookmark={selectionMode ? undefined : handleBookmarkMessage}
+                    onPin={selectionMode ? undefined : handlePin}
+                    isPinned={(activeChat.pinnedMessageIds ?? []).includes(msg.messageId)}
+                    onScrollToMessage={handleScrollToMessage}
+                    onCloseChat={selectionMode ? undefined : (() => { setActiveChat(null); navigate('/chats'); })}
+                    onEnterSelect={selectionMode ? undefined : enterSelectionMode}
+                    searchQuery={isSearchMatch ? searchQuery : undefined}
+                    isActiveSearchMatch={isActiveMatch}
+                    isHighlighted={highlightedMsgId === msg.messageId}
+                    currentUserShowMessageStatus={currentUser?.showMessageStatus !== false}
+                    otherUserShowMessageStatus={(() => {
+                      const otherUserId = msg.senderId === currentUser?.uid
+                        ? activeChat.members.find(m => m !== currentUser?.uid)
+                        : msg.senderId;
+                      return otherUserId ? userProfiles[otherUserId]?.showMessageStatus !== false : true;
+                    })()}
+                    onMessageReaction={selectionMode ? undefined : handleReact}
+                    currentUserId={currentUser?.uid}
+                    getUserName={(uid: string) => uid === currentUser?.uid ? 'You' : (userProfiles[uid]?.name || 'Unknown')}
+                  />
+                  </div>
                 </div>
-              </div>
-            </React.Fragment>
-          );
-        })}
+              </React.Fragment>
+            );
+          });
+        })()}
         <TypingIndicator
           users={typingList.filter((u) => u.userId !== currentUser?.uid)}
           liveTexts={liveTexts}
@@ -3678,7 +3839,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         </div>
       )}
       {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
-      {previewFile && <FilePreviewer message={previewFile} onClose={() => setPreviewFile(null)} />}
+      {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
     </div>
   );
 };
@@ -3806,7 +3967,9 @@ const selListItemStyle: React.CSSProperties = {
   color: 'var(--text-primary)',
 };
 
-const FilePreviewer: React.FC<{ message: Message; onClose: () => void }> = ({ message, onClose }) => {
+const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClose: () => void }> = ({ messages, initialIndex, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const message = messages[currentIndex];
   const isImage = message.type === 'image' || message.type === 'gif' || message.type === 'sticker';
   const isVideo = message.type === 'video' || message.type === 'video_note';
   const isPdf = message.fileName?.toLowerCase().endsWith('.pdf');
@@ -3937,6 +4100,37 @@ const FilePreviewer: React.FC<{ message: Message; onClose: () => void }> = ({ me
       </div>
     );
   };
+
+  const hasNext = currentIndex < messages.length - 1;
+  const hasPrev = currentIndex > 0;
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (hasNext) {
+      setCurrentIndex(c => c + 1);
+      resetZoom();
+      setTextContent(null);
+    }
+  };
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (hasPrev) {
+      setCurrentIndex(c => c - 1);
+      resetZoom();
+      setTextContent(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, messages.length, onClose]);
 
   return (
     <div 
@@ -4093,6 +4287,23 @@ const FilePreviewer: React.FC<{ message: Message; onClose: () => void }> = ({ me
           position: 'relative'
         }}
       >
+        {hasPrev && (
+          <button 
+            onClick={handlePrev}
+            style={{ position: 'absolute', left: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <ChevronLeft size={32} />
+          </button>
+        )}
+        {hasNext && (
+          <button 
+            onClick={handleNext}
+            style={{ position: 'absolute', right: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <ChevronLeft size={32} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        
         {isImage ? (
           <img
             src={message.fileUrl}
