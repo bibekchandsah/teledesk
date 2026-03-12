@@ -164,6 +164,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const isLongPressActive = useRef(false);
   const [recordingDurationRef, setRecordingDurationRef] = useState(0); // For UI display
   const recordingDurationSecondsRef = useRef(0); // For internal tracking
+  const isCameraFlippingRef = useRef(false);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  
+  // Canvas recording refs
+  const drawFrameRef = useRef<number>(0);
+  const recordingVideoRef = useRef<HTMLVideoElement | null>(null);
+  const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const coreAudioTrackRef = useRef<MediaStreamTrack | null>(null);
 
   const [recordedMediaBlob, setRecordedMediaBlob] = useState<Blob | null>(null);
   const [recordedMediaUrl, setRecordedMediaUrl] = useState<string | null>(null);
@@ -904,13 +912,74 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(stream);
 
-      const mediaRecorder = new MediaRecorder(stream, {
+      let streamToRecord = stream;
+
+      // Use Canvas approach for continuous video recording
+      if (recordingMode === 'video') {
+        const videoEl = document.createElement('video');
+        videoEl.autoplay = true;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        videoEl.srcObject = stream;
+        await videoEl.play().catch(console.error);
+        recordingVideoRef.current = videoEl;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 400; // Force 400x400 square for video notes
+        canvas.height = 400;
+        const ctx = canvas.getContext('2d');
+        recordingCanvasRef.current = canvas;
+
+        const drawFrame = () => {
+          if (!recordingVideoRef.current || !ctx || !recordingCanvasRef.current) return;
+          const video = recordingVideoRef.current;
+          if (video.readyState >= 2) {
+            const videoAspect = video.videoWidth / video.videoHeight;
+            const canvasAspect = 1; // square
+            let sx = 0, sy = 0, sWidth = video.videoWidth, sHeight = video.videoHeight;
+            if (videoAspect > canvasAspect) {
+              sWidth = sHeight * canvasAspect;
+              sx = (video.videoWidth - sWidth) / 2;
+            } else if (videoAspect < canvasAspect) {
+              sHeight = sWidth / canvasAspect;
+              sy = (video.videoHeight - sHeight) / 2;
+            }
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Flip horizontal if it's the front camera
+            ctx.save();
+            if (facingMode === 'user' || video.style.transform.includes('scaleX(-1)')) {
+               ctx.translate(canvas.width, 0);
+               ctx.scale(-1, 1);
+            }
+            ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+          }
+          drawFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrameRef.current = requestAnimationFrame(drawFrame);
+
+        const canvasStream = canvas.captureStream(30); // 30 FPS
+        coreAudioTrackRef.current = stream.getAudioTracks()[0];
+        const combinedStream = new MediaStream([canvasStream.getVideoTracks()[0]]);
+        if (coreAudioTrackRef.current) {
+          combinedStream.addTrack(coreAudioTrackRef.current);
+        }
+        streamToRecord = combinedStream;
+      }
+
+      const mediaRecorder = new MediaRecorder(streamToRecord, {
         mimeType: recordingMode === 'video' ? 'video/webm;codecs=vp8' : 'audio/webm'
       });
       
       const chunks: Blob[] = [];
       mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       mediaRecorder.onstop = async () => {
+        // If we are flipping the camera, we might intentionally stop this recorder 
+        // but keep isRecording = true. We handle concatenation there.
+        // However, for simplicity, let's just handle normal stop here.
+        if (isCameraFlippingRef.current) return;
+
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
         const finalDuration = recordingDurationSecondsRef.current;
         
@@ -924,9 +993,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           }
         } else {
           // Toast or ignore? For now just cleanup
-          stream.getTracks().forEach(track => track.stop());
+          stream?.getTracks().forEach(track => track.stop());
           setStream(null);
         }
+        setIsRecording(false);
+        clearInterval(recordingTimerRef.current!);
       };
 
       // Audio analysis for rolling waveform visualizer
@@ -987,12 +1058,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
+  const cleanupCanvasRecording = () => {
+    if (drawFrameRef.current) {
+      cancelAnimationFrame(drawFrameRef.current);
+      drawFrameRef.current = 0;
+    }
+    if (recordingVideoRef.current) {
+      recordingVideoRef.current.srcObject = null;
+      recordingVideoRef.current = null;
+    }
+    recordingCanvasRef.current = null;
+    coreAudioTrackRef.current = null;
+  };
+
   const stopRecording = () => {
+    isCameraFlippingRef.current = false;
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
+    } else if (recordedChunksRef.current.length > 0) {
+       finalizeMultiChunkRecording();
     }
     clearInterval(recordingTimerRef.current!);
     setIsRecording(false);
+    cleanupCanvasRecording();
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
@@ -1001,6 +1089,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   const cancelRecording = () => {
+    isCameraFlippingRef.current = false;
+    recordedChunksRef.current = [];
     if (recorder && recorder.state !== 'inactive') {
       recorder.onstop = null; // Don't trigger send
       recorder.stop();
@@ -1010,6 +1100,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     setIsRecording(false);
     setStream(null);
     setRecorder(null);
+    cleanupCanvasRecording();
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
@@ -1028,14 +1119,32 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewFile]);
 
-  const flipCamera = async () => {
-    if (!isRecording || recordingMode !== 'video' || !stream) return;
+  const finalizeMultiChunkRecording = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: recordingMode === 'video' ? 'video/webm;codecs=vp8' : 'audio/webm' });
+      const finalDuration = recordingDurationSecondsRef.current;
+      
+      if (finalDuration >= 1) { // Min 1s recording
+        setRecordedMediaBlob(blob);
+        setRecordedMediaUrl(URL.createObjectURL(blob));
+        setIsPreviewingRecording(true);
+        setRecordedMode(recordingMode);
+        if (recordingMode === 'voice') {
+          setRecordedWaveform([...waveformHistory]);
+        }
+      } else {
+        stream?.getTracks().forEach(track => track.stop());
+        setStream(null);
+      }
+      setIsRecording(false);
+      recordedChunksRef.current = [];
+  };
 
+  const flipCamera = async () => {
+    if (!isRecording || recordingMode !== 'video' || !stream || !recorder) return;
     try {
-      const currentVideoTrack = stream.getVideoTracks()[0];
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
       
-      const newStream = await navigator.mediaDevices.getUserMedia({
+      const newCameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 400 },
           height: { ideal: 400 },
@@ -1043,14 +1152,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         }
       });
       
-      const newVideoTrack = newStream.getVideoTracks()[0];
+      // Stop old video track
+      stream.getVideoTracks().forEach(t => t.stop());
       
-      // Replace track on the existing stream being recorded
-      stream.removeTrack(currentVideoTrack);
-      currentVideoTrack.stop();
-      stream.addTrack(newVideoTrack);
+      // Construct a replacement stream for UI and our hidden video element
+      // Keep the original core audio track
+      const tracks = [...newCameraStream.getVideoTracks()];
+      if (coreAudioTrackRef.current) {
+        tracks.push(coreAudioTrackRef.current);
+      }
+      const replacementStream = new MediaStream(tracks);
+
+      if (recordingVideoRef.current) {
+         recordingVideoRef.current.srcObject = replacementStream;
+         if (newFacingMode === 'user') {
+            recordingVideoRef.current.style.transform = 'scaleX(-1)';
+         } else {
+            recordingVideoRef.current.style.transform = 'none';
+         }
+         await recordingVideoRef.current.play().catch(console.error);
+      }
       
+      setStream(replacementStream);
       setFacingMode(newFacingMode);
+
     } catch (err) {
       console.error('Failed to flip camera:', err);
     }
