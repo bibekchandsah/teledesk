@@ -127,13 +127,17 @@ export const deleteMessage = async (req: Request, res: Response): Promise<void> 
     const scope = req.body?.scope === 'both' ? 'both' : 'me';
     const uid = req.user!.uid;
 
+    logger.info(`deleteMessage called: messageId=${messageId}, scope=${scope}, uid=${uid}`);
+
     if (scope === 'both') {
       const result = await deleteMessageForAll(messageId, uid);
       if (!result) {
+        logger.warn(`deleteMessageForAll failed (not found or denied): messageId=${messageId}, uid=${uid}`);
         res.status(404).json({ success: false, error: 'Message not found or access denied' });
         return;
       }
       if (_io) {
+        logger.info(`Emitting message_deleted to ${result.members.length} members for msg ${messageId}`);
         result.members.forEach((memberId) => {
           _io!.to(`user:${memberId}`).emit(SOCKET_EVENTS.MESSAGE_DELETED, {
             messageId,

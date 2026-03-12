@@ -291,14 +291,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })),
 
   markMessageDeleted: (chatId, messageId) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [chatId]: (state.messages[chatId] || []).map((m) =>
-          m.messageId === messageId ? { ...m, deleted: true, content: '' } : m
+    set((state) => {
+      const existing = state.messages[chatId] || [];
+      const updatedMessages = existing.map((m) =>
+        m.messageId === messageId ? { ...m, deleted: true, content: '' } : m
+      );
+      
+      const updatedChatMsg = updatedMessages.find(m => m.messageId === messageId);
+      
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: updatedMessages,
+        },
+        chats: state.chats.map((c) =>
+          c.chatId === chatId && c.lastMessage?.messageId === messageId && updatedChatMsg
+            ? { ...c, lastMessage: updatedChatMsg }
+            : c
         ),
-      },
-    })),
+        activeChat:
+          state.activeChat?.chatId === chatId && state.activeChat.lastMessage?.messageId === messageId && updatedChatMsg
+            ? { ...state.activeChat, lastMessage: updatedChatMsg }
+            : state.activeChat,
+      };
+    }),
 
   updateChatPins: (chatId, pinnedMessageIds) =>
     set((state) => ({

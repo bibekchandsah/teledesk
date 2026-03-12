@@ -4,6 +4,7 @@ import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
 import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
+import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 
@@ -178,11 +179,11 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
       <div className="message-voice-note" style={{ 
         display: 'flex', 
         alignItems: 'center', 
-        gap: 12, 
-        padding: '8px 4px',
+        gap: 8, 
+        padding: '2px 0',
         width: 'fit-content',
         maxWidth: '100%',
-        minWidth: 'min(240px, 100%)'
+        minWidth: 180
       }}>
       <button
          style={{
@@ -417,7 +418,6 @@ interface MessageBubbleProps {
   getUserName?: (uid: string) => string;
 }
 
-const PRESET_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '👎'];
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
@@ -462,49 +462,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const emojiBarRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (!ctxMenu) return;
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) {
-        setCtxMenu(null);
-        setAdjustedPos(null);
-        setShowExtended(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [ctxMenu]);
-
-  // Close extended emoji picker on outside click
-  useEffect(() => {
-    if (!showExtended) return;
-    const close = (e: MouseEvent) => {
-      if (!emojiBarRef.current?.contains(e.target as Node)) {
-        setShowExtended(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [showExtended]);
-
-  // Clamp the menu position so it never overflows the viewport
-  useLayoutEffect(() => {
-    if (!ctxMenu || !menuRef.current) return;
-    const { offsetWidth: w, offsetHeight: h } = menuRef.current;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const MARGIN = 8;
-    const x = Math.min(ctxMenu.x, vw - w - MARGIN);
-    const y = Math.min(ctxMenu.y, vh - h - MARGIN);
-    setAdjustedPos({ x: Math.max(MARGIN, x), y: Math.max(MARGIN, y) });
-  }, [ctxMenu, showExtended]);
-
+  // Handle context menu
   const handleContextMenu = (e: React.MouseEvent) => {
     if (!onDelete) return;
     e.preventDefault();
-    setAdjustedPos(null);
     setCtxMenu({ x: e.clientX, y: e.clientY });
   };
+
 
   const handleDelete = (scope: 'me' | 'both') => {
     setCtxMenu(null);
@@ -517,7 +481,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   const handleCopy = () => {
-    setCtxMenu(null);
     if (message.content) navigator.clipboard.writeText(message.content).catch(() => {});
   };
 
@@ -853,10 +816,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div
           className={`message-bubble ${isOwn ? 'bubble-own' : 'bubble-other'}`}
           style={{
-            backgroundColor: isOwn ? 'var(--accent)' : 'var(--bg-secondary)',
+            backgroundColor: message.type === 'video_note' ? 'transparent' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
             color: isOwn ? '#fff' : 'var(--text-primary)',
             borderRadius: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-            padding: '8px 12px',
+            padding: message.type === 'video_note' ? 0 : '8px 12px',
             fontSize: 14,
             lineHeight: 1.5,
             outline: isHighlighted
@@ -1040,156 +1003,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     </div>
 
     {ctxMenu && (
-      <div
-        ref={menuRef}
-        style={{
-          position: 'fixed',
-          top: adjustedPos ? adjustedPos.y : ctxMenu.y,
-          left: adjustedPos ? adjustedPos.x : ctxMenu.x,
-          visibility: adjustedPos ? 'visible' : 'hidden',
-          zIndex: 1000,
-          backgroundColor: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-          overflow: 'hidden',
-          minWidth: 170,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* ─ React option (Moved to Top) ─ */}
-        {!message.deleted && onMessageReaction && (
-          <>
-            <div style={{ padding: '8px 12px 6px', display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {PRESET_EMOJIS.map(em => (
-                  <button
-                    key={em}
-                    onClick={() => handleEmojiClick(em)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: 20,
-                      lineHeight: 1,
-                      padding: '2px',
-                      borderRadius: '50%',
-                      transition: 'transform 0.1s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
-                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                  >
-                    {em}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowExtended(!showExtended);
-                }}
-                title="More reactions"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: showExtended ? 'var(--accent)' : 'var(--text-secondary)',
-                  borderRadius: '50%',
-                  transition: 'background-color 0.2s',
-                }}
-              >
-                <SmilePlus size={20} />
-              </button>
-            </div>
-            
-            {showExtended && (
-              <div style={{ padding: '0 8px 8px' }}>
-                <div style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderRadius: 12,
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                  overflow: 'hidden',
-                }}>
-                  <Picker 
-                    data={data} 
-                    onEmojiSelect={handleEmojiMartSelect} 
-                    theme="auto" 
-                    previewPosition="none"
-                    skinTonePosition="none"
-                    navPosition="bottom"
-                    width="100%"
-                  />
-                </div>
-              </div>
-            )}
-            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
-          </>
-        )}
-
-        {onCloseChat && (
-          <>
-            <button onClick={() => { setCtxMenu(null); onCloseChat(); }} style={menuItemStyle}>
-              <X size={14} style={{ marginRight: 6 }} />Close chat
-            </button>
-            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
-          </>
-        )}
-        {onEnterSelect && (
-          <>
-            <button onClick={() => { setCtxMenu(null); onEnterSelect(message.messageId); }} style={menuItemStyle}>
-              <CheckSquare size={14} style={{ marginRight: 6 }} />Select
-            </button>
-            <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
-          </>
-        )}
-        
-        {isOwn && !message.deleted && message.type === 'text' && (
-          <button onClick={handleStartEdit} style={menuItemStyle}>
-            <Pencil size={14} style={{ marginRight: 6 }} />Edit message
-          </button>
-        )}
-        {!message.deleted && (
-          <button onClick={handleReply} style={menuItemStyle}>
-            <CornerUpLeft size={14} style={{ marginRight: 6 }} />Reply message
-          </button>
-        )}
-        {!message.deleted && message.content && (
-          <button onClick={handleCopy} style={menuItemStyle}>
-            <Copy size={14} style={{ marginRight: 6 }} />Copy message
-          </button>
-        )}
-        {!message.deleted && (
-          <button onClick={handleForward} style={menuItemStyle}>
-            <Forward size={14} style={{ marginRight: 6 }} />Forward message
-          </button>
-        )}
-        {!message.deleted && (
-          <button onClick={handleBookmark} style={bookmarked ? { ...menuItemStyle, color: 'var(--accent)' } : menuItemStyle}>
-            {bookmarked
-              ? <><BookmarkCheck size={14} style={{ marginRight: 6 }} />Remove bookmark</>  
-              : <><Bookmark size={14} style={{ marginRight: 6 }} />Save to bookmarks</>}
-          </button>
-        )}
-        {!message.deleted && onPin && (
-          <button onClick={handlePin} style={menuItemStyle}>
-            {isPinned
-              ? <><PinOff size={14} style={{ marginRight: 6 }} />Unpin message</>
-              : <><Pin size={14} style={{ marginRight: 6 }} />Pin message</>}
-          </button>
-        )}
-        <button onClick={() => handleDelete('me')} style={menuItemStyle}>
-          <Trash2 size={14} style={{ marginRight: 6 }} />Delete for me
-        </button>
-        {!message.deleted && (
-          <button onClick={() => handleDelete('both')} style={{ ...menuItemStyle, color: 'var(--error, #e74c3c)' }}>
-            <Trash2 size={14} style={{ marginRight: 6 }} />Delete for everyone
-          </button>
-        )}
-      </div>
+      <MessageContextMenu
+        message={message}
+        x={ctxMenu.x}
+        y={ctxMenu.y}
+        onClose={() => setCtxMenu(null)}
+        isOwn={isOwn}
+        bookmarked={bookmarked}
+        isPinned={isPinned}
+        onReply={onReply}
+        onForward={onForward}
+        onBookmark={handleBookmark}
+        onPin={onPin}
+        onDelete={onDelete}
+        onStartEdit={onStartEdit}
+        onCopy={handleCopy}
+        onEnterSelect={onEnterSelect}
+        onMessageReaction={onMessageReaction}
+        onCloseChat={onCloseChat}
+      />
     )}
 
     {/* ─── Reaction animation keyframes ─────────────────────────────────── */}

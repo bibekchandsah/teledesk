@@ -1,0 +1,4 @@
+instantly it don't show updated profile picture of opposite person in chat window until refreshed or reload 
+it don't show avatar in notification only shows user name if profile picture is not present
+it don't show reaction row on grid image layout
+when grid photo is deleted then it show reactions there but it should not show on deleted photo should remain same as before on that place

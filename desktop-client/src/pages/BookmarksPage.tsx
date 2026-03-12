@@ -7,6 +7,7 @@ import {
   CornerUpLeft, Forward, Copy, CheckSquare, Trash2, Pin, PinOff,
   Pencil, MoreVertical, Check,
 } from 'lucide-react';
+import { formatTime, formatFileSize, getDateKey, formatDateLabel } from '../utils/formatters';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
@@ -16,23 +17,7 @@ import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../service
 import { sendMessage } from '../services/socketService';
 import { Message, SavedMessage } from '@shared/types';
 
-// ─── Date helpers ────────────────────────────────────────────────────────────
-const getDateKey = (ts: string) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
-const formatDateLabel = (ts: string): string => {
-  const d = new Date(ts);
-  const now = new Date();
-  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (same(d, now)) return 'Today';
-  if (same(d, yesterday)) return 'Yesterday';
-  if (d.getFullYear() === now.getFullYear())
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-};
+// Date helpers removed (now using imports)
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const headerBtnStyle: React.CSSProperties = {

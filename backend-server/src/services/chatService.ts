@@ -366,22 +366,50 @@ export const deleteMessageForAll = async (
 ): Promise<{ chatId: string; members: string[] } | null> => {
   const { data: msgData } = await supabase
     .from('messages')
-    .select('chat_id')
+    .select('chat_id, type, timestamp, sender_id')
     .eq('message_id', messageId)
     .single();
   if (!msgData) return null;
 
   const { data: chatData } = await supabase
     .from('chats')
-    .select('members')
+    .select('members, last_message')
     .eq('chat_id', msgData.chat_id)
     .single();
   if (!chatData || !(chatData.members as string[]).includes(uid)) return null;
 
+  const updatedFields = { 
+    deleted: true, 
+    content: '', 
+    file_url: null, 
+    file_name: null, 
+    file_size: null, 
+    reactions: {},
+    is_edited: false
+  };
+
   await supabase
     .from('messages')
-    .update({ deleted: true, content: '' })
+    .update(updatedFields)
     .eq('message_id', messageId);
+
+  // Sync chats table if this was the last message
+  if (chatData.last_message?.messageId === messageId) {
+    const updatedLastMsg = {
+      ...chatData.last_message,
+      deleted: true,
+      content: '',
+      fileUrl: null,
+      fileName: null,
+      fileSize: null,
+      reactions: {},
+      isEdited: false
+    };
+    await supabase
+      .from('chats')
+      .update({ last_message: updatedLastMsg })
+      .eq('chat_id', msgData.chat_id);
+  }
 
   logger.info(`Message ${messageId} deleted for all by ${uid}`);
   return { chatId: msgData.chat_id as string, members: chatData.members as string[] };

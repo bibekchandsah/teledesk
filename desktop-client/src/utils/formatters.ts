@@ -1,4 +1,32 @@
 /**
+ * Get a key for grouping messages by date
+ */
+export const getDateKey = (ts: string) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};
+
+/**
+ * Format a timestamp as a human-readable date label (e.g. "Today", "Yesterday", "Oct 12")
+ */
+export const formatDateLabel = (ts: string): string => {
+  const d = new Date(ts);
+  const now = new Date();
+  const yesterday = new Date(now); 
+  yesterday.setDate(now.getDate() - 1);
+  const same = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    
+  if (same(d, now)) return 'Today';
+  if (same(d, yesterday)) return 'Yesterday';
+  
+  if (d.getFullYear() === now.getFullYear())
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+/**
  * Format a timestamp (ISO string or Date) for display
  */
 export const formatTime = (timestamp: string | Date): string => {

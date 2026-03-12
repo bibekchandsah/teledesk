@@ -20,11 +20,314 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, UserRound, Smile, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck } from 'lucide-react';
-import { formatTime } from '../utils/formatters';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck } from 'lucide-react';
+import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import MessageContextMenu from '../components/MessageContextMenu';
+
+// --- MediaGroupBubble Subcomponent ---
+const MediaGroupBubble = ({
+  msgs,
+  firstMsg,
+  lastMsg,
+  isOwn,
+  showDatePill,
+  onPreview,
+  onDelete,
+  onReply,
+  onForward,
+  onBookmark,
+  onPin,
+  isPinned,
+  bookmarkedIds,
+  currentUser,
+  onEnterSelect,
+  onMessageReaction,
+  selectionMode,
+  selectedIds,
+  onToggleSelect,
+}: {
+  msgs: Message[];
+  firstMsg: Message;
+  lastMsg: Message;
+  isOwn: boolean;
+  showDatePill: boolean;
+  onPreview: (msgs: Message[], index: number) => void;
+  onDelete?: (messageId: string, scope: 'me' | 'both') => void;
+  onReply?: (message: Message) => void;
+  onForward?: (message: Message) => void;
+  onBookmark?: (message: Message) => void;
+  onPin?: (message: Message, action: 'pin' | 'unpin') => void;
+  isPinned: (messageId: string) => boolean;
+  bookmarkedIds: Set<string>;
+  currentUser?: { uid: string } | null;
+  onEnterSelect?: (messageId: string) => void;
+  onMessageReaction?: (messageId: string, emoji: string) => void;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+}) => {
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
+  
+  const combinedReactions = useMemo(() => {
+    const combined: Record<string, string[]> = {};
+    msgs.forEach(m => {
+      if (m.reactions) {
+        Object.entries(m.reactions).forEach(([emoji, users]) => {
+          if (!combined[emoji]) combined[emoji] = [];
+          users.forEach(u => {
+            if (!combined[emoji].includes(u)) combined[emoji].push(u);
+          });
+        });
+      }
+    });
+    return combined;
+  }, [msgs]);
+
+  const is2Col = msgs.length === 2 || msgs.length === 4;
+
+  const menuItemStyle: React.CSSProperties = {
+    display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none',
+    textAlign: 'left', cursor: 'pointer', fontSize: 14, color: 'var(--text-primary)',
+  };
+
+  const handleCopyLink = (m: Message) => {
+    if (m.fileUrl) {
+      navigator.clipboard.writeText(m.fileUrl).catch(() => {});
+    }
+  };
+
+  const handleDownload = (m: Message) => {
+    if (m.fileUrl) {
+      const link = document.createElement('a');
+      link.href = m.fileUrl;
+      link.download = m.fileName || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleEmojiClick = (msgId: string, emoji: string) => {
+    setCtxMenu(null);
+    onMessageReaction?.(msgId, emoji);
+  };
+
+  return (
+    <React.Fragment key={`group_${firstMsg.groupId}`}>
+      {showDatePill && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
+          <span style={{
+            backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+            fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20,
+            border: '1px solid var(--border)', letterSpacing: '0.03em', userSelect: 'none',
+          }}>
+            {formatDateLabel(firstMsg.timestamp)}
+          </span>
+        </div>
+      )}
+      <div style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+        <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
+          <div style={{
+            display: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'flex' : 'grid',
+            flexDirection: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'column' : undefined,
+            gridTemplateColumns: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? undefined : 'repeat(6, 1fr)',
+            gridAutoRows: msgs.length === 1 ? undefined : '110px', 
+            gap: 3,
+            borderRadius: 12, overflow: 'hidden', 
+            maxWidth: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 300 : 340,
+            width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined,
+            backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'var(--bg-secondary)' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
+            border: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '1px solid var(--border)' : 'none',
+            padding: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '4px 0' : '4px',
+            color: isOwn ? '#fff' : 'var(--text-primary)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+          }}>
+            {msgs.map((m, ci) => {
+              let colSpan = 'span 2';
+              if (msgs.length === 1) colSpan = 'span 6';
+              else if (msgs.length === 2 || msgs.length === 4) colSpan = 'span 3';
+              else if (msgs.length === 5) { if (ci < 2) colSpan = 'span 3'; else colSpan = 'span 2'; }
+              else if (msgs.length === 7) { if (ci < 4) colSpan = 'span 3'; else colSpan = 'span 2'; }
+              else if (msgs.length === 8) { if (ci < 6) colSpan = 'span 2'; else colSpan = 'span 3'; }
+              
+              if (m.type === 'file' || m.type === 'pdf') {
+                const isSelected = selectedIds?.has(m.messageId);
+                return (
+                  <div
+                    key={m.messageId}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 8, 
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: ci < msgs.length - 1 ? '1px solid var(--border)' : 'none',
+                      backgroundColor: isSelected ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent'
+                    }}
+                    onClick={() => {
+                      if (selectionMode && onToggleSelect) {
+                        onToggleSelect(m.messageId);
+                      } else {
+                        onPreview(msgs, ci);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setCtxMenu({ x: e.clientX, y: e.clientY, msg: m });
+                    }}
+                  >
+                    {selectionMode && (
+                      <div style={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        border: `2px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                        backgroundColor: isSelected ? 'var(--accent)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        marginRight: 4, flexShrink: 0
+                      }}>
+                        {isSelected && <Check size={10} color="#fff" strokeWidth={3} />}
+                      </div>
+                    )}
+                    <div style={{ 
+                      width: 36, height: 36, borderRadius: 8, 
+                      backgroundColor: 'rgba(var(--accent-rgb), 0.1)', 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--accent)'
+                    }}>
+                      <Paperclip size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {m.fileName || 'Document'}
+                      </div>
+                      {m.fileSize && (
+                        <div style={{ fontSize: 11, opacity: 0.6 }}>
+                          {formatFileSize(m.fileSize)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              const isSelected = selectedIds?.has(m.messageId);
+              return (
+                <div
+                  key={m.messageId}
+                  style={{ position: 'relative', gridColumn: colSpan, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#111', maxHeight: msgs.length === 1 ? 320 : undefined }}
+                  onClick={() => {
+                    if (selectionMode && onToggleSelect) {
+                      onToggleSelect(m.messageId);
+                    } else {
+                      onPreview(msgs, ci);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCtxMenu({ x: e.clientX, y: e.clientY, msg: m });
+                  }}
+                >
+                  {m.type === 'image' || m.type === 'gif' ? (
+                    <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : m.type === 'video' ? (
+                    <video src={m.fileUrl} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                      <Paperclip size={24} color="var(--text-secondary)" />
+                    </div>
+                  )}
+                  
+                  {/* Selection Overlay */}
+                  {selectionMode && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 8, left: 8,
+                      width: 22, height: 22,
+                      borderRadius: '50%',
+                      backgroundColor: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.35)',
+                      border: `2px solid ${isSelected ? 'var(--accent)' : '#fff'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      zIndex: 10
+                    }}>
+                      {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                    </div>
+                  )}
+                  {isSelected && (
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(var(--accent-rgb), 0.15)', zIndex: 5 }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Reaction Pill Badges for Group */}
+          {Object.keys(combinedReactions).length > 0 && (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6,
+              justifyContent: isOwn ? 'flex-end' : 'flex-start',
+            }}>
+              {Object.entries(combinedReactions).map(([emoji, users]) => {
+                const iMine = currentUser?.uid ? users.includes(currentUser.uid) : false;
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onMessageReaction?.(firstMsg.messageId, emoji)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 12,
+                      backgroundColor: iMine ? 'rgba(var(--accent-rgb, 99, 102, 241), 0.2)' : 'rgba(255,255,255,0.1)',
+                      border: `1px solid ${iMine ? 'rgba(var(--accent-rgb, 99, 102, 241), 0.4)' : 'transparent'}`,
+                      cursor: 'pointer', color: '#fff', fontSize: 12
+                    }}
+                  >
+                    <span>{emoji}</span>
+                    {users.length > 1 && <span style={{ fontWeight: 600 }}>{users.length}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', marginTop: 4, fontSize: 11, opacity: 0.7, gap: 4, color: isOwn ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)' }}>
+            <span>{formatTime(lastMsg.timestamp)}</span>
+            {isOwn && (
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                {lastMsg.readBy.length > 1
+                  ? <CheckCheck size={13} style={{ color: isOwn ? '#fff' : '#4fc3f7' }} />
+                  : (lastMsg.deliveredTo ?? []).length > 0
+                    ? <CheckCheck size={13} style={{ opacity: 0.8 }} />
+                    : <Check size={13} style={{ opacity: 0.8 }} />}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {ctxMenu && (
+        <MessageContextMenu
+          message={ctxMenu.msg}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onClose={() => setCtxMenu(null)}
+          isOwn={isOwn}
+          bookmarked={bookmarkedIds.has(ctxMenu.msg.messageId)}
+          isPinned={isPinned(ctxMenu.msg.messageId)}
+          onReply={onReply}
+          onForward={onForward}
+          onBookmark={onBookmark}
+          onPin={onPin}
+          onDelete={onDelete}
+          onCopy={handleCopyLink}
+          onDownload={handleDownload}
+          onEnterSelect={onEnterSelect}
+          onMessageReaction={onMessageReaction}
+        />
+      )}
+    </React.Fragment>
+  );
+};
+// ------------------------------------
 
 interface ChatWindowProps {
   chatId?: string;
@@ -45,7 +348,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const { activeCall } = useCallStore();
   const isInCall = !!activeCall;
   const { liveTypingEnabled } = useUIStore();
-  const { addBookmark, isBookmarked, removeBookmark } = useBookmarkStore();
+  const { addBookmark, isBookmarked, removeBookmark, savedEntries } = useBookmarkStore();
+
+  const bookmarkedIds = useMemo(() => 
+    new Set(savedEntries.filter(e => !e.deleted).map(e => e.messageId)),
+    [savedEntries]
+  );
 
   // When opened directly via URL (e.g. "open in new window"), activeChat won't be
   // set from a sidebar click.  Resolve it from the chats list as soon as it loads.
@@ -68,6 +376,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [nicknameInput, setNicknameInput] = useState('');
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
+  const [msgConfirmDelete, setMsgConfirmDelete] = useState<{ ids: string[]; scope: 'me' | 'both' } | null>(null);
+  const [msgDeleting, setMsgDeleting] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState<'emoji' | 'sticker' | 'gif'>('emoji');
   const [gifSearch, setGifSearch] = useState('');
@@ -1386,21 +1696,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   // ─── Delete message ─────────────────────────────────────────────────────
+
   const handleDeleteMessage = useCallback(
-    async (messageId: string, scope: 'me' | 'both') => {
-      if (!chatId) return;
-      try {
-        await deleteMessageApi(chatId, messageId, scope);
-        if (scope === 'me') {
-          removeMessage(chatId, messageId);
-        } else {
-          markMessageDeleted(chatId, messageId);
-        }
-      } catch (err) {
-        console.error('[deleteMessage] Failed:', err);
-      }
+    (messageId: string, scope: 'me' | 'both') => {
+      setMsgConfirmDelete({ ids: [messageId], scope });
     },
-    [chatId, removeMessage, markMessageDeleted],
+    [],
   );
 
   // ─── Selection mode helpers ───────────────────────────────────────────────
@@ -1418,6 +1719,32 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     setSelectionMode(false);
     setSelectedIds(new Set());
   }, []);
+
+  const executeDeleteMessages = useCallback(
+    async (ids: string[], scope: 'me' | 'both') => {
+      if (!chatId || ids.length === 0) return;
+      setMsgDeleting(true);
+      try {
+        // Parallelize API calls for better performance in bulk delete
+        await Promise.all(ids.map(id => deleteMessageApi(chatId!, id, scope)));
+        
+        ids.forEach(id => {
+          if (scope === 'me') {
+            removeMessage(chatId!, id);
+          } else {
+            markMessageDeleted(chatId!, id);
+          }
+        });
+        setMsgConfirmDelete(null);
+        if (selectionMode) exitSelectionMode();
+      } catch (err) {
+        console.error('[deleteMessages] Failed:', err);
+      } finally {
+        setMsgDeleting(false);
+      }
+    },
+    [chatId, removeMessage, markMessageDeleted, selectionMode, exitSelectionMode],
+  );
 
   // Escape key cancels selection mode and edit mode
   useEffect(() => {
@@ -1473,13 +1800,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     });
   }, []);
 
-  const handleBulkDelete = useCallback(async (scope: 'me' | 'both') => {
-    if (!chatId) return;
-    for (const id of selectedIds) {
-      await handleDeleteMessage(id, scope);
-    }
-    exitSelectionMode();
-  }, [chatId, selectedIds, handleDeleteMessage, exitSelectionMode]);
+  const handleBulkDelete = useCallback((scope: 'me' | 'both') => {
+    if (!chatId || selectedIds.size === 0) return;
+    setMsgConfirmDelete({ ids: Array.from(selectedIds), scope });
+  }, [chatId, selectedIds]);
 
   const handleBulkForward = useCallback(() => {
     const msgs = chatMessages.filter((m) => selectedIds.has(m.messageId) && !m.deleted);
@@ -2107,28 +2431,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             | { kind: 'single'; msg: Message; idx: number }
             | { kind: 'group'; msgs: Message[]; firstIdx: number; lastIdx: number };
 
+          const getMsgCategory = (m: Message) => {
+            if (m.type === 'image' || m.type === 'gif' || m.type === 'sticker') return 'image';
+            if (m.type === 'video') return 'video';
+            if (m.type === 'file' || m.type === 'pdf') return 'file'; // include pdf explicitly if tracked
+            return m.type; // fallback
+          };
+
           const renderItems: RenderItem[] = [];
           let i = 0;
           while (i < chatMessages.length) {
             const msg = chatMessages[i];
             
-            // If message has a groupId, peek ahead to see if there are consecutive messages with the exact same groupId
-            if (msg.groupId) {
+            if (msg.groupId && !msg.deleted) {
+              const category = getMsgCategory(msg);
               const groupMsgs: Message[] = [msg];
               let j = i + 1;
-              while (j < chatMessages.length && chatMessages[j].groupId === msg.groupId) {
+              while (j < chatMessages.length && 
+                     chatMessages[j].groupId === msg.groupId && 
+                     !chatMessages[j].deleted &&
+                     getMsgCategory(chatMessages[j]) === category) {
                 groupMsgs.push(chatMessages[j]);
                 j++;
               }
               
               if (groupMsgs.length > 1) {
                 renderItems.push({ kind: 'group', msgs: groupMsgs, firstIdx: i, lastIdx: j - 1 });
-                i = j; // skip over all grouped messages
+                i = j;
                 continue;
               }
             }
             
-            // Single message (either no groupId, or only one message with this groupId)
             renderItems.push({ kind: 'single', msg, idx: i });
             i++;
           }
@@ -2144,137 +2477,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 !prevMsg ||
                 getDateKey(firstMsg.timestamp) !== getDateKey(prevMsg.timestamp);
 
-              // Telegram supports up to 10 in a block before capping, but we will show max 9 in the grid
-              const MAX_SHOWN = Math.min(msgs.length, 9);
-              const shown = msgs.slice(0, MAX_SHOWN);
-              const overflow = msgs.length - MAX_SHOWN;
-
-              // Compute Telegram style layout
-              // 1 = 1x1 full
-              // 2 = 1x2 half half
-              // 3 = 1x3 row
-              // 4 = 2x2 square
-              // 5 = 2 top, 3 bottom (or similar) -> we'll use a responsive 6-col grid to cheat spans
-              // 6 = 3x2
-              // 7 = 3 top, 4 bottom -> 3x3 with empty spots? Telegram uses complex masonry, we'll use 3 columns auto-flow
-              // 8 = 3, 3, 2
-              // 9 = 3x3
-              
-              const is2Col = msgs.length === 2 || msgs.length === 4;
-              
               return (
-                <React.Fragment key={`group_${firstMsg.groupId}`}>
-                  {showDatePill && (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
-                      <span style={{
-                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
-                        fontSize: 11, fontWeight: 600, padding: '4px 12px', borderRadius: 20,
-                        border: '1px solid var(--border)', letterSpacing: '0.03em', userSelect: 'none',
-                      }}>
-                        {formatDateLabel(firstMsg.timestamp)}
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(6, 1fr)',
-                        gridAutoRows: msgs.length === 1 ? undefined : '110px', // Fixed height for masonry-lite cells
-                        gap: 3,
-                        borderRadius: 12,
-                        overflow: 'hidden',
-                        maxWidth: 340,
-                        width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined
-                      }}>
-                        {shown.map((m, ci) => {
-                          const isLast = ci === shown.length - 1;
-                          const isLastAndHasOverflow = isLast && overflow > 0;
-                          
-                          // Determine grid spans for masonry-like layouts using a 6-col underlying grid
-                          let colSpan = 'span 2'; // Default: 3 items per row (6 / 3 = 2)
-                          
-                          if (msgs.length === 1) colSpan = 'span 6';
-                          else if (msgs.length === 2 || msgs.length === 4) {
-                            colSpan = 'span 3'; // 2 items per row
-                          } else if (msgs.length === 5) {
-                            if (ci < 2) colSpan = 'span 3'; // top 2
-                            else colSpan = 'span 2'; // bottom 3
-                          } else if (msgs.length === 7) {
-                            if (ci < 3) colSpan = 'span 2'; // top 3
-                            else colSpan = ci === 3 || ci === 6 ? 'span 2' : 'span 2'; // wait, 4 items = 6/4 = 1.5. Subgrids are hard. Let's do 3 top, 4 bottom by using flex? No, grid is easier. Let's just use spans: 
-                            // for 7: top 3 (span 2), bottom 4.. wait, 4 doesn't divide 6 cleanly. Let's do top 4 (span 1.5 doesn't work). Top 2 (span 3), middle 2 (span 3), bottom 3 (span 2) -> 2+2+3 = 7.
-                            if (ci < 4) colSpan = 'span 3'; // first 4 in 2 rows of 2
-                            else colSpan = 'span 2'; // last 3 in 1 row of 3
-                          } else if (msgs.length === 8) {
-                            // 2 rows of 3, 1 row of 2?
-                            if (ci < 6) colSpan = 'span 2'; // first 6 in 2 rows of 3
-                            else colSpan = 'span 3'; // next 2 in 1 row of 2
-                          }
-                          
-                          // Actually, a simpler approach for Telegram style 5-grid:
-                          // We'll leave it as auto-flow for now, but adjust aspect ratio based on grid position
-                          let cellAspectRatio = msgs.length === 1 ? 'auto' : '1/1';
-                          
-                          return (
-                            <div
-                              key={m.messageId}
-                              style={{ 
-                                position: 'relative', 
-                                gridColumn: colSpan,
-                                overflow: 'hidden', 
-                                cursor: 'pointer', 
-                                backgroundColor: '#111',
-                                maxHeight: msgs.length === 1 ? 320 : undefined,
-                              }}
-                              onClick={() => {
-                                if (isLastAndHasOverflow) {
-                                  // Clicking the +N overlay opens gallery at the first hidden item
-                                  setPreviewFile({ messages: msgs, initialIndex: MAX_SHOWN });
-                                } else {
-                                  setPreviewFile({ messages: msgs, initialIndex: ci });
-                                }
-                              }}
-                            >
-                              {m.type === 'image' || m.type === 'gif' ? (
-                                <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : m.type === 'video' ? (
-                                <video src={m.fileUrl} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                                  <Paperclip size={24} color="var(--text-secondary)" />
-                                </div>
-                              )}
-                              {isLastAndHasOverflow && (
-                                <div style={{
-                                  position: 'absolute', inset: 0,
-                                  backgroundColor: 'rgba(0,0,0,0.55)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  color: '#fff', fontSize: 24, fontWeight: 700,
-                                }}>
-                                  +{overflow}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {/* Timestamp row */}
-                      <div style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', marginTop: 4, fontSize: 11, opacity: 0.6, gap: 4 }}>
-                        <span>{formatTime(lastMsg.timestamp)}</span>
-                        {isOwn && (
-                          <span style={{ display: 'flex', alignItems: 'center' }}>
-                            {lastMsg.readBy.length > 1
-                              ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
-                              : (lastMsg.deliveredTo ?? []).length > 0
-                                ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
-                                : <Check size={13} style={{ opacity: 0.65 }} />}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </React.Fragment>
+                <MediaGroupBubble
+                  key={`group_${firstMsg.messageId}`}
+                  msgs={msgs}
+                  firstMsg={firstMsg}
+                  lastMsg={lastMsg}
+                  isOwn={isOwn}
+                  showDatePill={showDatePill}
+                  onPreview={(msgs, idx) => setPreviewFile({ messages: msgs, initialIndex: idx })}
+                  onDelete={selectionMode ? undefined : handleDeleteMessage}
+                  onReply={selectionMode ? undefined : handleReply}
+                  onForward={selectionMode ? undefined : handleForward}
+                  onBookmark={selectionMode ? undefined : handleBookmarkMessage}
+                  onPin={selectionMode ? undefined : handlePin}
+                  isPinned={(msgId) => (activeChat?.pinnedMessageIds ?? []).includes(msgId)}
+                  bookmarkedIds={bookmarkedIds}
+                  currentUser={currentUser}
+                  onEnterSelect={selectionMode ? undefined : enterSelectionMode}
+                  onMessageReaction={selectionMode ? undefined : handleReact}
+                  selectionMode={selectionMode}
+                  selectedIds={selectedIds}
+                  onToggleSelect={toggleSelectMessage}
+                />
               );
             }
 
@@ -2335,7 +2560,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     isOwn={msg.senderId === currentUser?.uid}
                     senderName={msg.senderId === currentUser?.uid ? currentUser?.name : userProfiles[msg.senderId]?.name}
                     senderAvatar={msg.senderId === currentUser?.uid ? currentUser?.avatar : userProfiles[msg.senderId]?.avatar}
-                    showSender={activeChat.type === 'group'}
+                    showSender={activeChat?.type === 'group'}
                     onDelete={selectionMode ? undefined : handleDeleteMessage}
                     onPreview={(msg) => setPreviewFile({ messages: [msg], initialIndex: 0 })}
                     onStartEdit={selectionMode ? undefined : (msg) => {
@@ -2357,7 +2582,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     onForward={selectionMode ? undefined : handleForward}
                     onBookmark={selectionMode ? undefined : handleBookmarkMessage}
                     onPin={selectionMode ? undefined : handlePin}
-                    isPinned={(activeChat.pinnedMessageIds ?? []).includes(msg.messageId)}
+                    isPinned={(activeChat?.pinnedMessageIds ?? []).includes(msg.messageId)}
                     onScrollToMessage={handleScrollToMessage}
                     onCloseChat={selectionMode ? undefined : (() => { setActiveChat(null); navigate('/chats'); })}
                     onEnterSelect={selectionMode ? undefined : enterSelectionMode}
@@ -2367,7 +2592,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     currentUserShowMessageStatus={currentUser?.showMessageStatus !== false}
                     otherUserShowMessageStatus={(() => {
                       const otherUserId = msg.senderId === currentUser?.uid
-                        ? activeChat.members.find(m => m !== currentUser?.uid)
+                        ? activeChat?.members?.find(m => m !== currentUser?.uid)
                         : msg.senderId;
                       return otherUserId ? userProfiles[otherUserId]?.showMessageStatus !== false : true;
                     })()}
@@ -3838,45 +4063,116 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </div>
         </div>
       )}
+
+      {/* ─── Confirm delete message(s) ─────────────────────────────────── */}
+      {msgConfirmDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2000,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setMsgConfirmDelete(null); }}
+        >
+          <div
+            style={{
+              backgroundColor: 'rgba(30, 30, 30, 0.85)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: 20,
+              padding: '24px',
+              maxWidth: 340,
+              width: '90%',
+              textAlign: 'center',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+          >
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: '#ef4444'
+            }}>
+              <Trash2 size={32} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: 18 }}>
+              Delete {msgConfirmDelete.ids.length > 1 ? `${msgConfirmDelete.ids.length} messages` : 'this message'}?
+            </h3>
+            <p style={{ margin: '0 0 24px', color: 'rgba(255, 255, 255, 0.6)', fontSize: 14, lineHeight: 1.5 }}>
+              {msgConfirmDelete.scope === 'both' 
+                ? 'This will delete the messages for everyone in this chat. This action cannot be undone.'
+                : 'This will delete the messages only for you. This action cannot be undone.'}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => executeDeleteMessages(msgConfirmDelete.ids, msgConfirmDelete.scope)}
+                disabled={msgDeleting}
+                style={{ 
+                  width: '100%',
+                  padding: '12px', 
+                  borderRadius: 12, 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  fontSize: 15, 
+                  fontWeight: 600, 
+                  backgroundColor: '#ef4444', 
+                  color: '#fff',
+                  transition: 'filter 0.2s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
+                onMouseOut={(e) => e.currentTarget.style.filter = 'none'}
+              >
+                {msgDeleting ? 'Deleting…' : `Delete for ${msgConfirmDelete.scope === 'both' ? 'Everyone' : 'Me'}`}
+              </button>
+              <button
+                onClick={() => setMsgConfirmDelete(null)}
+                disabled={msgDeleting}
+                style={{ 
+                  width: '100%',
+                  padding: '12px', 
+                  borderRadius: 12, 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  fontSize: 15, 
+                  fontWeight: 600, 
+                  backgroundColor: 'transparent', 
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  transition: 'background-color 0.2s, color 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
       {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
     </div>
   );
 };
 
-// ─── Date separator helpers ──────────────────────────────────────────────────
-const formatDuration = (seconds: number): string => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
 
-const getDateKey = (timestamp: string): string => {
-  const d = new Date(timestamp);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
-
-const formatDateLabel = (timestamp: string): string => {
-  const d = new Date(timestamp);
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-
-  if (sameDay(d, now)) return 'Today';
-  if (sameDay(d, yesterday)) return 'Yesterday';
-
-  // Within this year: show "Mon, Mar 7"
-  if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  }
-  // Older: show "Mar 7, 2024"
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-};
 
 const headerBtnStyle: React.CSSProperties = {
   background: 'none',
