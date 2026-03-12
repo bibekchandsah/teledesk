@@ -459,8 +459,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showEmojiBar, setShowEmojiBar] = useState(false);
   const [showExtended, setShowExtended] = useState(false);
   const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const emojiBarRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
 
   // Handle context menu
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -480,8 +486,27 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     onStartEdit?.(message);
   };
 
-  const handleCopy = () => {
-    if (message.content) navigator.clipboard.writeText(message.content).catch(() => {});
+  const handleCopy = async () => {
+    const isImage = message.type === 'image' || message.type === 'gif' || message.type === 'sticker';
+    if (isImage && message.fileUrl) {
+      try {
+        if (window.electronAPI?.copyImageToClipboard) {
+          const ok = await window.electronAPI.copyImageToClipboard(message.fileUrl);
+          if (ok) { showToast(`${message.type === 'sticker' ? 'Sticker' : message.type === 'gif' ? 'GIF' : 'Image'} copied`); return; }
+        }
+        const res = await fetch(message.fileUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        showToast(`${message.type === 'sticker' ? 'Sticker' : message.type === 'gif' ? 'GIF' : 'Image'} copied`);
+      } catch {
+        // fallback: copy URL
+        if (message.fileUrl) navigator.clipboard.writeText(message.fileUrl).catch(() => {});
+        showToast('Link copied');
+      }
+    } else if (message.content) {
+      navigator.clipboard.writeText(message.content).catch(() => {});
+      showToast('Text copied');
+    }
   };
 
   const handleReply = () => {
@@ -680,6 +705,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <>
+    {toast && (
+      <div style={{
+        position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+        backgroundColor: 'rgba(30,30,30,0.92)', color: '#fff',
+        padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)', zIndex: 9999,
+        pointerEvents: 'none', whiteSpace: 'nowrap',
+        animation: 'fadeIn 0.2s ease',
+      }}>{toast}</div>
+    )}
     <div
       className={`message-bubble-wrapper ${isOwn ? 'own' : 'other'}`}
       style={{

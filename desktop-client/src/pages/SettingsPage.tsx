@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
@@ -6,7 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
 import { updateMyProfile, uploadAvatar } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
-import { Pencil, Sun, Moon } from 'lucide-react';
+import { Pencil, Sun, Moon, Trash2 } from 'lucide-react';
 
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
@@ -153,6 +153,19 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleRemoveAvatar = async () => {
+    if (!currentUser?.avatar) return;
+    try {
+      const res = await updateMyProfile({ avatar: '' });
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setUserProfile(res.data);
+      }
+    } catch (e) {
+      console.error('[Profile] Failed to remove avatar', e);
+    }
+  };
+
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
@@ -250,6 +263,21 @@ const SettingsPage: React.FC = () => {
             >
               {isUploadingAvatar ? `${avatarProgress}%` : <Pencil size={11} />}
             </button>
+            {currentUser.avatar && (
+              <button
+                onClick={handleRemoveAvatar}
+                title="Remove profile picture"
+                style={{
+                  position: 'absolute', top: -2, right: -2,
+                  width: 20, height: 20, borderRadius: '50%',
+                  backgroundColor: '#ef4444', border: '2px solid var(--bg-secondary)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', padding: 0,
+                }}
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
             <input
               ref={avatarInputRef}
               type="file"

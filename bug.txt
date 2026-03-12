@@ -2,10 +2,14 @@
 (fixed) it don't show avatar in notification only shows user name if profile picture is not present
 (fixed) it don't show reaction row on grid image layout
 (fixed) when grid photo is deleted then it show reactions there but it should not show on deleted photo should remain same as before on that place
-allow user to remove their profile picture 
-show border-radius on grid image layout individually
-while downloading it redirect to new tab instead of it should download directly 
-copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
-in grid layout right click replace "copy link" with "copy image" which will copy image and show toast notification about copied image
-hovering on grid layout isn't showing any reaction row
+(fixed) allow user to remove their profile picture 
+(fixed) show border-radius on grid image layout individually
+(fixed) while downloading it redirect to new tab instead of it should download directly 
+(partially) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
+(fixed) in grid layout right click replace "copy link" with "copy image" which will copy image and show toast notification about copied image
+(partially) hovering on grid layout isn't showing any reaction row
 caption isn't attached with files, it shows on another message bubble
+it don't show caption for more than 1 image file and other files
+show reactions on grid layout not on individual image
+copy isn't working for text/sticker/GIFs
+for files like audio/video/pdf etc. instead of 'copy link' show 'download'

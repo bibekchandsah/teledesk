@@ -70,7 +70,14 @@ const MediaGroupBubble = ({
   onToggleSelect?: (id: string) => void;
 }) => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
-  
+  const [hoveredGridId, setHoveredGridId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const combinedReactions = useMemo(() => {
     const combined: Record<string, string[]> = {};
     msgs.forEach(m => {
@@ -93,14 +100,26 @@ const MediaGroupBubble = ({
     textAlign: 'left', cursor: 'pointer', fontSize: 14, color: 'var(--text-primary)',
   };
 
-  const handleCopyLink = (m: Message) => {
-    if (m.fileUrl) {
-      navigator.clipboard.writeText(m.fileUrl).catch(() => {});
-    }
+  const handleCopyImage = async (m: Message) => {
+    if (!m.fileUrl) return;
+    try {
+      if (window.electronAPI?.copyImageToClipboard) {
+        const ok = await window.electronAPI.copyImageToClipboard(m.fileUrl);
+        if (ok) showToast('Image copied to clipboard');
+      } else {
+        const res = await fetch(m.fileUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        showToast('Image copied to clipboard');
+      }
+    } catch { showToast('Failed to copy image'); }
   };
 
   const handleDownload = (m: Message) => {
-    if (m.fileUrl) {
+    if (!m.fileUrl) return;
+    if (window.electronAPI?.downloadFile) {
+      window.electronAPI.downloadFile(m.fileUrl, m.fileName);
+    } else {
       const link = document.createElement('a');
       link.href = m.fileUrl;
       link.download = m.fileName || 'download';
@@ -117,6 +136,17 @@ const MediaGroupBubble = ({
 
   return (
     <React.Fragment key={`group_${firstMsg.groupId}`}>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(30,30,30,0.92)', color: '#fff',
+          padding: '8px 18px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', zIndex: 9999,
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+          animation: 'fadeIn 0.2s ease',
+        }}>{toast}</div>
+      )}
       {showDatePill && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
           <span style={{
@@ -213,10 +243,23 @@ const MediaGroupBubble = ({
               }
 
               const isSelected = selectedIds?.has(m.messageId);
+              // compute per-cell border-radius
+              const totalCells = msgs.length;
+              const ci2 = ci; // alias for clarity
+              const isFirst = ci2 === 0;
+              const isLast = ci2 === totalCells - 1;
+              const cellRadius = (() => {
+                if (totalCells === 1) return '8px';
+                if (isFirst) return '8px 8px 8px 8px';
+                if (isLast) return '8px 8px 8px 8px';
+                return '8px';
+              })();
               return (
                 <div
                   key={m.messageId}
-                  style={{ position: 'relative', gridColumn: colSpan, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#111', maxHeight: msgs.length === 1 ? 320 : undefined }}
+                  onMouseEnter={() => setHoveredGridId(m.messageId)}
+                  onMouseLeave={() => setHoveredGridId(null)}
+                  style={{ position: 'relative', gridColumn: colSpan, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#111', borderRadius: cellRadius, maxHeight: msgs.length === 1 ? 320 : undefined }}
                   onClick={() => {
                     if (selectionMode && onToggleSelect) {
                       onToggleSelect(m.messageId);
@@ -239,6 +282,23 @@ const MediaGroupBubble = ({
                     </div>
                   )}
                   
+                  {/* Hover reaction bar */}
+                  {!selectionMode && hoveredGridId === m.messageId && onMessageReaction && !m.deleted && (
+                    <div style={{
+                      position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)',
+                      display: 'flex', gap: 4, padding: '4px 8px',
+                      backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 20,
+                      backdropFilter: 'blur(6px)', zIndex: 10,
+                    }}>
+                      {['❤️','👍','😂','😮','😢','👎'].map(em => (
+                        <button key={em} onClick={(e) => { e.stopPropagation(); handleEmojiClick(m.messageId, em); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px', borderRadius: '50%', transition: 'transform 0.1s' }}
+                          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
+                          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                        >{em}</button>
+                      ))}
+                    </div>
+                  )}
                   {/* Selection Overlay */}
                   {selectionMode && (
                     <div style={{
@@ -318,7 +378,14 @@ const MediaGroupBubble = ({
           onBookmark={onBookmark}
           onPin={onPin}
           onDelete={onDelete}
-          onCopy={handleCopyLink}
+          onCopy={(m) => {
+            if (m.type === 'image' || m.type === 'gif') {
+              handleCopyImage(m);
+            } else if (m.fileUrl) {
+              navigator.clipboard.writeText(m.fileUrl).catch(() => {});
+              showToast('Link copied to clipboard');
+            }
+          }}
           onDownload={handleDownload}
           onEnterSelect={onEnterSelect}
           onMessageReaction={onMessageReaction}
@@ -1584,7 +1651,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   // ─── File upload ──────────────────────────────────────────────────────────
-  const uploadFiles = async (files: File[]) => {
+  const uploadFiles = async (files: File[], caption?: string) => {
     if (files.length === 0 || !chatId || !currentUser) return;
 
     // Generate a shared groupId for batch uploads (multi-file grid rendering)
@@ -1592,7 +1659,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? `grp_${Date.now()}_${Math.random().toString(36).slice(2)}`
       : undefined;
 
-    for (const file of files) {
+    for (let fi = 0; fi < files.length; fi++) {
+      const file = files[fi];
+      const isLastFile = fi === files.length - 1;
       const validation = validateFile(file);
       if (!validation.valid) {
         setFileError(validation.error || `File "${file.name}" exceeds 100MB limit`);
@@ -1608,7 +1677,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         const msgType = getMessageTypeFromMime(file.type);
         sendMessage({
           chatId,
-          content: `Sent a ${msgType}`,
+          // Attach caption to last file message so it renders in the same bubble
+          content: isLastFile && caption ? caption : `Sent a ${msgType}`,
           type: msgType,
           fileUrl: result.url,
           fileName: result.fileName,
@@ -1678,17 +1748,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const caption = uploadCaption.trim();
     setPendingUploadFiles([]);
     setUploadCaption('');
-    await uploadFiles(files);
-    // If a caption was added, send it as a follow-up text message
-    if (caption && chatId && currentUser) {
-      sendMessage({
-        chatId,
-        content: caption,
-        type: 'text',
-        senderName: currentUser.name || 'Unknown',
-        senderAvatar: currentUser.avatar || ''
-      });
-    }
+    // Pass caption into uploadFiles so it attaches to the last file message
+    await uploadFiles(files, caption);
   };
 
   const handleRemovePendingFile = (index: number) => {

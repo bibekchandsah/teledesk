@@ -184,7 +184,12 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       )}
       {!message.deleted && (message.content || message.fileUrl) && onCopy && (
         <button onClick={() => { onClose(); onCopy(message); }} style={menuItemStyle}>
-          <Copy size={14} style={{ marginRight: 6 }} />{message.type === 'text' ? 'Copy message' : 'Copy link'}
+          <Copy size={14} style={{ marginRight: 6 }} />
+          {message.type === 'image' ? 'Copy image'
+            : message.type === 'gif' ? 'Copy GIF'
+            : message.type === 'sticker' ? 'Copy sticker'
+            : message.type === 'text' ? 'Copy message'
+            : 'Copy link'}
         </button>
       )}
       {!message.deleted && message.fileUrl && onDownload && (
