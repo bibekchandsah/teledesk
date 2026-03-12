@@ -180,6 +180,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const previewMediaRef = useRef<HTMLMediaElement | null>(null);
   const [recordedMode, setRecordedMode] = useState<'voice' | 'video'>('voice');
   const [recordedWaveform, setRecordedWaveform] = useState<number[]>([]);
+  // ─── File upload preview (staging) ───
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
+  const [uploadCaption, setUploadCaption] = useState('');
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -1308,9 +1311,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    await uploadFiles(files);
+    if (files.length > 0) {
+      setPendingUploadFiles(files);
+      setUploadCaption('');
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -1324,16 +1330,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await uploadFiles(Array.from(e.dataTransfer.files));
+      setPendingUploadFiles(Array.from(e.dataTransfer.files));
+      setUploadCaption('');
     }
   };
 
-  const handlePaste = async (e: React.ClipboardEvent) => {
+  const handlePaste = (e: React.ClipboardEvent) => {
     const items = Array.from(e.clipboardData.items);
     const files: File[] = [];
     for (const item of items) {
@@ -1343,8 +1350,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       }
     }
     if (files.length > 0) {
-      await uploadFiles(files);
+      setPendingUploadFiles(files);
+      setUploadCaption('');
     }
+  };
+
+  const handleConfirmUpload = async () => {
+    const files = pendingUploadFiles;
+    const caption = uploadCaption.trim();
+    setPendingUploadFiles([]);
+    setUploadCaption('');
+    await uploadFiles(files);
+    // If a caption was added, send it as a follow-up text message
+    if (caption && chatId && currentUser) {
+      sendMessage({
+        chatId,
+        content: caption,
+        type: 'text',
+        senderName: currentUser.name || 'Unknown',
+        senderAvatar: currentUser.avatar || ''
+      });
+    }
+  };
+
+  const handleRemovePendingFile = (index: number) => {
+    setPendingUploadFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   // ─── Delete message ─────────────────────────────────────────────────────
@@ -2225,6 +2255,192 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           >
             <ChevronDown size={18} />
           </button>
+        </div>
+      )}
+
+      {/* ─── File Upload Preview Modal ────────────────────────────────────── */}
+      {pendingUploadFiles.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.75)',
+          zIndex: 2000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-secondary)',
+            borderRadius: 20,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+            width: Math.min(520, window.innerWidth - 32),
+            maxHeight: 'min(680px, 90vh)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            border: '1px solid var(--border)',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Send {pendingUploadFiles.length > 1 ? `${pendingUploadFiles.length} Files` : 'File'}
+              </span>
+              <button
+                onClick={() => { setPendingUploadFiles([]); setUploadCaption(''); }}
+                style={{ ...iconBtnStyle, width: 32, height: 32 }}
+                title="Cancel"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* File Previews */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+              {pendingUploadFiles.every(f => f.type.startsWith('image/')) ? (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: pendingUploadFiles.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(150px, 1fr))',
+                  gap: 8,
+                  marginBottom: 16,
+                }}>
+                  {pendingUploadFiles.map((file, idx) => {
+                    const url = URL.createObjectURL(file);
+                    return (
+                      <div key={idx} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '1/1', backgroundColor: '#000' }}>
+                        <img
+                          src={url}
+                          onLoad={e => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          alt={file.name}
+                        />
+                        {pendingUploadFiles.length > 1 && (
+                          <button
+                            onClick={() => handleRemovePendingFile(idx)}
+                            style={{
+                              position: 'absolute', top: 6, right: 6,
+                              width: 24, height: 24,
+                              backgroundColor: 'rgba(0,0,0,0.6)', border: 'none',
+                              borderRadius: '50%', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#fff',
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                  {pendingUploadFiles.map((file, idx) => {
+                    const isVideo = file.type.startsWith('video/');
+                    const isAudio = file.type.startsWith('audio/');
+                    const isImage = file.type.startsWith('image/');
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    const url = (isImage || isVideo) ? URL.createObjectURL(file) : null;
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: 12, backgroundColor: 'var(--bg-tertiary)',
+                        borderRadius: 12, border: '1px solid var(--border)'
+                      }}>
+                        <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg-primary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {isImage && url ? (
+                            <img src={url} onLoad={() => URL.revokeObjectURL(url!)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={file.name} />
+                          ) : isVideo && url ? (
+                            <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                          ) : isAudio ? (
+                            <Mic size={24} color="#a78bfa" />
+                          ) : (
+                            <Paperclip size={24} color="var(--text-secondary)" />
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {file.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                            {sizeMB} MB
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleRemovePendingFile(idx)}
+                          style={{ ...iconBtnStyle, color: '#f87171', flexShrink: 0 }}
+                          title="Remove"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 14px', border: '2px dashed var(--border)',
+                  borderRadius: 12, backgroundColor: 'transparent',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                  width: '100%', justifyContent: 'center',
+                  fontSize: 13, marginBottom: 4,
+                  transition: 'border-color 0.2s, color 0.2s'
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
+              >
+                <Paperclip size={16} />
+                Add more files
+              </button>
+            </div>
+
+            {/* Caption + Send */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                autoFocus
+                type="text"
+                value={uploadCaption}
+                onChange={e => setUploadCaption(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleConfirmUpload(); }}
+                placeholder="Add a caption..."
+                style={{
+                  flex: 1, padding: '10px 16px',
+                  borderRadius: 20, border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)',
+                  fontSize: 14, outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleConfirmUpload}
+                disabled={pendingUploadFiles.length === 0}
+                style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  backgroundColor: 'var(--accent)', border: 'none',
+                  color: '#fff', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'transform 0.15s, opacity 0.15s',
+                  opacity: pendingUploadFiles.length === 0 ? 0.5 : 1,
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                title="Send"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
