@@ -1,21 +1,48 @@
 import { firebaseAuth } from './firebaseService';
-import { signInWithCredential, GoogleAuthProvider, GithubAuthProvider, EmailAuthProvider } from 'firebase/auth';
+import { signInWithCustomToken } from 'firebase/auth';
 import { StoredAccount } from '../store/multiAccountStore';
 
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
 /**
- * Switch to a different account using stored refresh token
+ * Switch to a different account using custom token
+ * This allows seamless switching without re-entering password
  */
-export const switchToAccount = async (account: StoredAccount): Promise<void> => {
+export const switchToAccount = async (account: StoredAccount): Promise<boolean> => {
   try {
-    // Firebase doesn't expose refresh token directly, so we need to use custom token
-    // For now, we'll sign out and require re-authentication
-    // In production, you'd implement a custom token exchange with your backend
-    
-    // Note: Firebase doesn't allow direct refresh token usage from client
-    // The refresh token is managed internally by Firebase SDK
-    // We'll need to implement a different approach
-    
-    throw new Error('Account switching requires re-authentication. Please use "Add Account" to login again.');
+    // Get current user's ID token
+    const currentUser = firebaseAuth.currentUser;
+    if (!currentUser) {
+      throw new Error('No user logged in');
+    }
+
+    const idToken = await currentUser.getIdToken();
+
+    // Request custom token for target account from backend
+    const response = await fetch(`${API_BASE}/api/auth/switch-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        targetUid: account.uid,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to switch account');
+    }
+
+    const data = await response.json();
+    const { customToken } = data.data;
+
+    // Sign in with custom token (this switches the account)
+    await signInWithCustomToken(firebaseAuth, customToken);
+
+    console.log(`Successfully switched to account: ${account.email}`);
+    return true;
   } catch (error) {
     console.error('Failed to switch account:', error);
     throw error;

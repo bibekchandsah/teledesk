@@ -13,6 +13,7 @@ import groupRoutes from './routes/groupRoutes';
 import fileRoutes from './routes/fileRoutes';
 import savedMessagesRoutes from './routes/savedMessagesRoutes';
 import deviceSessionRoutes from './routes/deviceSessionRoutes';
+import authRoutes from './routes/authRoutes';
 import { initializeSocket } from './sockets/socketManager';
 import { setIo as setUserIo } from './controllers/userController';
 import { setIo } from './controllers/chatController';
@@ -59,6 +60,7 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/saved-messages', savedMessagesRoutes);
 app.use('/api/device-sessions', deviceSessionRoutes);
+app.use('/api/auth', authRoutes);
 
 // ─── Debug route to verify deployment ──────────────────────────────────────
 app.get('/api/debug/routes', (_req, res) => {

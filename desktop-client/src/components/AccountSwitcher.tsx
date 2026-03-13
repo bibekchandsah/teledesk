@@ -32,23 +32,36 @@ export const AccountSwitcher: React.FC = () => {
     }
 
     setSwitching(true);
+    setIsOpen(false);
+    
     try {
       const account = accounts.find((a) => a.uid === uid);
-      if (!account) return;
+      if (!account) {
+        throw new Error('Account not found');
+      }
 
-      // Sign out current user (with switching flag)
-      await logout(true);
+      // Use seamless account switching (like Gmail)
+      const { switchToAccount } = await import('../services/multiAccountService');
+      await switchToAccount(account);
 
       // Set as active account
       setActiveAccount(uid);
 
-      // Redirect to login with account hint
-      window.location.href = `/login?switch=${encodeURIComponent(account.email)}`;
+      // Reload the page to reinitialize with new account
+      window.location.href = '/';
     } catch (error) {
       console.error('Failed to switch account:', error);
-      alert('Failed to switch account. Please try logging in manually.');
-    } finally {
       setSwitching(false);
+      
+      // Fallback: If seamless switching fails, use traditional method
+      alert('Seamless switching failed. Redirecting to login...');
+      
+      const account = accounts.find((a) => a.uid === uid);
+      if (account) {
+        await logout(true);
+        setActiveAccount(uid);
+        window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
+      }
     }
   };
 
