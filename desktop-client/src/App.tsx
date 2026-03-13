@@ -51,7 +51,7 @@ import PinModal from './components/modals/PinModal';
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId } = useUIStore();
-  const { activeCall, incomingCall } = useCallStore();
+  const { activeCall, incomingCall, isCallInPopup } = useCallStore();
   const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
   const hasArchived = archivedChatIds.length > 0;
@@ -372,9 +372,9 @@ const AppInner: React.FC = () => {
             </Routes>
           </div>
 
-          {/* Overlays — shown only as fallback when not running in Electron */}
-          {activeCall && !window.electronAPI?.openCallWindow && <CallScreen />}
-          {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal />}
+          {/* Overlays — shown only as fallback when not running in Electron or when popup is blocked */}
+          {activeCall && !window.electronAPI?.openCallWindow && !isCallInPopup && <CallScreen />}
+          {incomingCall && !window.electronAPI?.openIncomingCallWindow && !isCallInPopup && <IncomingCallModal />}
 
           {/* PIN Modal */}
           {pinModal && (

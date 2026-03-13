@@ -20,7 +20,7 @@ const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
-  const { setIncomingCall } = useCallStore();
+  const { setIncomingCall, setIsCallInPopup } = useCallStore();
   const { currentUser } = useAuthStore();
   const { logout } = useAuth();
   const { liveTypingEnabled } = useUIStore();
@@ -180,6 +180,34 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           targetName: nicknames[data.callerId] || data.callerName,
           targetAvatar: data.callerAvatar,
         });
+      } else {
+        // Web: open incoming call in popup window
+        const encoded = encodeURIComponent(JSON.stringify({
+          callId: data.callId,
+          callType: data.callType,
+          isOutgoing: false,
+          targetUserId: data.callerId,
+          targetName: nicknames[data.callerId] || data.callerName,
+          targetAvatar: data.callerAvatar,
+        }));
+        const url = `/call-window?d=${encoded}`;
+        const width = 960;
+        const height = 680;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+        
+        const popup = window.open(
+          url,
+          'TeleDesk Call',
+          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
+        );
+        
+        if (popup) {
+          setIsCallInPopup(true);
+        } else {
+          console.warn('[Call] Popup blocked for incoming call, using in-app modal');
+          setIsCallInPopup(false);
+        }
       }
 
       showNotification({

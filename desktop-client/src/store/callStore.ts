@@ -11,6 +11,7 @@ interface CallState {
   isCalleeRinging: boolean; // true once server confirms callee's device is ringing
   callDuration: number; // seconds
   callTimer: ReturnType<typeof setInterval> | null;
+  isCallInPopup: boolean; // true when call is handled in a popup window
 
   setActiveCall: (call: CallSession | null) => void;
   setIncomingCall: (call: CallSession | null) => void;
@@ -19,6 +20,7 @@ interface CallState {
   setMuted: (muted: boolean) => void;
   setVideoOff: (off: boolean) => void;
   setIsCalleeRinging: (ringing: boolean) => void;
+  setIsCallInPopup: (inPopup: boolean) => void;
   startCallTimer: () => void;
   stopCallTimer: () => void;
   endCallCleanup: () => void;
@@ -34,6 +36,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   isCalleeRinging: false,
   callDuration: 0,
   callTimer: null,
+  isCallInPopup: false,
 
   setActiveCall: (call) => set({ activeCall: call }),
   setIncomingCall: (call) => set({ incomingCall: call }),
@@ -42,6 +45,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   setMuted: (muted) => set({ isMuted: muted }),
   setVideoOff: (off) => set({ isVideoOff: off }),
   setIsCalleeRinging: (ringing) => set({ isCalleeRinging: ringing }),
+  setIsCallInPopup: (inPopup) => set({ isCallInPopup: inPopup }),
 
   startCallTimer: () => {
     const timer = setInterval(() => {
@@ -70,6 +74,7 @@ export const useCallStore = create<CallState>((set, get) => ({
       isCalleeRinging: false,
       callTimer: null,
       callDuration: 0,
+      isCallInPopup: false,
     });
   },
 }));

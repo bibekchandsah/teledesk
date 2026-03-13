@@ -63,6 +63,7 @@ const MediaGroupBubble = ({
   selectionMode,
   selectedIds,
   onToggleSelect,
+  highlightedMsgId,
 }: {
   msgs: Message[];
   firstMsg: Message;
@@ -84,6 +85,7 @@ const MediaGroupBubble = ({
   selectionMode?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  highlightedMsgId?: string | null;
 }) => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
   const [isGroupHovered, setIsGroupHovered] = useState(false);
@@ -221,6 +223,9 @@ const MediaGroupBubble = ({
             // color: '#fff',
             color: isOwn ? '#fff' : 'var(--text-primary)',
             boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+            outline: msgs.some(m => m.messageId === highlightedMsgId) ? '2px solid var(--accent)' : undefined,
+            outlineOffset: msgs.some(m => m.messageId === highlightedMsgId) ? 2 : undefined,
+            transition: 'outline 0.3s, box-shadow 0.3s',
           }}>
             {msgs.map((m, ci) => {
               let colSpan = 'span 2';
@@ -2722,6 +2727,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   selectionMode={selectionMode}
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelectMessage}
+                  highlightedMsgId={highlightedMsgId}
                 />
               );
             }

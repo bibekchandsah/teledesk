@@ -179,35 +179,47 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
       <div className="message-voice-note" style={{ 
         display: 'flex', 
         alignItems: 'center', 
-        gap: 8, 
-        padding: '2px 0',
+        gap: 10, 
+        padding: '4px 0',
         width: 'fit-content',
         maxWidth: '100%',
-        minWidth: 180
+        minWidth: 200
       }}>
       <button
          style={{
-           width: 36,
-           height: 36,
+           width: 40,
+           height: 40,
            borderRadius: '50%',
-           backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : 'var(--accent)',
+           backgroundColor: isOwn ? 'rgba(255,255,255,0.25)' : 'var(--accent)',
            border: 'none',
            display: 'flex',
            alignItems: 'center',
            justifyContent: 'center',
            color: '#fff',
            cursor: fileUrl ? 'pointer' : 'default',
-           opacity: fileUrl ? 1 : 0.5
+           opacity: fileUrl ? 1 : 0.5,
+           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+           transition: 'transform 0.15s ease, box-shadow 0.15s ease',
          }}
          onClick={togglePlay}
          disabled={!fileUrl}
          title={isPlaying ? "Pause" : "Play"}
+         onMouseEnter={e => {
+           if (fileUrl) {
+             e.currentTarget.style.transform = 'scale(1.05)';
+             e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+           }
+         }}
+         onMouseLeave={e => {
+           e.currentTarget.style.transform = 'scale(1)';
+           e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
+         }}
       >
          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginLeft: 2 }} />}
       </button>
       
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 24 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+         <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 28 }}>
             {/* Real waveform visualization */}
             {waveform.length > 0 ? (
                waveform.map((val, i) => (
@@ -215,13 +227,13 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
                    key={i} 
                    style={{ 
                      flex: 1, 
-                     height: `${Math.max(2, val * 24)}px`, 
+                     height: `${Math.max(3, val * 28)}px`, 
                      minWidth: 2,
                      backgroundColor: (progress / (duration || 0.1)) > (i / waveform.length) 
                        ? (isOwn ? '#fff' : 'var(--accent)') 
-                       : (isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)'), 
-                     borderRadius: 2,
-                     transition: 'background-color 0.1s'
+                       : (isOwn ? 'rgba(255,255,255,0.35)' : 'rgba(99, 102, 241, 0.25)'), 
+                     borderRadius: 3,
+                     transition: 'background-color 0.1s, height 0.1s'
                    }} 
                  />
                ))
@@ -232,15 +244,21 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
                    key={i} 
                    style={{ 
                      flex: 1, 
-                     height: '2px', 
-                     backgroundColor: isOwn ? 'rgba(255,255,255,0.3)' : 'var(--border)', 
-                     borderRadius: 2
+                     height: '3px', 
+                     backgroundColor: isOwn ? 'rgba(255,255,255,0.35)' : 'rgba(99, 102, 241, 0.25)', 
+                     borderRadius: 3
                    }} 
                  />
                ))
             )}
          </div>
-         <div style={{ fontSize: 10, opacity: 0.8, color: isOwn ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)' }}>
+         <div style={{ 
+           fontSize: 11, 
+           opacity: 0.85, 
+           color: isOwn ? 'rgba(255,255,255,0.95)' : 'var(--text-secondary)',
+           fontWeight: 500,
+           letterSpacing: '0.02em',
+         }}>
            {formatSecs(progress)} / {formatSecs(duration)}
          </div>
       </div>
@@ -285,8 +303,20 @@ const VideoNoteBubble = ({ message }: { message: Message }) => {
       cursor: 'pointer',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center'
-    }} onClick={togglePlay}>
+      justifyContent: 'center',
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.15)',
+      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    }} 
+    onClick={togglePlay}
+    onMouseEnter={e => {
+      e.currentTarget.style.transform = 'scale(1.02)';
+      e.currentTarget.style.boxShadow = '0 6px 24px rgba(0, 0, 0, 0.25), 0 3px 12px rgba(0, 0, 0, 0.2)';
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.transform = 'scale(1)';
+      e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.15)';
+    }}
+    >
       
       {/* Premium Circular Playback Ring */}
       <svg 
@@ -298,7 +328,8 @@ const VideoNoteBubble = ({ message }: { message: Message }) => {
             height: '100%', 
             transform: 'rotate(-90deg)', 
             pointerEvents: 'none',
-            zIndex: 10
+            zIndex: 10,
+            filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))',
          }}
       >
         {/* Background track */}
@@ -307,8 +338,8 @@ const VideoNoteBubble = ({ message }: { message: Message }) => {
           cy="120"
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.15)"
-          strokeWidth="6"
+          stroke="rgba(255,255,255,0.2)"
+          strokeWidth="5"
         />
         {/* Progress track */}
         <circle
@@ -317,7 +348,7 @@ const VideoNoteBubble = ({ message }: { message: Message }) => {
           r={radius}
           fill="none"
           stroke="var(--accent)"
-          strokeWidth="6"
+          strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
@@ -372,18 +403,19 @@ const VideoNoteBubble = ({ message }: { message: Message }) => {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 48,
-            height: 48,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            width: 56,
+            height: 56,
+            backgroundColor: 'rgba(0,0,0,0.6)',
             borderRadius: '50%',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(8px)',
             pointerEvents: 'none',
-            zIndex: 11
+            zIndex: 11,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
          }}>
-             <Play size={24} color="#fff" style={{ marginLeft: 4 }} />
+             <Play size={26} color="#fff" style={{ marginLeft: 4 }} fill="#fff" />
          </div>
       )}
     </div>
@@ -599,7 +631,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         ? message.callStatus
         : (message.callStatusReceiver ?? message.callStatus);
 
-      const iconEl = message.callType === 'video' ? <Video size={18} /> : <Phone size={18} />;
+      const iconEl = message.callType === 'video' ? <Video size={20} /> : <Phone size={20} />;
       const typeName = message.callType === 'video' ? 'Video' : 'Voice';
       const dur = message.callDuration ?? 0;
       const m = Math.floor(dur / 60);
@@ -620,19 +652,56 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       }
 
       const isFailed = viewerStatus === 'missed' || viewerStatus === 'cancelled' || viewerStatus === 'declined' || viewerStatus === 'no_answer';
-      const callColor = isFailed ? '#f87171' : undefined;
+      const callColor = isFailed ? '#f87171' : 'var(--accent)';
 
       return (
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: onCall ? 'pointer' : 'default' }}
+          className={`message-call-bubble ${isFailed ? 'call-failed' : ''}`}
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 12, 
+            cursor: onCall ? 'pointer' : 'default',
+            minWidth: 220,
+          }}
           onClick={() => onCall?.(message.callType ?? 'voice')}
           title={onCall ? `Call back (${message.callType ?? 'voice'})` : undefined}
         >
-          <span style={{ display: 'flex', alignItems: 'center', color: callColor }}>{iconEl}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 500, color: callColor }}>{label}</div>
+          <div style={{ 
+            width: 44, 
+            height: 44, 
+            borderRadius: '50%', 
+            background: isFailed 
+              ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(248, 113, 113, 0.2) 100%)'
+              : 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(129, 140, 248, 0.2) 100%)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: callColor,
+            flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+          }}>
+            {iconEl}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ 
+              fontSize: 14, 
+              fontWeight: 600, 
+              color: callColor,
+              marginBottom: 2,
+              letterSpacing: '0.01em',
+            }}>
+              {label}
+            </div>
             {viewerStatus === 'completed' && dur > 0 && (
-              <div style={{ fontSize: 12, opacity: 0.7 }}>{dStr}</div>
+              <div style={{ 
+                fontSize: 12, 
+                opacity: 0.7,
+                color: 'var(--text-secondary)',
+                fontWeight: 500,
+              }}>
+                Duration: {dStr}
+              </div>
             )}
           </div>
         </div>
@@ -880,12 +949,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
 
         <div
-          className={`message-bubble ${isOwn ? 'bubble-own' : 'bubble-other'}`}
+          className={`message-bubble ${isOwn ? 'bubble-own' : 'bubble-other'} ${message.type === 'text' ? 'message-text-bubble' : ''}`}
           style={{
-            backgroundColor: message.type === 'video_note' ? 'transparent' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
+            backgroundColor: message.type === 'video_note' ? 'transparent' : message.type === 'call' ? 'transparent' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
             color: isOwn ? '#fff' : 'var(--text-primary)',
             borderRadius: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-            padding: message.type === 'video_note' ? 0 : '8px 12px',
+            padding: message.type === 'video_note' ? 0 : message.type === 'call' ? 0 : '10px 14px',
             fontSize: 14,
             lineHeight: 1.5,
             outline: isHighlighted

@@ -35,6 +35,29 @@ const CallContext = createContext<CallContextValue | null>(null);
 /** True when running inside Electron with call-window IPC available */
 const isElectron = (): boolean => !!window.electronAPI?.openCallWindow;
 
+/** Open call in popup window for web browsers */
+const openCallPopup = (params: {
+  callId: string;
+  callType: 'video' | 'voice';
+  isOutgoing: boolean;
+  targetUserId: string;
+  targetName: string;
+  targetAvatar?: string;
+}): Window | null => {
+  const encoded = encodeURIComponent(JSON.stringify(params));
+  const url = `/call-window?d=${encoded}`;
+  const width = 960;
+  const height = 680;
+  const left = window.screen.width / 2 - width / 2;
+  const top = window.screen.height / 2 - height / 2;
+  
+  return window.open(
+    url,
+    'TeleDesk Call',
+    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
+  );
+};
+
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     activeCall,
@@ -48,6 +71,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     endCallCleanup,
     callDuration,
     setIsCalleeRinging,
+    setIsCallInPopup,
   } = useCallStore();
   const { currentUser } = useAuthStore();
   const { activeChat, chats, nicknames } = useChatStore();
@@ -62,6 +86,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const localStreamRef = useRef<MediaStream | null>(null);
   // Track call duration at the time the call window closes (for summary)
   const callDurationRef = useRef(callDuration);
+  // Track popup window reference for web calls
+  const callPopupRef = useRef<Window | null>(null);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
@@ -399,16 +425,34 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetAvatar,
       });
     } else {
-      // Non-Electron fallback: capture stream here and store for when ACCEPT_CALL arrives
-      getLocalStream(callType)
-        .then((stream) => {
-          localStreamRef.current = stream;
-          setLocalStream(stream);
-        })
-        .catch((err) => {
-          console.error('[Call] getLocalStream failed:', err);
-          endCallCleanup();
-        });
+      // Web: open call in popup window
+      const popup = openCallPopup({
+        callId,
+        callType,
+        isOutgoing: true,
+        targetUserId,
+        targetName: nicknames[targetUserId] || targetName,
+        targetAvatar,
+      });
+      
+      if (popup) {
+        // Store popup reference and set flag
+        callPopupRef.current = popup;
+        setIsCallInPopup(true);
+      } else {
+        // Popup blocked - fallback to in-app modal
+        console.warn('[Call] Popup blocked, using in-app modal');
+        setIsCallInPopup(false);
+        getLocalStream(callType)
+          .then((stream) => {
+            localStreamRef.current = stream;
+            setLocalStream(stream);
+          })
+          .catch((err) => {
+            console.error('[Call] getLocalStream failed:', err);
+            endCallCleanup();
+          });
+      }
     }
 
     // Auto-cancel after 30 s if receiver doesn't answer
@@ -424,6 +468,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       endCallCleanup();
       if (isElectron()) {
         window.electronAPI?.closeCallWindow?.();
+      } else if (callPopupRef.current && !callPopupRef.current.closed) {
+        // Close web popup window
+        callPopupRef.current.close();
+        callPopupRef.current = null;
+        setIsCallInPopup(false);
       }
       showNotification({ title: 'TeleDesk', body: 'No answer' });
     }, 30000);

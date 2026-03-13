@@ -207,6 +207,83 @@ body {
   display: none !important;
 }
 
+/* ─── Premium Message Bubble Styles ────────────────────────────────────────── */
+.message-bubble-wrapper {
+  position: relative;
+}
+
+.message-bubble-wrapper .message-bubble-content {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.message-bubble-wrapper:hover .message-bubble-content {
+  transform: translateY(-1px);
+}
+
+/* Text message bubbles */
+.message-bubble-wrapper .message-text-bubble {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 10px 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.message-bubble-wrapper.other .message-text-bubble {
+  background: var(--bg-secondary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Call message bubbles - premium design */
+.message-call-bubble {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(129, 140, 248, 0.12) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 16px;
+  padding: 14px 16px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+}
+
+.message-call-bubble:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(129, 140, 248, 0.16) 100%);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+.message-call-bubble.call-failed {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(248, 113, 113, 0.12) 100%);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.message-call-bubble.call-failed:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(248, 113, 113, 0.16) 100%);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Voice/Video note bubbles */
+.message-voice-note,
+.message-video-note {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message-voice-note:hover,
+.message-video-note:hover {
+  transform: scale(1.02);
+}
+
+/* Media group bubbles */
+.message-media-group {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease;
+}
+
+.message-media-group:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18), 0 3px 6px rgba(0, 0, 0, 0.12);
+}
+
 /* ─── Responsive: Tablet (769px – 1024px) ───────────────────────────────────── */
 @media (max-width: 1024px) {
   .chat-sidebar {

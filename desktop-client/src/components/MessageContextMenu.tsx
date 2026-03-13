@@ -87,6 +87,11 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       const vh = window.innerHeight;
       const MARGIN = 8;
       
+      // On mobile, account for bottom navigation bar (56px on mobile, 52px on small mobile)
+      const isMobile = window.innerWidth <= 768;
+      const navBarHeight = window.innerWidth <= 480 ? 52 : (isMobile ? 56 : 0);
+      const bottomMargin = isMobile ? navBarHeight + MARGIN : MARGIN;
+      
       let px = x;
       let py = y;
       
@@ -95,10 +100,19 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
         px = vw - w - MARGIN;
       }
       
-      // Check if menu would overflow bottom edge
-      if (y + h > vh - MARGIN) {
-        // Position to fit within viewport
-        py = Math.max(MARGIN, vh - h - MARGIN);
+      // Check if menu would overflow bottom edge (accounting for nav bar on mobile)
+      if (y + h > vh - bottomMargin) {
+        // Position above the click point if there's more space there
+        const spaceAbove = y - MARGIN;
+        const spaceBelow = vh - bottomMargin - y;
+        
+        if (spaceAbove > spaceBelow && spaceAbove >= h) {
+          // Position above click point
+          py = y - h - MARGIN;
+        } else {
+          // Position to fit within viewport
+          py = Math.max(MARGIN, vh - h - bottomMargin);
+        }
       }
       
       // Check if menu would overflow top edge
