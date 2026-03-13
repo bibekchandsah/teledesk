@@ -81,6 +81,33 @@ const createWindow = () => {
     mainWindow?.focus();
   });
 
+  // Register zoom keyboard shortcuts
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!mainWindow) return;
+
+    const isCtrlOrCmd = input.control || input.meta;
+
+    // Zoom In: Ctrl/Cmd + Plus or Ctrl/Cmd + =
+    if (isCtrlOrCmd && (input.key === '+' || input.key === '=')) {
+      event.preventDefault();
+      const currentZoom = mainWindow.webContents.getZoomLevel();
+      mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+    }
+
+    // Zoom Out: Ctrl/Cmd + Minus
+    if (isCtrlOrCmd && input.key === '-') {
+      event.preventDefault();
+      const currentZoom = mainWindow.webContents.getZoomLevel();
+      mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+    }
+
+    // Reset Zoom: Ctrl/Cmd + 0
+    if (isCtrlOrCmd && input.key === '0') {
+      event.preventDefault();
+      mainWindow.webContents.setZoomLevel(0);
+    }
+  });
+
   // Prevent navigation to external URLs
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(isDev ? VITE_DEV_SERVER_URL : 'file://')) {

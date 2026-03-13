@@ -1148,6 +1148,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const peerProfile = peerId === currentUser?.uid 
       ? currentUser 
       : userProfiles[peerId];
+    
+    // Check if both users have showActiveStatus enabled (mutual visibility)
+    const isSelfVisible = currentUser?.showActiveStatus !== false;
+    const isPeerVisible = peerProfile?.showActiveStatus !== false;
       
     return {
       uid: peerId,
