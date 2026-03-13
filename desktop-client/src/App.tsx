@@ -175,6 +175,13 @@ const AppInner: React.FC = () => {
   }
 
   if (!isAuthenticated) {
+    // Check if we're in the middle of account switching
+    const isSwitching = document.getElementById('account-switching-overlay');
+    if (isSwitching) {
+      // Don't show login page during account switch
+      return null;
+    }
+    
     return (
       <Routes>
         <Route path="*" element={<LoginPage />} />

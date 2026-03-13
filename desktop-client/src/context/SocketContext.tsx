@@ -286,7 +286,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       alert(`Security Alert: ${data.message}`);
       
       // Force logout from this device
-      logout();
+      logout(false);
+      window.location.href = '/login?logout=true';
     };
 
     const handleUserUpdated = (user: User) => {

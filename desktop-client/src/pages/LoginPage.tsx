@@ -22,8 +22,12 @@ const LoginPage: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const switchEmail = params.get('switch');
     const addAccount = params.get('add');
+    const logout = params.get('logout');
 
-    if (switchEmail) {
+    if (logout === 'true') {
+      // User explicitly logged out, don't show picker
+      setShowAccountPicker(false);
+    } else if (switchEmail) {
       // Pre-fill email when switching accounts
       setEmail(decodeURIComponent(switchEmail));
       setShowAccountPicker(false);

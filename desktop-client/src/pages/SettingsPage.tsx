@@ -193,8 +193,9 @@ const SettingsPage: React.FC = () => {
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
-    await logout();
-    setIsLoggingOut(false);
+    await logout(false); // false = not switching, explicit logout
+    // Redirect to login with logout flag
+    window.location.href = '/login?logout=true';
   };
 
   const handleToggleActiveStatus = async () => {

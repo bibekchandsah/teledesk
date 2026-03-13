@@ -40,6 +40,42 @@ export const AccountSwitcher: React.FC = () => {
         throw new Error('Account not found');
       }
 
+      // Show switching overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'account-switching-overlay';
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: var(--bg-primary);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        gap: 16px;
+      `;
+      overlay.innerHTML = `
+        <div style="
+          width: 48px;
+          height: 48px;
+          border: 4px solid var(--accent);
+          border-top-color: transparent;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        "></div>
+        <div style="
+          color: var(--text-primary);
+          font-size: 16px;
+          font-weight: 600;
+        ">Switching to ${account.name}...</div>
+        <style>
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        </style>
+      `;
+      document.body.appendChild(overlay);
+
       // Use seamless account switching (like Gmail)
       const { switchToAccount } = await import('../services/multiAccountService');
       await switchToAccount(account);
@@ -47,10 +83,18 @@ export const AccountSwitcher: React.FC = () => {
       // Set as active account
       setActiveAccount(uid);
 
+      // Small delay to ensure state is saved
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Reload the page to reinitialize with new account
       window.location.href = '/';
     } catch (error) {
       console.error('Failed to switch account:', error);
+      
+      // Remove overlay on error
+      const overlay = document.getElementById('account-switching-overlay');
+      if (overlay) overlay.remove();
+      
       setSwitching(false);
       
       // Fallback: If seamless switching fails, use traditional method
