@@ -12,6 +12,6 @@
 (fixed) move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
 (fixed) hovering on grid layout isn't showing any reaction row
 (fixed) show reactions on grid layout not on individual image 
+(fixed) for files like audio/video/pdf etc. instead of 'copy link' show 'download'
 (partially) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
 copy isn't working for text/sticker/GIFs
-for files like audio/video/pdf etc. instead of 'copy link' show 'download'

@@ -475,11 +475,29 @@ const MediaGroupBubble = ({
           onPin={onPin}
           onDelete={onDelete}
           onCopy={(m) => {
-            if (m.type === 'image' || m.type === 'gif') {
+            if (m.type === 'text' && m.content) {
+              if (window.electronAPI?.copyTextToClipboard) {
+                window.electronAPI.copyTextToClipboard(m.content);
+              } else {
+                navigator.clipboard.writeText(m.content).catch(() => {});
+              }
+              showToast('Message copied to clipboard');
+            } else if (m.type === 'image') {
               handleCopyImage(m);
-            } else if (m.fileUrl) {
-              navigator.clipboard.writeText(m.fileUrl).catch(() => {});
-              showToast('Link copied to clipboard');
+            } else if (m.type === 'gif' && m.fileUrl) {
+              if (window.electronAPI?.copyTextToClipboard) {
+                window.electronAPI.copyTextToClipboard(m.fileUrl);
+              } else {
+                navigator.clipboard.writeText(m.fileUrl).catch(() => {});
+              }
+              showToast('GIF copied to clipboard');
+            } else if (m.type === 'sticker' && m.fileUrl) {
+              if (window.electronAPI?.copyTextToClipboard) {
+                window.electronAPI.copyTextToClipboard(m.fileUrl);
+              } else {
+                navigator.clipboard.writeText(m.fileUrl).catch(() => {});
+              }
+              showToast('Sticker copied to clipboard');
             }
           }}
           onDownload={onDownload}

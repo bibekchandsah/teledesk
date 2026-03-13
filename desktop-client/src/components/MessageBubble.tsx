@@ -502,11 +502,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
       } catch {
-        if (target.fileUrl) navigator.clipboard.writeText(target.fileUrl).catch(() => {});
+        if (target.fileUrl) {
+          if (window.electronAPI?.copyTextToClipboard) {
+            window.electronAPI.copyTextToClipboard(target.fileUrl);
+          } else {
+            navigator.clipboard.writeText(target.fileUrl).catch(() => {});
+          }
+        }
         showToast('Link copied');
       }
     } else if (target.content) {
-      navigator.clipboard.writeText(target.content).catch(() => {});
+      if (window.electronAPI?.copyTextToClipboard) {
+        window.electronAPI.copyTextToClipboard(target.content);
+      } else {
+        navigator.clipboard.writeText(target.content).catch(() => {});
+      }
       showToast('Text copied');
     }
   };

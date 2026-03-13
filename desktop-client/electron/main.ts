@@ -218,6 +218,11 @@ ipcMain.on('window-close', () => mainWindow?.hide());
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
 
+// Copy text to clipboard natively
+ipcMain.on('copy-text-to-clipboard', (_e, text: string) => {
+  if (text) clipboard.writeText(text);
+});
+
 // Copy image to clipboard natively (bypasses CORS)
 ipcMain.handle('copy-image-to-clipboard', async (_event, url: string) => {
   if (!url || !url.startsWith('http')) return false;
