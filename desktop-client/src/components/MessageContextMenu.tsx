@@ -62,6 +62,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
   const [adjustedPos, setAdjustedPos] = useState<{ x: number; y: number } | null>(null);
   const [showExtended, setShowExtended] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -73,15 +74,47 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
     return () => document.removeEventListener('mousedown', close);
   }, [onClose]);
 
+  // Recalculate position when picker opens/closes
   useLayoutEffect(() => {
     if (!menuRef.current) return;
-    const { offsetWidth: w, offsetHeight: h } = menuRef.current;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const MARGIN = 8;
-    const px = Math.min(x, vw - w - MARGIN);
-    const py = Math.min(y, vh - h - MARGIN);
-    setAdjustedPos({ x: Math.max(MARGIN, px), y: Math.max(MARGIN, py) });
+    
+    // Small delay to ensure picker is rendered
+    const timer = setTimeout(() => {
+      if (!menuRef.current) return;
+      
+      const { offsetWidth: w, offsetHeight: h } = menuRef.current;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const MARGIN = 8;
+      
+      let px = x;
+      let py = y;
+      
+      // Check if menu would overflow right edge
+      if (x + w > vw - MARGIN) {
+        px = vw - w - MARGIN;
+      }
+      
+      // Check if menu would overflow bottom edge
+      if (y + h > vh - MARGIN) {
+        // Position to fit within viewport
+        py = Math.max(MARGIN, vh - h - MARGIN);
+      }
+      
+      // Check if menu would overflow top edge
+      if (py < MARGIN) {
+        py = MARGIN;
+      }
+      
+      // Check if menu would overflow left edge
+      if (px < MARGIN) {
+        px = MARGIN;
+      }
+      
+      setAdjustedPos({ x: px, y: py });
+    }, showExtended ? 10 : 0); // Small delay when picker opens to get accurate height
+    
+    return () => clearTimeout(timer);
   }, [x, y, showExtended]);
 
   const handleEmojiClick = (emoji: string) => {
@@ -110,6 +143,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
         boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
         overflow: 'hidden',
         minWidth: 170,
+        maxHeight: 'calc(100vh - 16px)',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -145,9 +179,9 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
             </button>
           </div>
           {showExtended && (
-            <div style={{ padding: '0 8px 8px' }}>
+            <div ref={pickerRef} style={{ padding: '0 8px 8px', maxHeight: 'calc(100vh - 200px)', overflow: 'auto' }}>
               <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
-                <Picker data={data} onEmojiSelect={handleEmojiMartSelect} theme="auto" previewPosition="none" skinTonePosition="none" navPosition="bottom" width="100%" />
+                <Picker data={data} onEmojiSelect={handleEmojiMartSelect} theme="auto" previewPosition="none" skinTonePosition="none" navPosition="bottom" width={350} />
               </div>
             </div>
           )}

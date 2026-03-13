@@ -90,6 +90,14 @@ const MediaGroupBubble = ({
   const [showExtended, setShowExtended] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Clear hover state when context menu opens
+  useEffect(() => {
+    if (ctxMenu) {
+      setIsGroupHovered(false);
+      setShowExtended(false);
+    }
+  }, [ctxMenu]);
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
@@ -163,8 +171,17 @@ const MediaGroupBubble = ({
       )}
       <div 
         style={{ position: 'relative' }}
-        onMouseEnter={() => setIsGroupHovered(true)}
+        onMouseEnter={() => {
+          // Only show hover on non-touch devices
+          if (!('ontouchstart' in window)) {
+            setIsGroupHovered(true);
+          }
+        }}
         onMouseLeave={() => { setIsGroupHovered(false); setShowExtended(false); }}
+        onTouchStart={() => {
+          // On touch devices, don't show hover reaction row
+          setIsGroupHovered(false);
+        }}
       >
         <div
           style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}
@@ -236,6 +253,12 @@ const MediaGroupBubble = ({
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
+                      // Clear any text selection
+                      if (window.getSelection) {
+                        window.getSelection()?.removeAllRanges();
+                      }
+                      // Hide hover reaction row
+                      setIsGroupHovered(false);
                       setCtxMenu({ x: e.clientX, y: e.clientY, msg: m });
                     }}
                   >
@@ -298,6 +321,12 @@ const MediaGroupBubble = ({
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    // Clear any text selection
+                    if (window.getSelection) {
+                      window.getSelection()?.removeAllRanges();
+                    }
+                    // Hide hover reaction row
+                    setIsGroupHovered(false);
                     setCtxMenu({ x: e.clientX, y: e.clientY, msg: m });
                   }}
                 >
@@ -336,7 +365,7 @@ const MediaGroupBubble = ({
           </div>
 
           {/* Group-level hover reaction bar */}
-          {!selectionMode && isGroupHovered && onMessageReaction && (
+          {!selectionMode && isGroupHovered && onMessageReaction && !ctxMenu && (
             <div 
               onMouseLeave={() => setShowExtended(false)}
               style={{
@@ -3374,7 +3403,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   fontSize: 14,
                   outline: 'none',
                   resize: 'none',
-                  maxHeight: 120,
+                  maxHeight: 230,
                   overflowY: 'auto',
                   lineHeight: 1.5,
                   fontFamily: 'inherit',
