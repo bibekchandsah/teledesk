@@ -38,10 +38,15 @@ Last seen Invalid Date
 (fixed) during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
 (fixed) add delete account option in setting page & delete user from database too 
 (fixed) when user don't have friends and navigate to other pages and click on chat nav icon then it shows spinning instead of showing empty state
+(fixed) spinning loader by showing message "Select a chat to start messaging"
+(fixed) when new user send message it don't reflect immediately in receiver chat
+(fixed) in notification it showed correct username but in sidebar it shows "unknown"
+(fixed) in touch device pressing enter will use as shift + enter so that user can write in new line in message input box 
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
 logged in with google and redirect to default browser for logged in same like other window app does for login it redirects to default browser and gets login in own application
-when new user send message it don't reflect immediately in receiver chat
 draft message across the device 
-in touch device pressing enter will use as shift + enter so that user can write in new line in message input box 
+when user delete account then in another user chat it shows profile picture of owner profile picuture and username (you) instead of it show "Deleted User"
+link sidebar "delete for me" and "delete for everyone" with chat window three dot menu "delete for me" and "delete for everyone"
+in notification show rounded profile picture

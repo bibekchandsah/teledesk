@@ -45,7 +45,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!socket) return;
 
     // ─── Message Events ──────────────────────────────────────────────────
-    const handleNewMessage = (message: Message) => {
+    const handleNewMessage = async (message: Message) => {
       // Deduplicate: backend emits to both chat room + personal room
       if (processedMsgIds.current.has(message.messageId)) return;
       processedMsgIds.current.add(message.messageId);
@@ -53,6 +53,31 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (processedMsgIds.current.size > 500) {
         const first = processedMsgIds.current.values().next().value;
         if (first) processedMsgIds.current.delete(first);
+      }
+
+      // Check if chat exists in local store
+      const { chats, setChats, setUserProfile, userProfiles } = useChatStore.getState();
+      const chatExists = chats.some(c => c.chatId === message.chatId);
+      
+      // If chat doesn't exist locally, fetch it from backend
+      if (!chatExists) {
+        try {
+          const { getChats, getUserById } = await import('../services/apiService');
+          const result = await getChats();
+          if (result.success && result.data) {
+            setChats(result.data);
+          }
+          
+          // Also fetch the sender's profile if we don't have it
+          if (message.senderId && !userProfiles[message.senderId]) {
+            const userResult = await getUserById(message.senderId);
+            if (userResult.success && userResult.data) {
+              setUserProfile(userResult.data);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch chats or user profile:', error);
+        }
       }
 
       addMessage(message);

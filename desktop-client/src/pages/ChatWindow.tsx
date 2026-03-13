@@ -571,6 +571,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     [savedEntries]
   );
 
+  // Detect if device is primarily touch-based (mobile/tablet, not touchscreen laptop)
+  // We check if it's a touch device AND has a small screen (mobile/tablet)
+  const isTouchDevice = useMemo(() => {
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const isMobileScreen = window.innerWidth <= 768; // Mobile/tablet breakpoint
+    return hasTouch && isMobileScreen;
+  }, []);
+
   // When opened directly via URL (e.g. "open in new window"), activeChat won't be
   // set from a sidebar click.  Resolve it from the chats list as soon as it loads.
   useEffect(() => {
@@ -1434,6 +1442,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
+      // On touch devices, Enter creates a new line (like Shift+Enter on desktop)
+      // On desktop, Enter sends the message
+      if (isTouchDevice) {
+        // Allow default behavior (new line)
+        return;
+      }
       e.preventDefault();
       handleSend();
     }
