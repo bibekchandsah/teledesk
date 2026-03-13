@@ -120,7 +120,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               : message.type === 'file'
               ? `Sent a file: ${message.fileName || 'document'}`
               : `Sent a ${message.type}`,
-          icon: message.senderAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[message.senderId] || message.senderName || 'U')}&background=6366f1&color=fff`,
+          icon: (message.senderAvatar && message.senderAvatar.trim()) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[message.senderId] || message.senderName || 'U')}&background=6366f1&color=fff`,
           chatId: message.chatId,
         });
       }
@@ -238,7 +238,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       showNotification({
         title: `Incoming ${data.callType} call`,
         body: `${nicknames[data.callerId] || data.callerName} is calling...`,
-        icon: data.callerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[data.callerId] || data.callerName || 'C')}&background=6366f1&color=fff`,
+        icon: (data.callerAvatar && data.callerAvatar.trim()) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[data.callerId] || data.callerName || 'C')}&background=6366f1&color=fff`,
       });
     };
 
@@ -314,7 +314,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           showNotification({
             title: 'Message Reaction',
             body: `${reactorLabel} reacted ${payload.emoji} to: "${contentSnippet}"`,
-            icon: payload.reactorAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(payload.reactorName || payload.reactorUsername || 'R')}&background=6366f1&color=fff`,
+            icon: (payload.reactorAvatar && payload.reactorAvatar.trim()) || `https://ui-avatars.com/api/?name=${encodeURIComponent(payload.reactorName || payload.reactorUsername || 'R')}&background=6366f1&color=fff`,
             chatId: payload.chatId,
           });
         }

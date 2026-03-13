@@ -121,11 +121,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
   const requestDelete = (chatId: string, scope: 'me' | 'both') => {
     setCtxMenu(null);
-    if (scope === 'both') {
-      setConfirmDelete({ chatId, scope });
-    } else {
-      performDelete(chatId, scope);
-    }
+    // Show confirmation modal for both "me" and "both"
+    setConfirmDelete({ chatId, scope });
   };
 
   const performDelete = async (chatId: string, scope: 'me' | 'both') => {
@@ -651,6 +648,70 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           >
             <Trash2 size={14} style={{ marginRight: 6 }} />Delete for everyone
           </button>
+        </div>
+      )}
+
+      {/* ─── Delete Confirmation Modal ──────────────────────────────────── */}
+      {confirmDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {confirmDelete.scope === 'both' ? 'Delete for Everyone?' : 'Delete Chat?'}
+            </h3>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {confirmDelete.scope === 'both'
+                ? 'This will permanently delete the chat for all participants. This action cannot be undone.'
+                : 'This will delete the chat from your device. Other participants will still have access to it.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                style={{
+                  ...btnStyle,
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  opacity: deleting ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => performDelete(confirmDelete.chatId, confirmDelete.scope)}
+                disabled={deleting}
+                style={{
+                  ...btnStyle,
+                  backgroundColor: 'var(--error, #e74c3c)',
+                  color: '#fff',
+                  opacity: deleting ? 0.5 : 1,
+                }}
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

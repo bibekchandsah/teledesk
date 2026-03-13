@@ -45,15 +45,13 @@ Last seen Invalid Date
 (fixed) in laptop it still pressing enter don't send the message it works like shift+enter
 (fixed) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
 (fixed) in new chat if user signup with google then it don't show profile picture there
+(fixed) in new chat if user signup with google then it don't show profile picture there
+(fixed) sidebar "delete for everyone" is not working - now shows confirmation modal for both delete options
+(fixed) show warning modal for 'delete for me" and "delete for everyone" in sidebar
+(fixed) avatar is not shown in notification as profile picture if there is no profile picture - now generates default avatar
 
-(partially) link sidebar "delete for me" and "delete for everyone" with chat window three dot menu - already implemented
-(note) in notification show rounded profile picture - OS-level notifications don't support custom styling, avatars display as provided by OS 
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
 logged in with google and redirect to default browser for logged in same like other window app does for login it redirects to default browser and gets login in own application
-draft message across the device 
-when user delete account then in another user chat it shows profile picture of owner profile picuture and username (you) instead of it show "Deleted User"
-link sidebar "delete for me" and "delete for everyone" with chat window three dot menu "delete for me" and "delete for everyone"
-in notification show rounded profile picture
-in new chat if user signup with google then it don't show profile picture there
+draft message across the device
