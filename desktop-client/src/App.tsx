@@ -113,6 +113,21 @@ const AppInner: React.FC = () => {
     import('./services/notificationService').then(m => m.requestNotificationPermission());
   }, [isAuthenticated, currentUser?.uid]);
 
+  // Auto-lock when navigating away from locked chats or switching tabs
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const isChatsPage = location.pathname.startsWith('/chats');
+    const isLockedView = showLocked;
+
+    // If we were in locked view and moved away from chats, or if we switched back to normal chats
+    // We should lock again for security.
+    if (isLockedView && !isChatsPage) {
+       setIsUnlocked(false);
+       setShowLocked(false);
+    }
+  }, [location.pathname, showLocked, setIsUnlocked, setShowLocked, isAuthenticated]);
+
   // ─── Popup window mode (bypass loading screen — auth resolves inside) ────
   if (isPopupWindow) {
     return (
@@ -191,6 +206,8 @@ const AppInner: React.FC = () => {
               title="Chats"
               onClick={() => {
                 setShowArchived(false);
+                setShowLocked(false);
+                setIsUnlocked(false);
                 if (location.pathname.startsWith('/chats')) {
                   toggleSidebar();
                 } else {
@@ -206,6 +223,7 @@ const AppInner: React.FC = () => {
               to="/calls"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
               title="Calls"
+              onClick={() => { setShowArchived(false); setShowLocked(false); setIsUnlocked(false); }}
             >
               <Phone size={22} />
             </NavLink>
@@ -213,6 +231,7 @@ const AppInner: React.FC = () => {
               to="/bookmarks"
               className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
               title="Saved Messages"
+              onClick={() => { setShowArchived(false); setShowLocked(false); setIsUnlocked(false); }}
             >
               <Bookmark size={22} />
             </NavLink>
@@ -234,7 +253,7 @@ const AppInner: React.FC = () => {
 
             {(hasLocked || currentUser?.chatLockPin) && (
               <button
-                className={`nav-btn nav-btn--lock${showLocked ? ' active' : ''}`}
+                className={`nav-btn nav-btn--lock desktop-only${showLocked ? ' active' : ''}`}
                 title="Locked chats"
                 onClick={() => {
                   setShowArchived(false);

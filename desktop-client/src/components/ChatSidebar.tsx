@@ -28,6 +28,11 @@ interface ChatSidebarProps {
 const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, lockedChatIds, toggleLockChat } =
     useChatStore();
+  
+  const totalLockedUnread = useMemo(() => {
+    return lockedChatIds.reduce((sum, id) => sum + (unreadCounts[id] || 0), 0);
+  }, [lockedChatIds, unreadCounts]);
+
   const { currentUser } = useAuthStore();
   const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived, showLocked, setShowLocked, isUnlocked, setIsUnlocked } = useUIStore();
   const navigate = useNavigate();
@@ -312,31 +317,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               }}
             />
           </div>
-          {archivedChatIds.length > 0 && (
-            <div
-              onClick={() => setShowArchived(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
-                cursor: 'pointer', transition: 'background-color 0.15s',
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
-            >
-              <div style={{
-                width: 40, height: 40, borderRadius: '50%', backgroundColor: 'var(--bg-tertiary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <Archive size={18} style={{ color: 'var(--text-secondary)' }} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Archived</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {archivedChatIds.length} {archivedChatIds.length === 1 ? 'chat' : 'chats'}
-                </div>
-              </div>
-              <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />
-            </div>
-          )}
           {lockedChatIds.length > 0 && (
             <div
               onClick={() => {
@@ -359,9 +339,44 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                 <Lock size={18} style={{ color: 'var(--text-secondary)' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Locked Chats</div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Locked Chats</span>
+                  {totalLockedUnread > 0 && (
+                    <span style={{
+                      backgroundColor: 'var(--accent)', color: '#fff', fontSize: 10, fontWeight: 700,
+                      padding: '2px 6px', borderRadius: 10, minWidth: 20, textAlign: 'center'
+                    }}>
+                      {totalLockedUnread}
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {lockedChatIds.length} {lockedChatIds.length === 1 ? 'chat' : 'chats'}
+                </div>
+              </div>
+              <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />
+            </div>
+          )}
+          {archivedChatIds.length > 0 && (
+            <div
+              onClick={() => setShowArchived(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+                cursor: 'pointer', transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', backgroundColor: 'var(--bg-tertiary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Archive size={18} style={{ color: 'var(--text-secondary)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Archived</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {archivedChatIds.length} {archivedChatIds.length === 1 ? 'chat' : 'chats'}
                 </div>
               </div>
               <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />

@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -522,13 +522,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const navigateRouter = useNavigate();
   // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
   const navigate = chatIdProp ? () => {} : navigateRouter;
-  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname } =
+  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds } =
     useChatStore();
   const { currentUser } = useAuthStore();
   const { startCall } = useCallContext();
   const { activeCall } = useCallStore();
   const isInCall = !!activeCall;
   const { liveTypingEnabled } = useUIStore();
+  const { isUnlocked, setPinModal } = useUIStore();
   const { addBookmark, isBookmarked, removeBookmark, savedEntries } = useBookmarkStore();
 
   const bookmarkedIds = useMemo(() => 
@@ -738,6 +739,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     setEditingNickname(false);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [chatId]);
+
+  const isLocked = useMemo(() => {
+    return !!chatId && lockedChatIds.includes(chatId) && !isUnlocked;
+  }, [chatId, lockedChatIds, isUnlocked]);
 
   // Focus search input when opened
   useEffect(() => {
@@ -2116,37 +2121,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   if (!activeChat) {
-    // If we have a chatId target (popup/direct link) but chats haven't loaded yet,
-    // show a loading spinner instead of the "select a chat" placeholder.
+    // ... (no-chat placeholder logic) ...
     if (chatId) {
       return (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            gap: 12,
-            color: 'var(--text-secondary)',
-          }}
-        >
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-secondary)' }}>
           <div style={{ width: 36, height: 36, border: '3px solid rgba(255,255,255,0.15)', borderTopColor: 'var(--accent, #6366f1)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         </div>
       );
     }
     return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: 12,
-          color: 'var(--text-secondary)',
-        }}
-      >
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, color: 'var(--text-secondary)' }}>
         <MessageCircle size={64} style={{ color: 'var(--text-secondary)' }} />
         <p style={{ fontSize: 18 }}>Select a chat to start messaging</p>
       </div>
@@ -2154,20 +2138,40 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   }
 
   return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        position: 'relative',
-        backgroundColor: 'var(--bg-primary)',
-      }}
-      onDragEnter={handleDrag}
-      onDragLeave={handleDrag}
-      onDragOver={handleDrag}
-      onDrop={handleDrop}
-    >
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden' }}>
+      {isLocked ? (
+        <div style={{
+          flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', zIndex: 10
+        }}>
+          <Lock size={64} style={{ marginBottom: 16, opacity: 0.5 }} />
+          <h2 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Chat Locked</h2>
+          <p style={{ marginBottom: 24 }}>Enter your PIN to access this conversation</p>
+          <button
+            onClick={() => setPinModal({ mode: 'verify' })}
+            style={{
+              padding: '10px 24px', borderRadius: 20, backgroundColor: 'var(--accent)',
+              color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer'
+            }}
+          >
+            Unlock Chat
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            position: 'relative',
+            backgroundColor: 'var(--bg-primary)',
+          }}
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+        >
       {dragActive && (
         <div style={{
           position: 'absolute',
@@ -2402,7 +2406,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <button
                 onClick={() => { setHeaderMenu(null); enterSelectionModeEmpty(); }}
                 style={headerCtxItemStyle}
-              >
+                >
                 <CheckSquare size={14} style={{ marginRight: 8 }} />Select messages
               </button>
               <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
@@ -3472,7 +3476,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                onTouchStart={handleActionMouseDown}
                onTouchEnd={handleActionMouseUp}
                style={{
-                 ...iconBtnStyle,
                  backgroundColor: (inputText.trim() || isRecording) ? 'var(--accent)' : 'transparent',
                  color: (inputText.trim() || isRecording) ? '#fff' : 'var(--text-secondary)',
                  borderRadius: '50%',
@@ -4345,6 +4348,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
       {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
       {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
+        </div>
+      )}
     </div>
   );
 };

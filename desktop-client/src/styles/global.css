@@ -199,6 +199,14 @@ body {
   text-overflow: ellipsis;
 }
 
+.desktop-only {
+  display: flex !important;
+}
+
+.mobile-only {
+  display: none !important;
+}
+
 /* ─── Responsive: Tablet (769px – 1024px) ───────────────────────────────────── */
 @media (max-width: 1024px) {
   .chat-sidebar {
@@ -361,6 +369,14 @@ body {
   .login-card {
     padding: 28px 20px !important;
     border-radius: 16px !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: flex !important;
   }
 }
 
