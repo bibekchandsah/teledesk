@@ -1197,6 +1197,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const value = e.target.value;
     setInputText(value);
 
+    // Auto-resize textarea
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+    }
+
     // Emoji suggestion logic
     const cursor = e.target.selectionStart;
     const textBeforeCursor = value.slice(0, cursor);
@@ -3403,11 +3409,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   fontSize: 14,
                   outline: 'none',
                   resize: 'none',
+                  minHeight: 42,
                   maxHeight: 230,
                   overflowY: 'auto',
                   lineHeight: 1.5,
                   fontFamily: 'inherit',
-                  display: 'block'
+                  display: 'block',
+                  boxSizing: 'border-box',
                 }}
               />
             </>

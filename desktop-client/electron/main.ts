@@ -157,9 +157,15 @@ const createWindow = () => {
   mainWindow.on('maximize', saveWindowState);
   mainWindow.on('unmaximize', saveWindowState);
 
-  // Save state before closing
-  mainWindow.on('close', () => {
+  // Save state and hide window on close (instead of quitting)
+  mainWindow.on('close', (event) => {
     saveWindowState();
+    
+    // Prevent the window from closing
+    event.preventDefault();
+    
+    // Hide the window instead
+    mainWindow?.hide();
   });
 
   // Load the app
@@ -248,24 +254,60 @@ const createTray = () => {
 
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Open TeleDesk',
-      click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
-  ]);
+  const updateTrayMenu = () => {
+    const isAutoStartEnabled = app.getLoginItemSettings().openAtLogin;
+    const isWindowVisible = mainWindow?.isVisible() ?? false;
 
-  tray.setContextMenu(contextMenu);
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: isWindowVisible ? 'Hide Window' : 'Show Window',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isVisible()) {
+              mainWindow.hide();
+            } else {
+              mainWindow.show();
+              mainWindow.focus();
+            }
+            updateTrayMenu();
+          }
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Start on System Startup',
+        type: 'checkbox',
+        checked: isAutoStartEnabled,
+        click: () => {
+          const currentSetting = app.getLoginItemSettings().openAtLogin;
+          app.setLoginItemSettings({
+            openAtLogin: !currentSetting,
+            openAsHidden: false,
+          });
+          updateTrayMenu();
+        },
+      },
+      { type: 'separator' },
+      { label: 'Quit', click: () => app.quit() },
+    ]);
+
+    tray?.setContextMenu(contextMenu);
+  };
+
+  updateTrayMenu();
   tray.setToolTip('TeleDesk');
+  
   tray.on('double-click', () => {
     mainWindow?.show();
     mainWindow?.focus();
+    updateTrayMenu();
   });
+
+  // Update menu when window visibility changes
+  if (mainWindow) {
+    mainWindow.on('show', updateTrayMenu);
+    mainWindow.on('hide', updateTrayMenu);
+  }
 };
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────

@@ -30,3 +30,7 @@ User
 Last seen Invalid Date
 " instead of user profile picture and username should show user profile picture instead of default profile picture
 
+
+(fixed) add checkbox in systemm tray menu for auto statrt on startup
+(fixed) add show/hide window in system tray menu
+during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
