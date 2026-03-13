@@ -29,8 +29,10 @@ Start a conversation
 User
 Last seen Invalid Date
 " instead of user profile picture and username should show user profile picture instead of default profile picture
-
-
 (fixed) add checkbox in systemm tray menu for auto statrt on startup
 (fixed) add show/hide window in system tray menu
+(fixed) show play icon in video files
+(fixed) replyed messaged isn't highlighted when clicked
+
 during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
+while voice/video incoming or outgoing calling open in popup window for web version

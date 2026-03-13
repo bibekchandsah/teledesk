@@ -671,12 +671,31 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       case 'video':
         return (
-          <div className="message-video" onClick={() => onPreview?.(message)} style={{ cursor: onPreview ? 'pointer' : 'default' }}>
+          <div className="message-video" onClick={() => onPreview?.(message)} style={{ cursor: onPreview ? 'pointer' : 'default', position: 'relative' }}>
             <video
               src={message.fileUrl}
               controls={!onPreview}
               style={{ maxWidth: '100%', borderRadius: 8, pointerEvents: onPreview ? 'none' : 'auto' }}
             />
+            {onPreview && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                backdropFilter: 'blur(4px)',
+              }}>
+                <Play size={28} style={{ color: '#fff', marginLeft: 4 }} fill="#fff" />
+              </div>
+            )}
           </div>
         );
 
@@ -905,28 +924,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
           {/* Reply quote */}
           {message.replyTo && !message.deleted && (
-              <div style={{
-                borderLeft: `3px solid ${isOwn ? 'rgba(255,255,255,0.5)' : 'var(--accent)'}`,
-                paddingLeft: 8,
-                marginBottom: 6,
-                opacity: 0.8,
-                fontSize: 12,
-                maxWidth: '100%',
-                cursor: onScrollToMessage ? 'pointer' : 'default',
-                borderRadius: '0 4px 4px 0',
-                backgroundColor: isOwn ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.06)',
-                padding: '4px 8px',
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {message.replyTo.senderName || 'Unknown'}
+              <div 
+                style={{
+                  borderLeft: `3px solid ${isOwn ? 'rgba(255,255,255,0.5)' : 'var(--accent)'}`,
+                  paddingLeft: 8,
+                  marginBottom: 6,
+                  opacity: 0.8,
+                  fontSize: 12,
+                  maxWidth: '100%',
+                  cursor: onScrollToMessage ? 'pointer' : 'default',
+                  borderRadius: '0 4px 4px 0',
+                  backgroundColor: isOwn ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.06)',
+                  padding: '4px 8px',
+                }}
+                onClick={() => {
+                  if (onScrollToMessage && message.replyTo?.messageId) {
+                    onScrollToMessage(message.replyTo.messageId);
+                  }
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {message.replyTo.senderName || 'Unknown'}
+                </div>
+                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85 }}>
+                  {message.replyTo.type !== 'text' && !message.replyTo.content
+                    ? `[${message.replyTo.type}]`
+                    : message.replyTo.content || `[${message.replyTo.type}]`}
+                </div>
               </div>
-              <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85 }}>
-                {message.replyTo.type !== 'text' && !message.replyTo.content
-                  ? `[${message.replyTo.type}]`
-                  : message.replyTo.content || `[${message.replyTo.type}]`}
-              </div>
-            </div>
           )}
           {renderContent()}
           <div
