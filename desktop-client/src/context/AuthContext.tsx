@@ -93,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUserProfile(userProfile); // Also update chat store cache
               useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
               useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
+              useChatStore.getState().setLockedChatIds(userProfile.lockedChatIds ?? []);
               useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
             }
             

@@ -15,6 +15,9 @@ export interface User {
   showMessageStatus?: boolean; // if false, hides message delivery/read receipts (mutual: both must enable to see each other's status)
   pinnedChatIds?: string[]; // chats pinned by this user (synced across devices)
   archivedChatIds?: string[]; // chats archived by this user (synced across devices)
+  lockedChatIds?: string[]; // chats locked with PIN (synced across devices)
+  chatLockPin?: string; // hashed 6-digit PIN
+  chatLockResetCode?: string; // 6-digit code for PIN reset via email
   nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
 }
 

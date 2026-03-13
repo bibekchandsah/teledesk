@@ -1,7 +1,7 @@
 import React, { useEffect, Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark } from 'lucide-react';
+import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark, Lock, Unlock } from 'lucide-react';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
@@ -44,14 +44,17 @@ import IncomingCallWindowPage from './pages/IncomingCallWindowPage';
 import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
 import { useBookmarkStore } from './store/bookmarkStore';
+import PinModal from './components/modals/PinModal';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
-  const { isAuthenticated, isLoading, setLoading, currentUser } = useAuthStore();
+  const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId } = useUIStore();
   const { activeCall, incomingCall } = useCallStore();
-  const { archivedChatIds } = useChatStore();
+  const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
+  const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
   const hasArchived = archivedChatIds.length > 0;
+  const hasLocked = lockedChatIds.length > 0;
   const navigate = useNavigate();
   const location = useLocation();
   const isPopupWindow = location.pathname.startsWith('/popup');
@@ -218,10 +221,33 @@ const AppInner: React.FC = () => {
               <button
                 className={`nav-btn nav-btn--archive${showArchived ? ' active' : ''}`}
                 title="Archived chats"
-                onClick={() => { setShowArchived(true); navigate('/chats'); }}
+                onClick={() => {
+                  setShowLocked(false);
+                  setShowArchived(true);
+                  navigate('/chats');
+                }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 <Archive size={22} />
+              </button>
+            )}
+
+            {(hasLocked || currentUser?.chatLockPin) && (
+              <button
+                className={`nav-btn nav-btn--lock${showLocked ? ' active' : ''}`}
+                title="Locked chats"
+                onClick={() => {
+                  setShowArchived(false);
+                  if (isUnlocked) {
+                    setShowLocked(true);
+                    navigate('/chats');
+                  } else {
+                    setPinModal({ mode: 'verify' });
+                  }
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                {isUnlocked ? <Unlock size={22} /> : <Lock size={22} />}
               </button>
             )}
             <NavLink
@@ -285,6 +311,31 @@ const AppInner: React.FC = () => {
           {/* Overlays — shown only as fallback when not running in Electron */}
           {activeCall && !window.electronAPI?.openCallWindow && <CallScreen />}
           {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal />}
+
+          {/* PIN Modal */}
+          {pinModal && (
+            <PinModal
+              mode={pinModal.mode}
+              onSuccess={(pin) => {
+                if (pinModal.mode === 'setup' && pinModal.chatId) {
+                  toggleLockChat(pinModal.chatId, true);
+                  // Update currentUser in store immediately so UI reflects PIN is set
+                  if (currentUser) {
+                    setCurrentUser({ ...currentUser, chatLockPin: '********' }); // placeholder since pin is hashed
+                  }
+                } else if (pinModal.mode === 'verify' || pinModal.mode === 'reset') {
+                  setIsUnlocked(true);
+                  setShowLocked(true);
+                  navigate('/chats');
+                  if (pinModal.mode === 'reset' && currentUser) {
+                     setCurrentUser({ ...currentUser, chatLockPin: '********' });
+                  }
+                }
+                setPinModal(null);
+              }}
+              onCancel={() => setPinModal(null)}
+            />
+          )}
         </div>
       </CallProvider>
     </SocketProvider>

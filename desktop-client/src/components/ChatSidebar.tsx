@@ -7,7 +7,8 @@ import UserAvatar from './UserAvatar';
 import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon, getMessagePreviewColor } from '../utils/formatters';
 import { Chat } from '@shared/types';
 import { deleteChat as deleteChatApi } from '../services/apiService';
-import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff } from 'lucide-react';
+import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const PREVIEW_ICON_MAP = { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff } as const;
 type PreviewIconKey = keyof typeof PREVIEW_ICON_MAP;
@@ -25,10 +26,10 @@ interface ChatSidebarProps {
 }
 
 const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
-  const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat } =
+  const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, lockedChatIds, toggleLockChat } =
     useChatStore();
   const { currentUser } = useAuthStore();
-  const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived } = useUIStore();
+  const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived, showLocked, setShowLocked, isUnlocked, setIsUnlocked } = useUIStore();
   const navigate = useNavigate();
 
   // ─── Context Menu State ───────────────────────────────────────────────────
@@ -144,10 +145,10 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const getChatDisplayInfo = useCallback(
     (chat: Chat) => {
       if (chat.type === 'private') {
-        const isSelfChat = chat.members.every((m) => m === currentUser?.uid);
+        const isSelfChat = chat.members.every((m: string) => m === currentUser?.uid);
         const otherUid = isSelfChat
           ? currentUser?.uid
-          : chat.members.find((m) => m !== currentUser?.uid);
+          : chat.members.find((m: string) => m !== currentUser?.uid);
         
         // For the current user, always use the latest currentUser data
         // For other users, use the cached profile
@@ -182,6 +183,14 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
   const filteredChats = useMemo(() => {
     let list = chats;
+    if (showLocked) {
+      list = chats.filter(c => lockedChatIds.includes(c.chatId));
+    } else if (showArchived) {
+      list = chats.filter(c => archivedChatIds.includes(c.chatId));
+    } else {
+      list = chats.filter(c => !archivedChatIds.includes(c.chatId) && !lockedChatIds.includes(c.chatId));
+    }
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = chats.filter((chat) => {
@@ -192,9 +201,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         );
       });
     }
-    // Pinned chats float to the top, archived chats hidden from main list
+    // Pinned chats float to the top
     return [...list]
-      .filter((chat) => !archivedChatIds.includes(chat.chatId))
       .sort((a, b) => {
         const aP = pinnedChatIds.includes(a.chatId) ? 0 : 1;
         const bP = pinnedChatIds.includes(b.chatId) ? 0 : 1;
@@ -248,6 +256,19 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               Archived Chats
             </h2>
           </>
+        ) : showLocked ? (
+          <>
+            <button
+              onClick={() => setShowLocked(false)}
+              style={{ ...iconBtnStyle, marginRight: 6 }}
+              title="Back"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
+              Locked Chats
+            </h2>
+          </>
         ) : (
           <>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -269,8 +290,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         )}
       </div>
 
-      {/* Search + Archived folder — collapses on scroll-down on mobile */}
-      {!showArchived && (
+      {/* Search + Folders — collapses on scroll-down on mobile */}
+      {!showArchived && !showLocked && (
         <div className={`sidebar-topbar${showTopBar ? '' : ' sidebar-topbar--hidden'}`}>
           <div style={{ padding: '8px 12px' }}>
             <input
@@ -316,6 +337,36 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />
             </div>
           )}
+          {lockedChatIds.length > 0 && (
+            <div
+              onClick={() => {
+                if (isUnlocked) setShowLocked(true);
+                else {
+                  useUIStore.getState().setPinModal({ mode: 'verify' });
+                }
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+                cursor: 'pointer', transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', backgroundColor: 'var(--bg-tertiary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Lock size={18} style={{ color: 'var(--text-secondary)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>Locked Chats</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {lockedChatIds.length} {lockedChatIds.length === 1 ? 'chat' : 'chats'}
+                </div>
+              </div>
+              <ChevronLeft size={16} style={{ color: 'var(--text-secondary)', transform: 'rotate(180deg)', flexShrink: 0 }} />
+            </div>
+          )}
           <div style={{ height: 1, backgroundColor: 'var(--border)' }} />
         </div>
       )}
@@ -329,15 +380,18 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         onTouchEnd={handleTouchEnd}
         style={{ flex: 1, overflowY: 'auto' }}
       >
-        {/* ─── Archived Chats View ──────────────────────────────────────── */}
-        {showArchived && (() => {
-          const archivedChats = chats.filter((c) => archivedChatIds.includes(c.chatId));
-          if (archivedChats.length === 0) return (
+        {/* ─── Filtered Chats View ──────────────────────────────────────── */}
+        {(showArchived || showLocked) && (() => {
+          const list = showArchived 
+            ? chats.filter((c) => archivedChatIds.includes(c.chatId))
+            : chats.filter((c) => lockedChatIds.includes(c.chatId));
+
+          if (list.length === 0) return (
             <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)', fontSize: 14 }}>
-              No archived chats
+              No {showArchived ? 'archived' : 'locked'} chats
             </div>
           );
-          return archivedChats.map((chat) => {
+          return list.map((chat) => {
             const info = getChatDisplayInfo(chat);
             const unread = unreadCounts[chat.chatId] || 0;
             const isActive = activeChat?.chatId === chat.chatId;
@@ -382,17 +436,21 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                   </div>
                 </div>
                 <button
-                  onClick={() => toggleArchiveChat(chat.chatId)}
-                  title="Unarchive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (showArchived) toggleArchiveChat(chat.chatId);
+                    else toggleLockChat(chat.chatId, false);
+                  }}
+                  title={showArchived ? "Unarchive" : "Unlock"}
                   style={{ ...iconBtnStyle, flexShrink: 0 }}
                 >
-                  <ArchiveRestore size={16} />
+                  {showArchived ? <ArchiveRestore size={16} /> : <Unlock size={16} />}
                 </button>
               </div>
             );
           });
         })()}
-        {filteredChats.length === 0 && !showArchived && (
+        {filteredChats.length === 0 && !showArchived && !showLocked && (
           <div
             style={{
               textAlign: 'center',
@@ -408,8 +466,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           const info = getChatDisplayInfo(chat);
           const unread = unreadCounts[chat.chatId] || 0;
           const isActive = activeChat?.chatId === chat.chatId;
-          const isChatPinned = pinnedChatIds.includes(chat.chatId);
-          if (showArchived) return null;
+           const isChatPinned = pinnedChatIds.includes(chat.chatId);
+           if (showArchived || showLocked) return null;
 
           return (
             <div
@@ -587,6 +645,24 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               ? <><ArchiveRestore size={14} style={{ marginRight: 6 }} />Unarchive chat</>
               : <><Archive size={14} style={{ marginRight: 6 }} />Archive chat</>}
           </button>
+          <button
+            onClick={() => {
+              const isLocked = lockedChatIds.includes(ctxMenu.chatId);
+              if (!isLocked && !currentUser?.chatLockPin) {
+                useUIStore.getState().setPinModal({ mode: 'setup', chatId: ctxMenu.chatId });
+              } else if (!isLocked) {
+                toggleLockChat(ctxMenu.chatId, true);
+              } else {
+                toggleLockChat(ctxMenu.chatId, false);
+              }
+              setCtxMenu(null);
+            }}
+            style={ctxMenuItemStyle}
+          >
+            {lockedChatIds.includes(ctxMenu.chatId)
+              ? <><Unlock size={14} style={{ marginRight: 6 }} />Unlock chat</>
+              : <><Lock size={14} style={{ marginRight: 6 }} />Lock chat</>}
+          </button>
           {activeChat?.chatId === ctxMenu.chatId && (
             <button
               onClick={() => { setActiveChat(null); navigate('/chats'); setCtxMenu(null); }}
@@ -611,55 +687,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         </div>
       )}
 
-      {/* ─── Confirm Delete for Both ──────────────────────────────────────── */}
-      {confirmDelete && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 2000,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              padding: '24px 28px',
-              maxWidth: 340,
-              width: '90%',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-            }}
-          >
-            <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 17 }}>
-              Delete for everyone?
-            </h3>
-            <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
-              This will permanently delete the chat and all messages for all participants. This action cannot be undone.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setConfirmDelete(null)}
-                disabled={deleting}
-                style={{ ...btnStyle, backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => performDelete(confirmDelete.chatId, 'both')}
-                disabled={deleting}
-                style={{ ...btnStyle, backgroundColor: 'var(--error, #e74c3c)', color: '#fff' }}
-              >
-                {deleting ? 'Deleting…' : 'Delete for everyone'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </aside>
   );
 };

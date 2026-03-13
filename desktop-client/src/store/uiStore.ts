@@ -12,6 +12,9 @@ interface UIState {
   showArchived: boolean;
   selectedMicId: string;
   lastActiveChatId: string | null;
+  showLocked: boolean;
+  isUnlocked: boolean;
+  pinModal: { mode: 'setup' | 'verify' | 'reset', chatId?: string } | null;
 
   setSidebarOpen: (open: boolean) => void;
   setSelectedMicId: (id: string) => void;
@@ -24,6 +27,9 @@ interface UIState {
   setNewGroupModal: (open: boolean) => void;
   toggleLiveTyping: () => void;
   setShowArchived: (val: boolean) => void;
+  setShowLocked: (val: boolean) => void;
+  setIsUnlocked: (val: boolean) => void;
+  setPinModal: (val: { mode: 'setup' | 'verify' | 'reset', chatId?: string } | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -38,6 +44,9 @@ export const useUIStore = create<UIState>((set) => ({
   showArchived: false,
   selectedMicId: localStorage.getItem('selectedMicId') ?? '',
   lastActiveChatId: localStorage.getItem('lastActiveChatId') || null,
+  showLocked: false,
+  isUnlocked: false,
+  pinModal: null,
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSelectedMicId: (id) => {
@@ -68,4 +77,7 @@ export const useUIStore = create<UIState>((set) => ({
       return { liveTypingEnabled: next };
     }),
   setShowArchived: (val) => set({ showArchived: val }),
+  setShowLocked: (val) => set({ showLocked: val }),
+  setIsUnlocked: (val) => set({ isUnlocked: val }),
+  setPinModal: (val) => set({ pinModal: val }),
 }));

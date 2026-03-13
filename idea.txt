@@ -616,7 +616,7 @@ lock chat for specific user
     when user set pin then selected chat is moved to lock chat
     when user click on lock icon on nav bar or for smaller devices show lock icon above archieve 
     while opening lock chat folder it ask pin and checks whether it matches with database
-    if matched then open or show wrong pin and also show forgot option so that user can enter 6 digit code which has received in their account created email and user will set new pin .
+    if matched then open else show wrong pin and also show forgot option so that user can enter 6 digit code which has received in their account created email and user will set new pin .
 set app lock & if forgot enter registered email and verify it with 6 digit code
 
 allow multiple account to login and switch between them without logout

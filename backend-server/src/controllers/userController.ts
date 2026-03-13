@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames } from '../services/userService';
+import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat, requestPinReset, resetPinWithCode } from '../services/userService';
 import { getUserChats } from '../services/chatService';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import { Chat, User as SharedUser } from '../../../shared/types';
@@ -314,5 +314,99 @@ export const updateUsername = async (req: Request, res: Response): Promise<void>
   } catch (error) {
     logger.error(`updateUsername error: ${(error as Error).message}`);
     res.status(500).json({ success: false, error: 'Failed to update username' });
+  }
+};
+
+/**
+ * POST /api/users/me/set-pin
+ */
+export const setPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { pin } = req.body as { pin: string };
+    if (!pin || pin.length !== 6) {
+      res.status(400).json({ success: false, error: 'PIN must be 6 digits' });
+      return;
+    }
+    await setLockPin(uid, pin);
+    res.json({ success: true, message: 'PIN set successfully' });
+  } catch (error) {
+    logger.error(`setPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to set PIN' });
+  }
+};
+
+/**
+ * POST /api/users/me/verify-pin
+ */
+export const verifyPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { pin } = req.body as { pin: string };
+    const isValid = await verifyLockPin(uid, pin);
+    res.json({ success: true, data: { isValid } });
+  } catch (error) {
+    logger.error(`verifyPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify PIN' });
+  }
+};
+
+/**
+ * PATCH /api/users/me/toggle-lock
+ */
+export const toggleLock = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { chatId, lock } = req.body as { chatId: string; lock: boolean };
+    if (!chatId) {
+      res.status(400).json({ success: false, error: 'chatId is required' });
+      return;
+    }
+    const result = await toggleLockChat(uid, chatId, lock);
+    res.json({ success: true, data: { lockedChatIds: result } });
+  } catch (error) {
+    logger.error(`toggleLock error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to toggle chat lock' });
+  }
+};
+
+/**
+ * POST /api/users/me/forgot-pin
+ */
+export const forgotPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const success = await requestPinReset(uid);
+    if (!success) {
+      res.status(500).json({ success: false, error: 'Failed to send reset code' });
+      return;
+    }
+    res.json({ success: true, message: 'Reset code sent to your email' });
+  } catch (error) {
+    logger.error(`forgotPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to request PIN reset' });
+  }
+};
+
+/**
+ * POST /api/users/me/reset-pin
+ */
+export const resetPin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { code, newPin } = req.body as { code: string; newPin: string };
+    if (!code || !newPin || newPin.length !== 6) {
+      res.status(400).json({ success: false, error: 'Invalid code or PIN' });
+      return;
+    }
+    const success = await resetPinWithCode(uid, code, newPin);
+    if (!success) {
+      res.status(400).json({ success: false, error: 'Invalid reset code' });
+      return;
+    }
+    res.json({ success: true, message: 'PIN reset successfully' });
+  } catch (error) {
+    logger.error(`resetPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to reset PIN' });
   }
 };

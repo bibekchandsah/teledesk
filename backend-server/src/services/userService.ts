@@ -16,6 +16,9 @@ type UserRow = {
   show_message_status: boolean;
   pinned_chat_ids: string[];
   archived_chat_ids: string[];
+  locked_chat_ids: string[];
+  chat_lock_pin: string | null;
+  chat_lock_reset_code: string | null;
   nicknames: Record<string, string> | null;
 };
 
@@ -32,6 +35,9 @@ const rowToUser = (r: UserRow): User => ({
   showMessageStatus: r.show_message_status,
   pinnedChatIds: r.pinned_chat_ids ?? [],
   archivedChatIds: r.archived_chat_ids ?? [],
+  lockedChatIds: r.locked_chat_ids ?? [],
+  chatLockPin: r.chat_lock_pin ?? undefined,
+  chatLockResetCode: r.chat_lock_reset_code ?? undefined,
   nicknames: r.nicknames ?? {},
 });
 
@@ -56,6 +62,9 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       show_message_status: true,
       pinned_chat_ids: [],
       archived_chat_ids: [],
+      locked_chat_ids: [],
+      chat_lock_pin: null,
+      chat_lock_reset_code: null,
       nicknames: {},
     };
     await supabase.from('users').insert(newUser);
@@ -167,4 +176,69 @@ export const getUserByUsername = async (username: string): Promise<User | null> 
   
   if (!data) return null;
   return rowToUser(data as UserRow);
+};
+
+// ─── PIN Management & Chat Locking ─────────────────────────────────────────
+import bcrypt from 'bcryptjs';
+import { sendResetCodeEmail } from './emailService';
+
+export const setLockPin = async (uid: string, pin: string): Promise<void> => {
+  const hashedPin = await bcrypt.hash(pin, 10);
+  await supabase.from('users').update({ chat_lock_pin: hashedPin }).eq('uid', uid);
+};
+
+export const verifyLockPin = async (uid: string, pin: string): Promise<boolean> => {
+  const { data } = await supabase.from('users').select('chat_lock_pin').eq('uid', uid).single();
+  if (!data || !data.chat_lock_pin) return false;
+  return await bcrypt.compare(pin, data.chat_lock_pin);
+};
+
+export const toggleLockChat = async (uid: string, chatId: string, lock: boolean): Promise<string[]> => {
+  const user = await getUserById(uid);
+  if (!user) throw new Error('User not found');
+
+  let lockedChatIds = user.lockedChatIds || [];
+  if (lock) {
+    if (!lockedChatIds.includes(chatId)) {
+      lockedChatIds = [...lockedChatIds, chatId];
+    }
+  } else {
+    lockedChatIds = lockedChatIds.filter(id => id !== chatId);
+  }
+
+  await supabase.from('users').update({ locked_chat_ids: lockedChatIds }).eq('uid', uid);
+  return lockedChatIds;
+};
+
+export const requestPinReset = async (uid: string): Promise<boolean> => {
+  const user = await getUserById(uid);
+  if (!user || !user.email) return false;
+
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  await supabase.from('users').update({ chat_lock_reset_code: resetCode }).eq('uid', uid);
+
+  return await sendResetCodeEmail(user.email, resetCode);
+};
+
+export const resetPinWithCode = async (uid: string, code: string, newPin: string): Promise<boolean> => {
+  const { data } = await supabase
+    .from('users')
+    .select('chat_lock_reset_code')
+    .eq('uid', uid)
+    .single();
+
+  if (!data || data.chat_lock_reset_code !== code) {
+    return false;
+  }
+
+  const hashedPin = await bcrypt.hash(newPin, 10);
+  await supabase
+    .from('users')
+    .update({ 
+      chat_lock_pin: hashedPin, 
+      chat_lock_reset_code: null 
+    })
+    .eq('uid', uid);
+
+  return true;
 };

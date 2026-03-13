@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Chat, Message, User } from '@shared/types';
-import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi, updateMyNicknames as updateMyNicknamesApi } from '../services/apiService';
+import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi, updateMyNicknames as updateMyNicknamesApi, toggleLockChat as toggleLockChatApi } from '../services/apiService';
 
 // ─── localStorage helpers for unread counts ────────────────────────────────
 const UNREAD_KEY = 'teledesk_unread_counts';
@@ -60,6 +60,9 @@ interface ChatState {
   nicknames: Record<string, string>;
   setNicknames: (nicknames: Record<string, string>) => void;
   setNickname: (uid: string, nickname: string) => void;
+  lockedChatIds: string[];
+  setLockedChatIds: (ids: string[]) => void;
+  toggleLockChat: (chatId: string, lock: boolean) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -73,6 +76,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   unreadCounts: loadUnreadCounts(),
   pinnedChatIds: [],
   archivedChatIds: [],
+  lockedChatIds: [],
   nicknames: loadNicknames(),
 
   setChats: (chats) => set((state) => {
@@ -385,6 +389,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveNicknamesCache(prev);
       console.error('[setNickname]', err);
     });
+  },
+
+  setLockedChatIds: (ids) => set({ lockedChatIds: ids }),
+
+  toggleLockChat: async (chatId, lock) => {
+    const prev = get().lockedChatIds;
+    const next = lock 
+      ? [...new Set([...prev, chatId])]
+      : prev.filter(id => id !== chatId);
+    
+    set({ lockedChatIds: next });
+    try {
+      await toggleLockChatApi(chatId, lock);
+    } catch (err) {
+      set({ lockedChatIds: prev });
+      console.error('[toggleLockChat]', err);
+      throw err;
+    }
   },
 
 }));

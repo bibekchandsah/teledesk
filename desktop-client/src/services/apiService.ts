@@ -62,6 +62,35 @@ export const updateMyNicknames = (nicknames: Record<string, string>) =>
     body: JSON.stringify({ nicknames }),
   });
 
+export const setLockPin = (pin: string) =>
+  authFetch<{ success: boolean }>('/api/users/me/set-pin', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+
+export const verifyLockPin = (pin: string) =>
+  authFetch<{ isValid: boolean }>('/api/users/me/verify-pin', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+
+export const toggleLockChat = (chatId: string, lock: boolean) =>
+  authFetch<{ lockedChatIds: string[] }>('/api/users/me/toggle-lock', {
+    method: 'PATCH',
+    body: JSON.stringify({ chatId, lock }),
+  });
+
+export const forgotLockPin = () =>
+  authFetch<{ success: boolean }>('/api/users/me/forgot-pin', {
+    method: 'POST',
+  });
+
+export const resetLockPin = (code: string, newPin: string) =>
+  authFetch<{ success: boolean }>('/api/users/me/reset-pin', {
+    method: 'POST',
+    body: JSON.stringify({ code, newPin }),
+  });
+
 export const uploadAvatar = async (file: File): Promise<ApiResponse<{ url: string }>> => {
   const token = await getIdToken();
   const formData = new FormData();
