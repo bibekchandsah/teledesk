@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat, requestPinReset, resetPinWithCode } from '../services/userService';
+import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat } from '../services/userService';
 import { getUserChats } from '../services/chatService';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import { Chat, User as SharedUser } from '../../../shared/types';
@@ -370,43 +370,3 @@ export const toggleLock = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-/**
- * POST /api/users/me/forgot-pin
- */
-export const forgotPin = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const uid = req.user!.uid;
-    const success = await requestPinReset(uid);
-    if (!success) {
-      res.status(500).json({ success: false, error: 'Failed to send reset code' });
-      return;
-    }
-    res.json({ success: true, message: 'Reset code sent to your email' });
-  } catch (error) {
-    logger.error(`forgotPin error: ${(error as Error).message}`);
-    res.status(500).json({ success: false, error: 'Failed to request PIN reset' });
-  }
-};
-
-/**
- * POST /api/users/me/reset-pin
- */
-export const resetPin = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const uid = req.user!.uid;
-    const { code, newPin } = req.body as { code: string; newPin: string };
-    if (!code || !newPin || newPin.length !== 6) {
-      res.status(400).json({ success: false, error: 'Invalid code or PIN' });
-      return;
-    }
-    const success = await resetPinWithCode(uid, code, newPin);
-    if (!success) {
-      res.status(400).json({ success: false, error: 'Invalid reset code' });
-      return;
-    }
-    res.json({ success: true, message: 'PIN reset successfully' });
-  } catch (error) {
-    logger.error(`resetPin error: ${(error as Error).message}`);
-    res.status(500).json({ success: false, error: 'Failed to reset PIN' });
-  }
-};

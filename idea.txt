@@ -626,6 +626,20 @@ when user navigate to other chat than locked chat or any other navigation then i
 for 2nd time when user click lock icon then it should ask for pin and after entering pin it should unlock the chat
 and so on
 
+reset chat pin
+[Verify mode] → Forgot PIN?
+  → "Verify Identity" button
+    → Google/GitHub user: Re-auth popup (forced account prompt)
+    → Email/Password user: Password entry screen
+      → Enter password → Submit
+        → Verified ✓ → Set new PIN
+          → Enter PIN → Confirm PIN → Done!
+
+Forgot PIN → Verify Identity
+  → Password users: Enter password → reset-input → reset-confirm → Done!
+  → Google/GitHub: Re-auth popup → reset-input → reset-confirm → Done!
+
+
 allow multiple account to login and switch between them without logout
 show logged in devices and allow user to logout from specific device
 check network connection status (

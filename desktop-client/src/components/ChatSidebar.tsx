@@ -171,8 +171,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         const isPeerVisible = profile?.showActiveStatus !== false;
         const isSelfVisible = currentUser?.showActiveStatus !== false;
         const baseName = isSelfChat
-          ? `${profile?.name || 'Unknown'} (You)`
-          : profile?.name || 'Unknown';
+          ? `${profile?.name || profile?.email?.split('@')[0] || 'Unknown'} (You)`
+          : profile?.name || profile?.email?.split('@')[0] || 'Unknown';
         const displayName = (!isSelfChat && otherUid && nicknames[otherUid])
           ? nicknames[otherUid]
           : baseName;

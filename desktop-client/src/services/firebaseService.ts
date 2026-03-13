@@ -96,6 +96,49 @@ export const getIdToken = async (): Promise<string | null> => {
   return user.getIdToken();
 };
 
+export const reauthenticate = async (): Promise<boolean> => {
+  const user = firebaseAuth.currentUser;
+  if (!user) return false;
+
+  const providerId = user.providerData[0]?.providerId;
+  let provider;
+
+  if (providerId === 'google.com') {
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+    provider = googleProvider;
+  } else if (providerId === 'github.com') {
+    provider = githubProvider;
+  } else {
+    // If it's email/password, we'd need a different flow (reauthenticateWithCredential)
+    // For now, let's support Google and GitHub which use popups.
+    return false;
+  }
+
+  try {
+    const { reauthenticateWithPopup } = await import('firebase/auth');
+    await reauthenticateWithPopup(user, provider);
+    return true;
+  } catch (error) {
+    console.error('Re-authentication failed:', error);
+    return false;
+  }
+};
+
+export const reauthenticateWithPassword = async (password: string): Promise<boolean> => {
+  const user = firebaseAuth.currentUser;
+  if (!user || !user.email) return false;
+
+  try {
+    const { EmailAuthProvider, reauthenticateWithCredential } = await import('firebase/auth');
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+    return true;
+  } catch (error) {
+    console.error('Password re-authentication failed:', error);
+    return false;
+  }
+};
+
 // ─── Supabase Realtime – Chat list ─────────────────────────────────────────
 // Fetches the initial list via backend HTTP, then pushes incremental updates
 // from Supabase Realtime postgres changes so the UI stays live.

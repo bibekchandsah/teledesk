@@ -180,7 +180,6 @@ export const getUserByUsername = async (username: string): Promise<User | null> 
 
 // ─── PIN Management & Chat Locking ─────────────────────────────────────────
 import bcrypt from 'bcryptjs';
-import { sendResetCodeEmail } from './emailService';
 
 export const setLockPin = async (uid: string, pin: string): Promise<void> => {
   const hashedPin = await bcrypt.hash(pin, 10);
@@ -210,35 +209,3 @@ export const toggleLockChat = async (uid: string, chatId: string, lock: boolean)
   return lockedChatIds;
 };
 
-export const requestPinReset = async (uid: string): Promise<boolean> => {
-  const user = await getUserById(uid);
-  if (!user || !user.email) return false;
-
-  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-  await supabase.from('users').update({ chat_lock_reset_code: resetCode }).eq('uid', uid);
-
-  return await sendResetCodeEmail(user.email, resetCode);
-};
-
-export const resetPinWithCode = async (uid: string, code: string, newPin: string): Promise<boolean> => {
-  const { data } = await supabase
-    .from('users')
-    .select('chat_lock_reset_code')
-    .eq('uid', uid)
-    .single();
-
-  if (!data || data.chat_lock_reset_code !== code) {
-    return false;
-  }
-
-  const hashedPin = await bcrypt.hash(newPin, 10);
-  await supabase
-    .from('users')
-    .update({ 
-      chat_lock_pin: hashedPin, 
-      chat_lock_reset_code: null 
-    })
-    .eq('uid', uid);
-
-  return true;
-};

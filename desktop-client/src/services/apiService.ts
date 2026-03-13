@@ -80,17 +80,6 @@ export const toggleLockChat = (chatId: string, lock: boolean) =>
     body: JSON.stringify({ chatId, lock }),
   });
 
-export const forgotLockPin = () =>
-  authFetch<{ success: boolean }>('/api/users/me/forgot-pin', {
-    method: 'POST',
-  });
-
-export const resetLockPin = (code: string, newPin: string) =>
-  authFetch<{ success: boolean }>('/api/users/me/reset-pin', {
-    method: 'POST',
-    body: JSON.stringify({ code, newPin }),
-  });
-
 export const uploadAvatar = async (file: File): Promise<ApiResponse<{ url: string }>> => {
   const token = await getIdToken();
   const formData = new FormData();

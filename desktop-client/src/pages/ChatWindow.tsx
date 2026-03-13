@@ -1149,8 +1149,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? currentUser 
       : userProfiles[peerId];
       
-    const isPeerVisible = peerProfile?.showActiveStatus !== false;
-    const isSelfVisible = currentUser?.showActiveStatus !== false;
     return {
       uid: peerId,
       isSelf: isSelfChat,
@@ -2261,7 +2259,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   ? 'Message yourself' 
                   : peer.online 
                     ? 'Online' 
-                    : `Last seen ${formatTime(peer.profile?.lastSeen || '')}`}
+                    : peer.profile?.lastSeen 
+                      ? `Last seen ${formatTime(peer.profile.lastSeen)}`
+                      : 'Offline'}
               </div>
             </button>
           </>

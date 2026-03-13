@@ -22,3 +22,11 @@
 (fixed) when lock folder is empty then remove it from nav bar and when user lock the chat then it should show in nav bar
 (fixed) improve the design of "next", "confirm" and "continue" button in enter pin popup
 (fixed) allow user to change pin from settings
+(fixed) when user seaarch for new chat and click on user then it shows "
+Unknown
+Start a conversation
+" in side bar and in chat window it shwos "
+User
+Last seen Invalid Date
+" instead of user profile picture and username should show user profile picture instead of default profile picture
+

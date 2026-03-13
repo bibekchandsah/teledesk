@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Lock, Key, Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { setLockPin, verifyLockPin, forgotLockPin, resetLockPin } from '../../services/apiService';
+import { setLockPin, verifyLockPin } from '../../services/apiService';
+import { reauthenticate, reauthenticateWithPassword } from '../../services/firebaseService';
 import { useAuthStore } from '../../store/authStore';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface PinModalProps {
   mode: 'setup' | 'verify' | 'reset' | 'change';
@@ -12,8 +14,9 @@ interface PinModalProps {
 const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [password, setPassword] = useState('');
   const [resetCode, setResetCode] = useState('');
-  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'reset-code' | 'verify-current'>('input');
+  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'verify-current' | 'reauth-password' | 'reset-input' | 'reset-confirm'>('input');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -49,7 +52,60 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
+    setError(null);
 
+    // ── Pre-auth / Reset steps take precedence ────────────────────────
+    if (step === 'reauth-password') {
+      if (!password) {
+        setError('Please enter your password');
+        return;
+      }
+      setLoading(true);
+      try {
+        const success = await reauthenticateWithPassword(password);
+        if (success) {
+          setStep('reset-input');  // go to new-PIN entry, not verify
+          setPin('');
+          setPassword('');
+          setError(null);
+          setMessage('Identity verified. Please set a new PIN.');
+        } else {
+          setError('Incorrect password. Please try again.');
+        }
+      } catch (err) {
+        setError('Verification failed. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── Post-reauth new PIN flow ──────────────────────────────────────
+    if (step === 'reset-input') {
+      if (pin.length !== 6) { setError('PIN must be 6 digits'); return; }
+      setStep('reset-confirm');
+      setConfirmPin('');
+      return;
+    }
+    if (step === 'reset-confirm') {
+      if (pin !== confirmPin) { setError('PINs do not match'); return; }
+      setLoading(true);
+      try {
+        const res = await setLockPin(pin);
+        if (res.success) {
+          onSuccess(pin);
+        } else {
+          setError(res.error || 'Failed to set PIN');
+        }
+      } catch (err) {
+        setError('Failed to set PIN');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── Setup / Change flow ───────────────────────────────────────────
     if (mode === 'change' && step === 'verify-current') {
       if (pin.length !== 6) {
         setError('PIN must be 6 digits');
@@ -74,7 +130,7 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
       return;
     }
 
-    if (mode === 'setup' || (mode === 'change' && step !== 'verify-current')) {
+    if (mode === 'setup' || mode === 'reset' || (mode === 'change' && step !== 'verify-current')) {
       if (step === 'input') {
         if (pin.length !== 6) {
           setError('PIN must be 6 digits');
@@ -102,9 +158,11 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
         } finally {
           setLoading(false);
         }
+        return;
       }
     }
 
+    // ── Verify flow ───────────────────────────────────────────────────
     if (mode === 'verify') {
       if (pin.length !== 6) {
         setError('PIN must be 6 digits');
@@ -124,77 +182,67 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
       } finally {
         setLoading(false);
       }
-    }
-
-    if (step === 'reset-code') {
-      if (resetCode.length !== 6) {
-        setError('Code must be 6 digits');
-        return;
-      }
-      if (pin.length !== 6) {
-        setError('New PIN must be 6 digits');
-        return;
-      }
-      setLoading(true);
-      try {
-        const res = await resetLockPin(resetCode, pin);
-        if (res.success) {
-          onSuccess(pin);
-        } else {
-          setError(res.error || 'Invalid code');
-        }
-      } catch (err) {
-        setError('Reset failed');
-      } finally {
-        setLoading(false);
-      }
+      return;
     }
   };
 
   const handleForgotPin = async () => {
+    const user = useAuthStore.getState().currentUser;
+    // We can't check providerData easily from the custom User type, 
+    // but we can check if they have a 'password' provider in firebase.
+    // For simplicity, let's try the reauthenticate() first which handles Google/GitHub.
+    
     setLoading(true);
     setError(null);
     try {
-      const res = await forgotLockPin();
-      if (res.success) {
-        setStep('reset-code');
-        setMessage('A reset code has been sent to your email.');
+      const success = await reauthenticate();
+      if (success) {
+        setStep('reset-input');  // go to new-PIN entry after OAuth re-auth
+        setPin('');
+        setError(null);
+        setMessage('Identity verified. Please set a new PIN.');
       } else {
-        setError(res.error || 'Failed to send reset code');
+        // OAuth popup dismissed/failed — try password re-auth
+        setStep('reauth-password');
+        setError(null);
       }
     } catch (err) {
-      setError('Failed to send reset code');
+      setError('Verification failed');
     } finally {
       setLoading(false);
     }
   };
 
   const getTitle = () => {
-    if (mode === 'change') {
-      if (step === 'verify-current') return 'Verify Current PIN';
+    if (step === 'reauth-password') return 'Verify Your Password';
+    if (step === 'reset-input') return 'Set New PIN';
+    if (step === 'reset-confirm') return 'Confirm New PIN';
+    if (step === 'forgot') return 'Reset Your PIN';
+    if (mode === 'setup' || (mode === 'change' && step !== 'verify-current')) {
       if (step === 'input') return 'Set New PIN';
       if (step === 'confirm') return 'Confirm New PIN';
     }
     if (mode === 'setup') return step === 'confirm' ? 'Confirm PIN' : 'Set Chat Lock PIN';
-    if (step === 'reset-code') return 'Reset PIN';
-    if (step === 'forgot') return 'Forgot PIN';
     return 'Enter PIN';
   };
 
   const getButtonText = () => {
     if (loading) return 'Processing...';
-    if (step === 'input' && (mode === 'setup' || mode === 'change')) return 'Next';
-    if (step === 'verify-current') return 'Continue';
-    if (step === 'forgot') return 'Send Reset Code';
+    if (step === 'input' && (mode === 'setup' || mode === 'change' || mode === 'reset')) return 'Next';
+    if (step === 'reset-input') return 'Next';
+    if (step === 'verify-current' || step === 'reauth-password') return 'Continue';
+    if (step === 'forgot') return 'Verify Identity';
     return 'Confirm';
   };
 
   const getAltText = () => {
     if (step === 'verify-current') return 'Enter your current 6-digit PIN to proceed.';
+    if (step === 'reauth-password') return 'Enter your account password to verify your identity.';
+    if (step === 'reset-input') return 'Enter a new 6-digit PIN.';
+    if (step === 'reset-confirm') return 'Re-enter your new PIN to confirm.';
     if (step === 'confirm') return 'Re-enter your 6-digit PIN to confirm.';
-    if (step === 'reset-code') return 'Enter the code from your email and your new PIN.';
     if (mode === 'setup') return 'Set a 6-digit PIN to protect your locked chats.';
-    if (mode === 'change' && step === 'input') return 'Enter your new 6-digit PIN.';
+    if ((mode === 'change' || mode === 'reset') && step === 'input') return 'Enter your new 6-digit PIN.';
     return 'Enter your 6-digit PIN to access locked chats.';
   };
 
@@ -217,10 +265,10 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
           {step === 'forgot' ? (
             <div style={{ textAlign: 'center' }}>
               <div style={{ ...iconBoxStyle, width: 56, height: 56, margin: '0 auto 16px' }}>
-                <Mail size={28} style={{ color: '#fff' }} />
+                <Key size={28} style={{ color: '#fff' }} />
               </div>
               <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6 }}>
-                We will send a 6-digit code to <strong>{currentUser?.email}</strong> to reset your PIN.
+                To reset your PIN, we'll ask you to quickly re-authenticate with your login provider.
               </p>
               <button 
                 type="button" 
@@ -238,38 +286,42 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
                 {getAltText()}
               </p>
 
-              {step === 'reset-code' && (
+
+              {step === 'reauth-password' && (
                 <div style={inputGroupStyle}>
-                  <label style={labelStyle}>6-Digit Reset Code</label>
+                  <label style={labelStyle}>Your Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                      placeholder="Enter your password"
+                      style={{ ...pinInputStyle, fontSize: 16, letterSpacing: 'normal', textAlign: 'left' }}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {step !== 'reauth-password' && (
+                <div style={inputGroupStyle}>
+                  <label style={labelStyle}>
+                    {(step === 'confirm' || step === 'reset-confirm') ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN')}
+                  </label>
                   <input
-                    type="text"
+                    ref={inputRef}
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     maxLength={6}
-                    value={resetCode}
-                    onChange={(e) => handleCodeChange(e.target.value)}
-                    placeholder="000000"
+                    value={(step === 'confirm' || step === 'reset-confirm') ? confirmPin : pin}
+                    onChange={(e) => (step === 'confirm' || step === 'reset-confirm') ? handleConfirmChange(e.target.value) : handlePinChange(e.target.value)}
+                    placeholder="••••••"
                     style={pinInputStyle}
                     required
                   />
                 </div>
               )}
-
-              <div style={inputGroupStyle}>
-                <label style={labelStyle}>
-                  {step === 'reset-code' ? 'New PIN' : (step === 'confirm' ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN'))}
-                </label>
-                <input
-                  ref={inputRef}
-                  type="password"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={step === 'confirm' ? confirmPin : pin}
-                  onChange={(e) => step === 'confirm' ? handleConfirmChange(e.target.value) : handlePinChange(e.target.value)}
-                  placeholder="••••••"
-                  style={pinInputStyle}
-                  required
-                />
-              </div>
 
               {error && (
                 <div style={errorStyle}>
@@ -288,11 +340,11 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
               <button 
                 type="submit" 
                 className="premium-pin-btn"
-                disabled={loading || (step === 'reset-code' ? resetCode.length !== 6 || pin.length !== 6 : (step === 'confirm' ? confirmPin.length !== 6 : pin.length !== 6))}
+                disabled={loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6))}
                 style={{ 
                   ...premiumBtnStyle, 
                   marginTop: 12,
-                  opacity: loading || (step === 'reset-code' ? resetCode.length !== 6 || pin.length !== 6 : (step === 'confirm' ? confirmPin.length !== 6 : pin.length !== 6)) ? 0.6 : 1,
+                  opacity: loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6)) ? 0.6 : 1,
                   cursor: loading ? 'not-allowed' : 'pointer'
                 }}
               >

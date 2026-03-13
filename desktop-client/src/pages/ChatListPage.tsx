@@ -110,6 +110,10 @@ const ChatListPage: React.FC = () => {
       const chat = await getOrCreatePrivateChatDirect(currentUser.uid, user.uid);
       chatId = chat.chatId;
     }
+    
+    // Pre-populate profile to prevent "Unknown" flash
+    setUserProfile(user);
+
     // Immediately refresh Chat list so the new chat appears in the sidebar
     // without waiting for the Supabase realtime event.
     const refreshed = await getChats();
