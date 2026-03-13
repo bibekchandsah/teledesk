@@ -664,7 +664,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               }}
             />
             {message.content && (
-              <p className="message-caption">{message.content}</p>
+              <p className="message-caption">{renderMessageText(message.content, searchQuery)}</p>
             )}
           </div>
         );
@@ -710,7 +710,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       default:
         return (
-          <p style={{ margin: 0, wordBreak: 'break-word' }}>{highlightText(message.content ?? '', searchQuery)}</p>
+          <p style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery)}</p>
         );
     }
   };
@@ -1119,6 +1119,66 @@ const highlightText = (text: string, query?: string): React.ReactNode => {
       part
     ),
   );
+};
+
+/** Detects URLs in text and makes them clickable, while also highlighting search queries. */
+const renderMessageText = (text: string, query?: string): React.ReactNode => {
+  if (!text) return null;
+
+  // Regex for http/https URLs
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  
+  // Split the text into parts that are either URLs or non-URLs
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, i) => {
+    // Check if this part is a URL (using a non-global regex to avoid lastIndex issues)
+    const isUrl = /^https?:\/\/[^\s]+$/i.test(part);
+
+    if (isUrl) {
+      // It's a URL
+      const url = part.trim();
+      return (
+        <span
+          key={`url-${i}`}
+          onClick={async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('URL Clicked:', url);
+            if (window.electronAPI?.openExternalUrl) {
+              try {
+                console.log('Attempting to open via Electron API');
+                const success = await window.electronAPI.openExternalUrl(url);
+                if (!success) {
+                  console.warn('Electron API failed to open URL, falling back to window.open');
+                  window.open(url, '_blank');
+                }
+              } catch (err) {
+                console.error('Error calling openExternalUrl:', err);
+                window.open(url, '_blank');
+              }
+            } else {
+              console.log('Opening via window.open');
+              window.open(url, '_blank');
+            }
+          }}
+          style={{ 
+            color: 'var(--text-primary)', 
+            textDecoration: 'underline', 
+            cursor: 'pointer',
+            transition: 'opacity 0.2s'
+          }}
+          title={url}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {highlightText(part, query)}
+        </span>
+      );
+    }
+    // It's regular text, just highlight it
+    return highlightText(part, query);
+  });
 };
 
 export default MessageBubble;

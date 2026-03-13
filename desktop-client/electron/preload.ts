@@ -113,6 +113,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Copy text to clipboard natively
   copyTextToClipboard: (text: string) => ipcRenderer.send('copy-text-to-clipboard', text),
 
+  // Open external URL natively
+  openExternalUrl: (url: string): Promise<boolean> => ipcRenderer.invoke('open-external-url', url),
+
   // Download file natively
   downloadFile: (url: string, fileName?: string): Promise<boolean> =>
     ipcRenderer.invoke('download-file', { url, fileName }),
@@ -187,6 +190,7 @@ export interface ElectronAPI {
   closeIncomingCallWindow?: () => void;
   copyImageToClipboard: (url: string) => Promise<boolean>;
   copyTextToClipboard: (text: string) => void;
+  openExternalUrl: (url: string) => Promise<boolean>;
   downloadFile: (url: string, fileName?: string) => Promise<boolean>;
   fetchAudioData: (url: string) => Promise<Uint8Array>;
 }

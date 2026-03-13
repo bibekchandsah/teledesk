@@ -255,6 +255,21 @@ ipcMain.handle('download-file', async (_event, { url, fileName }: { url: string;
   }
 });
 
+// Open external URL natively
+ipcMain.handle('open-external-url', async (_e, url: string) => {
+  console.log('[IPC] Opening external URL:', url);
+  if (url && url.startsWith('http')) {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch (err) {
+      console.error('[IPC] Failed to open external URL:', err);
+      return false;
+    }
+  }
+  return false;
+});
+
 // Desktop screen/window sources for screen share
 ipcMain.handle(
   'get-desktop-sources',

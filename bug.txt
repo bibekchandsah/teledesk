@@ -13,5 +13,4 @@
 (fixed) hovering on grid layout isn't showing any reaction row
 (fixed) show reactions on grid layout not on individual image 
 (fixed) for files like audio/video/pdf etc. instead of 'copy link' show 'download'
-(partially) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
-copy isn't working for text/sticker/GIFs
+(fixed) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
