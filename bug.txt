@@ -13,5 +13,5 @@ it don't show caption for more than 1 image file and other files
 show reactions on grid layout not on individual image
 copy isn't working for text/sticker/GIFs
 for files like audio/video/pdf etc. instead of 'copy link' show 'download'
-move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
-show sidebar context menu inside view port
+(fixed) move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
+(fixed) show sidebar context menu inside view port

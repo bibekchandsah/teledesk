@@ -172,11 +172,12 @@ const MediaGroupBubble = ({
             return (
               <div style={{
                 fontSize: 13,
-                color: '#fff',
+                // color: '#fff',
+                color: isOwn ? '#fff' : 'var(--text-primary)',
                 padding: '7px 12px 8px',
                 wordBreak: 'break-word',
                 maxWidth: '100%',
-                background: 'var(--accent)',
+                background: isOwn ? 'var(--accent)' : 'var(--bg-secondary)',
                 borderRadius: '12px 12px 0px 0px',
               }}>{cap}</div>
             );
@@ -191,9 +192,10 @@ const MediaGroupBubble = ({
             overflow: 'hidden', 
             maxWidth: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 300 : 340,
             width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined,
-            backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'var(--accent)' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
+            backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? (isOwn ? 'var(--accent)' : 'var(--bg-secondary)') : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
             border: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '1px solid var(--border)' : 'none',
             padding: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '4px 0' : '4px',
+            // color: '#fff',
             color: isOwn ? '#fff' : 'var(--text-primary)',
             boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
           }}>
@@ -244,9 +246,10 @@ const MediaGroupBubble = ({
                     )}
                     <div style={{ 
                       width: 36, height: 36, borderRadius: 8, 
-                      backgroundColor: 'rgba(var(--accent-rgb), 0.1)', 
+                      // backgroundColor: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(var(--accent-rgb), 0.1)', 
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'var(--accent)'
+                      color:'#fff',
+                      // color: isOwn ? '#fff' : 'var(--accent)'
                     }}>
                       <Paperclip size={18} />
                     </div>
