@@ -213,8 +213,17 @@ export const toggleLockChat = async (uid: string, chatId: string, lock: boolean)
 export const deleteUserAccount = async (uid: string): Promise<void> => {
   logger.info(`Deleting user account: ${uid}`);
   
-  // Delete user's messages
-  await supabase.from('messages').delete().eq('sender_id', uid);
+  // Instead of deleting the user record, mark them as deleted
+  // This preserves chat history while showing "Deleted User"
+  await supabase.from('users').update({
+    name: 'Deleted User',
+    username: null,
+    email: `deleted_${uid}@deleted.local`,
+    avatar: '',
+    show_active_status: false,
+    show_message_status: false,
+    online_status: 'offline',
+  }).eq('uid', uid);
   
   // Delete user's device sessions
   await supabase.from('device_sessions').delete().eq('user_id', uid);
@@ -238,9 +247,6 @@ export const deleteUserAccount = async (uid: string): Promise<void> => {
     }
   }
   
-  // Finally, delete the user record
-  await supabase.from('users').delete().eq('uid', uid);
-  
-  logger.info(`User account deleted successfully: ${uid}`);
+  logger.info(`User account marked as deleted: ${uid}`);
 };
 
