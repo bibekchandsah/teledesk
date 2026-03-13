@@ -209,3 +209,38 @@ export const toggleLockChat = async (uid: string, chatId: string, lock: boolean)
   return lockedChatIds;
 };
 
+// ─── Delete User Account ───────────────────────────────────────────────────
+export const deleteUserAccount = async (uid: string): Promise<void> => {
+  logger.info(`Deleting user account: ${uid}`);
+  
+  // Delete user's messages
+  await supabase.from('messages').delete().eq('sender_id', uid);
+  
+  // Delete user's device sessions
+  await supabase.from('device_sessions').delete().eq('user_id', uid);
+  
+  // Remove user from all chats (we don't delete chats, just remove the user from members)
+  const { data: userChats } = await supabase
+    .from('chats')
+    .select('chat_id, members')
+    .contains('members', [uid]);
+  
+  if (userChats && userChats.length > 0) {
+    for (const chat of userChats) {
+      const updatedMembers = chat.members.filter((m: string) => m !== uid);
+      
+      // If chat has no members left, delete it
+      if (updatedMembers.length === 0) {
+        await supabase.from('chats').delete().eq('chat_id', chat.chat_id);
+      } else {
+        await supabase.from('chats').update({ members: updatedMembers }).eq('chat_id', chat.chat_id);
+      }
+    }
+  }
+  
+  // Finally, delete the user record
+  await supabase.from('users').delete().eq('uid', uid);
+  
+  logger.info(`User account deleted successfully: ${uid}`);
+};
+

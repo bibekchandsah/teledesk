@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount } from '../controllers/userController';
 import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions, cleanupDuplicateDeviceSessions, debugSessionInfo } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
@@ -88,8 +88,8 @@ router.post('/me/verify-pin', verifyPin);
 // PATCH /api/users/me/toggle-lock
 router.patch('/me/toggle-lock', toggleLock);
 
-// PATCH /api/users/me/toggle-lock
-router.patch('/me/toggle-lock', toggleLock);
+// DELETE /api/users/me - Delete account
+router.delete('/me', deleteAccount);
 
 // GET /api/users/search?q=...
 router.get('/search', searchUsersHandler);

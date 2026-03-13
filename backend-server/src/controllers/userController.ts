@@ -370,3 +370,21 @@ export const toggleLock = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+/**
+ * DELETE /api/users/me
+ * Delete user account and all associated data
+ */
+export const deleteAccount = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { deleteUserAccount } = await import('../services/userService');
+    
+    await deleteUserAccount(uid);
+    
+    res.json({ success: true, message: 'Account deleted successfully' });
+  } catch (error) {
+    logger.error(`deleteAccount error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to delete account' });
+  }
+};
+

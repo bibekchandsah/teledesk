@@ -15,6 +15,10 @@ const SettingsPage: React.FC = () => {
   const { theme, toggleTheme, liveTypingEnabled, toggleLiveTyping, selectedMicId, setSelectedMicId } = useUIStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Enumerate microphone devices
   useEffect(() => {
@@ -112,7 +116,7 @@ const SettingsPage: React.FC = () => {
       setUsernameCheckStatus('checking');
       const { checkUsernameAvailability } = await import('../services/usernameService');
       const result = await checkUsernameAvailability(usernameInput);
-      
+
       if (result.available) {
         setUsernameCheckStatus('available');
         setUsernameMessage('✓ Username is available');
@@ -127,12 +131,12 @@ const SettingsPage: React.FC = () => {
 
   const handleSaveUsername = async () => {
     if (!usernameInput.trim() || usernameCheckStatus !== 'available') return;
-    
+
     setIsSavingUsername(true);
     try {
       const { updateUsername } = await import('../services/usernameService');
       const result = await updateUsername(usernameInput.trim());
-      
+
       if (result.success) {
         const res = await updateMyProfile({ username: usernameInput.trim().toLowerCase() });
         if (res.success && res.data) {
@@ -196,6 +200,62 @@ const SettingsPage: React.FC = () => {
     await logout(false); // false = not switching, explicit logout
     // Redirect to login with logout flag
     window.location.href = '/login?logout=true';
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword && currentUser?.email) {
+      // Check if user has email/password auth
+      const providerId = (window as any).firebase?.auth()?.currentUser?.providerData[0]?.providerId;
+      if (providerId === 'password') {
+        setDeleteError('Please enter your password to confirm');
+        return;
+      }
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      // Re-authenticate if needed
+      if (deletePassword && currentUser?.email) {
+        const { reauthenticateWithPassword } = await import('../services/firebaseService');
+        const reauthed = await reauthenticateWithPassword(deletePassword);
+        if (!reauthed) {
+          setDeleteError('Incorrect password');
+          setIsDeleting(false);
+          return;
+        }
+      }
+
+      // Delete from backend database first
+      const { deleteMyAccount } = await import('../services/apiService');
+      const result = await deleteMyAccount();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete account from database');
+      }
+
+      // Delete from Firebase Auth
+      const { deleteCurrentUser } = await import('../services/firebaseService');
+      const deleteResult = await deleteCurrentUser();
+
+      if (!deleteResult.success) {
+        if (deleteResult.error?.includes('re-authenticate')) {
+          setDeleteError('Please sign out and sign in again, then try deleting your account');
+        } else {
+          setDeleteError(deleteResult.error || 'Failed to delete account');
+        }
+        setIsDeleting(false);
+        return;
+      }
+
+      // Success - redirect to login
+      window.location.href = '/login?logout=true';
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      setDeleteError(error.message || 'Failed to delete account');
+      setIsDeleting(false);
+    }
   };
 
   const handleToggleActiveStatus = async () => {
@@ -338,9 +398,9 @@ const SettingsPage: React.FC = () => {
                     autoFocus
                     value={usernameInput}
                     onChange={(e) => setUsernameInput(e.target.value.toLowerCase())}
-                    onKeyDown={(e) => { 
-                      if (e.key === 'Enter' && usernameCheckStatus === 'available') handleSaveUsername(); 
-                      if (e.key === 'Escape') { setEditingUsername(false); setUsernameInput(currentUser.username ?? ''); setUsernameCheckStatus('idle'); setUsernameMessage(''); } 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && usernameCheckStatus === 'available') handleSaveUsername();
+                      if (e.key === 'Escape') { setEditingUsername(false); setUsernameInput(currentUser.username ?? ''); setUsernameCheckStatus('idle'); setUsernameMessage(''); }
                     }}
                     placeholder="username"
                     maxLength={20}
@@ -353,10 +413,10 @@ const SettingsPage: React.FC = () => {
                   <button
                     onClick={handleSaveUsername}
                     disabled={isSavingUsername || usernameCheckStatus !== 'available'}
-                    style={{ 
-                      ...smallBtnStyle, 
-                      backgroundColor: usernameCheckStatus === 'available' ? 'var(--accent)' : 'var(--bg-tertiary)', 
-                      color: usernameCheckStatus === 'available' ? '#fff' : 'var(--text-secondary)', 
+                    style={{
+                      ...smallBtnStyle,
+                      backgroundColor: usernameCheckStatus === 'available' ? 'var(--accent)' : 'var(--bg-tertiary)',
+                      color: usernameCheckStatus === 'available' ? '#fff' : 'var(--text-secondary)',
                       border: 'none',
                       opacity: usernameCheckStatus === 'available' ? 1 : 0.5,
                       cursor: usernameCheckStatus === 'available' ? 'pointer' : 'not-allowed',
@@ -372,10 +432,10 @@ const SettingsPage: React.FC = () => {
                   </button>
                 </div>
                 {usernameMessage && (
-                  <div style={{ 
-                    fontSize: 11, 
-                    marginTop: 4, 
-                    color: usernameCheckStatus === 'available' ? '#22c55e' : '#ef4444' 
+                  <div style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    color: usernameCheckStatus === 'available' ? '#22c55e' : '#ef4444'
                   }}>
                     {usernameMessage}
                   </div>
@@ -624,11 +684,158 @@ const SettingsPage: React.FC = () => {
             cursor: 'pointer',
             fontSize: 14,
             opacity: isLoggingOut ? 0.7 : 1,
+            // marginBottom: 12,
           }}
         >
           {isLoggingOut ? 'Signing out...' : 'Sign Out'}
         </button>
+
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          style={{
+            padding: '10px 20px',
+            borderRadius: 10,
+            border: '1px solid #dc2626',
+            backgroundColor: '#dc2626',
+            color: '#fff',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: 14,
+          }}
+        >
+          Delete Account
+        </button>
       </Section>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+          }}
+          onClick={() => {
+            if (!isDeleting) {
+              setShowDeleteConfirm(false);
+              setDeletePassword('');
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div
+            className="responsive-modal"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 16,
+              padding: 28,
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ color: 'var(--text-primary)', marginBottom: 12, fontSize: 20, fontWeight: 700 }}>
+              Delete Account
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
+              This action cannot be undone. This will permanently delete your account, all your messages, and remove you from all chats.
+            </p>
+
+            {deleteError && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(239,68,68,0.1)',
+                  border: '1px solid #ef4444',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 16,
+                  color: '#ef4444',
+                  fontSize: 13,
+                }}
+              >
+                {deleteError}
+              </div>
+            )}
+
+            {currentUser?.email && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                  Confirm your password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter your password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  disabled={isDeleting}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isDeleting) {
+                      handleDeleteAccount();
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeletePassword('');
+                  setDeleteError(null);
+                }}
+                disabled={isDeleting}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 600,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  opacity: isDeleting ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: '#dc2626',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete My Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -653,11 +860,17 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
         borderRadius: 12,
         padding: '8px 16px',
         border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignContent: 'center',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}
     >
       {children}
     </div>
-  </div>
+  </div >
 );
 
 const SettingRow: React.FC<{

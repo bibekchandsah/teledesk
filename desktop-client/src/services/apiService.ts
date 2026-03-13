@@ -80,6 +80,11 @@ export const toggleLockChat = (chatId: string, lock: boolean) =>
     body: JSON.stringify({ chatId, lock }),
   });
 
+export const deleteMyAccount = () =>
+  authFetch<{ message: string }>('/api/users/me', {
+    method: 'DELETE',
+  });
+
 export const uploadAvatar = async (file: File): Promise<ApiResponse<{ url: string }>> => {
   const token = await getIdToken();
   const formData = new FormData();

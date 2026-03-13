@@ -35,8 +35,11 @@ Last seen Invalid Date
 (fixed) replyed messaged isn't highlighted when clicked
 (fixed) in message bubble it shows yesterday not the exact time, show exact time
 (fixed) in smaller devices right click context menu bottom portion is hides below navigation bar 
+(fixed) during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
+(fixed) add delete account option in setting page & delete user from database too 
 
-during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
-add delete account option in setting page & delete user from database too 
+logged in with google and redirect to default browser for logged in same like other window app does for login it redirects to default browser and gets login in own application
+when new user send message it don't reflect immediately in receiver chat
+draft message across the device 

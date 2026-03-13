@@ -13,6 +13,8 @@ import {
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
+  sendPasswordResetEmail,
+  deleteUser,
 } from 'firebase/auth';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Message, Chat } from '@shared/types';
@@ -136,6 +138,47 @@ export const reauthenticateWithPassword = async (password: string): Promise<bool
   } catch (error) {
     console.error('Password re-authentication failed:', error);
     return false;
+  }
+};
+
+// ─── Password Reset ────────────────────────────────────────────────────────
+export const sendPasswordReset = async (email: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    await sendPasswordResetEmail(firebaseAuth, email);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Password reset failed:', error);
+    let errorMessage = 'Failed to send password reset email';
+    
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'No account found with this email address';
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage = 'Invalid email address';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many requests. Please try again later';
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+};
+
+// ─── Delete Account ────────────────────────────────────────────────────────
+export const deleteCurrentUser = async (): Promise<{ success: boolean; error?: string }> => {
+  const user = firebaseAuth.currentUser;
+  if (!user) return { success: false, error: 'No user logged in' };
+
+  try {
+    await deleteUser(user);
+    return { success: true };
+  } catch (error: any) {
+    console.error('Delete user failed:', error);
+    let errorMessage = 'Failed to delete account';
+    
+    if (error.code === 'auth/requires-recent-login') {
+      errorMessage = 'Please re-authenticate before deleting your account';
+    }
+    
+    return { success: false, error: errorMessage };
   }
 };
 
