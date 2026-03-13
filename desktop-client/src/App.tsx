@@ -226,9 +226,23 @@ const AppInner: React.FC = () => {
                 setShowArchived(false);
                 setShowLocked(false);
                 setIsUnlocked(false);
+                
+                // If already on chats page
                 if (location.pathname.startsWith('/chats')) {
-                  toggleSidebar();
+                  // On mobile, toggle sidebar
+                  if (window.innerWidth < 768) {
+                    toggleSidebar();
+                  } else {
+                    // On desktop, if a chat is open, go back to chat list
+                    if (location.pathname !== '/chats') {
+                      navigate('/chats');
+                    } else {
+                      // If already on chat list, toggle sidebar
+                      toggleSidebar();
+                    }
+                  }
                 } else {
+                  // Navigate to chats from another page
                   setSidebarOpen(true);
                   navigate(lastActiveChatId ? `/chats/${lastActiveChatId}` : '/chats');
                 }

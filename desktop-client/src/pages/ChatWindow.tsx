@@ -2213,6 +2213,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
       {/* Header */}
       <div
+        className="chat-window-header"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -2236,7 +2237,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             <button
               onClick={() => setShowProfile((v) => !v)}
               title="View profile"
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%' }}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%', flexShrink: 0 }}
             >
               <UserAvatar
                 name={peer.profile?.name || 'User'}
@@ -2248,17 +2249,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             <button
               onClick={() => setShowProfile((v) => !v)}
               title="View profile"
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+              className="chat-header-info"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', minWidth: 0, flex: 1, overflow: 'hidden' }}
             >
-              <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {peer.isSelf
-                  ? (peer.profile?.name || currentUser?.name || 'You')
-                  : (nicknames[peer.uid] || peer.profile?.name || 'User')}
+              <div className="chat-header-name" style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {peer.isSelf
+                    ? (peer.profile?.name || currentUser?.name || 'You')
+                    : (nicknames[peer.uid] || peer.profile?.name || 'User')}
+                </span>
                 {peer.isSelf && (
-                  <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)' }}>(You)</span>
+                  <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', flexShrink: 0 }}>(You)</span>
                 )}
               </div>
-              <div style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)') }}>
+              <div className="chat-header-status" style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)'), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {peer.isSelf 
                   ? 'Message yourself' 
                   : peer.online 
@@ -2275,7 +2279,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </div>
         )}
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
           {activeChat.type === 'private' && (
             <>
               <button
@@ -3482,12 +3486,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                style={{
                  backgroundColor: (inputText.trim() || isRecording) ? 'var(--accent)' : 'transparent',
                  color: (inputText.trim() || isRecording) ? '#fff' : 'var(--text-secondary)',
+                 border: 'none',
                  borderRadius: '50%',
                  width: 40,
                  height: 40,
                  display: 'flex',
                  alignItems: 'center',
                  justifyContent: 'center',
+                 cursor: 'pointer',
                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                  transform: isRecording ? 'scale(1.1)' : 'scale(1)'
                }}
