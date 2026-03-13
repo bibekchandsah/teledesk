@@ -672,9 +672,10 @@ const SettingRow: React.FC<{
       alignItems: 'center',
       padding: '12px 0',
       borderBottom: '1px solid var(--border)',
+      gap: 12,
     }}
   >
-    <div>
+    <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 500 }}>{label}</div>
       {description && (
         <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 2 }}>
@@ -682,7 +683,9 @@ const SettingRow: React.FC<{
         </div>
       )}
     </div>
-    {children}
+    <div style={{ flexShrink: 0 }}>
+      {children}
+    </div>
   </div>
 );
 

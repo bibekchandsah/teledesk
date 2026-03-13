@@ -272,6 +272,16 @@ body {
     width: auto;
     height: 100%;
     border-radius: 0;
+    /* Prevent stretching of circular elements inside */
+    min-width: 0;
+    /* Remove desktop margin on mobile */
+    margin-top: 0 !important;
+  }
+  
+  /* Keep profile picture circular on mobile */
+  .nav-btn img,
+  .nav-btn > div:not([style*="position: absolute"]) {
+    flex-shrink: 0;
   }
 
   /* Chat slide panels */
@@ -328,7 +338,7 @@ body {
 
   /* Touch-friendly tap targets (min 44px) */
   button {
-    min-height: 36px;
+    /* min-height: 36px; */
   }
 
   /* Scrollbar hidden on touch devices */
@@ -396,3 +406,11 @@ body {
     padding: 24px 16px !important;
   }
 }
+
+  /* Ensure circular elements stay circular on mobile */
+  img[style*="border-radius: 50%"],
+  div[style*="border-radius: 50%"],
+  button[style*="border-radius: 50%"],
+  span[style*="border-radius: 50%"] {
+    flex-shrink: 0 !important;
+  }

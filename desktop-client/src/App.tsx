@@ -295,21 +295,31 @@ const AppInner: React.FC = () => {
             >
               <Settings size={22} />
             </NavLink>
-            <div style={{ position: 'relative', marginTop: 8 }}>
-              <NavLink
-                to="/profile"
-                className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
-                title="Profile"
-                style={{ position: 'relative' }}
-              >
-                {currentUser?.avatar ? (
-                  <img src={currentUser.avatar} alt="Profile" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
+            <NavLink
+              to="/profile"
+              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+              title="Profile"
+              style={{ position: 'relative', marginTop: 8 }}
+            >
+              {currentUser?.avatar ? (
+                <img 
+                  src={currentUser.avatar} 
+                  alt="Profile" 
+                  style={{ 
+                    width: 28, 
+                    height: 28, 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                  }} 
+                />
+              ) : (
+                <div style={{ flexShrink: 0 }}>
                   <UserAvatar name={currentUser?.name || 'User'} size={28} />
-                )}
-              </NavLink>
+                </div>
+              )}
               <AccountSwitcher />
-            </div>
+            </NavLink>
           </nav>
 
           {/* Main Content */}

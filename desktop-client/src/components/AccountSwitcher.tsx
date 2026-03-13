@@ -33,7 +33,7 @@ export const AccountSwitcher: React.FC = () => {
 
     setSwitching(true);
     setIsOpen(false);
-    
+
     try {
       const account = accounts.find((a) => a.uid === uid);
       if (!account) {
@@ -90,16 +90,16 @@ export const AccountSwitcher: React.FC = () => {
       window.location.href = '/';
     } catch (error) {
       console.error('Failed to switch account:', error);
-      
+
       // Remove overlay on error
       const overlay = document.getElementById('account-switching-overlay');
       if (overlay) overlay.remove();
-      
+
       setSwitching(false);
-      
+
       // Fallback: If seamless switching fails, use traditional method
       alert('Seamless switching failed. Redirecting to login...');
-      
+
       const account = accounts.find((a) => a.uid === uid);
       if (account) {
         await logout(true);
@@ -125,12 +125,12 @@ export const AccountSwitcher: React.FC = () => {
 
   const handleAddAccount = async () => {
     if (addingAccount) return; // Prevent multiple clicks
-    
+
     setAddingAccount(true);
     try {
       // Log out current user first so they can add a different account
       await logout(true); // true = switching account, keeps account list
-      
+
       // Navigate to login page with add account flag
       window.location.href = '/login?add=true';
     } catch (error) {
@@ -142,46 +142,66 @@ export const AccountSwitcher: React.FC = () => {
   };
 
   return (
-    <div style={{ position: 'relative' }}>
-      {/* Icon Button - Shows + when single account, ^ when multiple */}
-      <button
-        onClick={async (e) => {
+    <>
+      {/* Badge overlay - covers the top-right corner to block NavLink clicks */}
+      <div 
+        style={{ 
+          position: 'absolute', 
+          top: -10, 
+          right: 0, 
+          width: 28, 
+          height: 28, 
+          pointerEvents: 'auto',
+          zIndex: 10,
+        }}
+        onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          
-          if (hasMultipleAccounts) {
-            setIsOpen(!isOpen);
-          } else {
-            await handleAddAccount();
-          }
         }}
-        disabled={addingAccount}
-        style={{
-          position: 'absolute',
-          top: -50,
-          right: -4,
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          backgroundColor: 'var(--accent)',
-          color: '#fff',
-          border: '2px solid var(--bg-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: addingAccount ? 'not-allowed' : 'pointer',
-          padding: 0,
-          zIndex: 10,
-          opacity: addingAccount ? 0.6 : 1,
-        }}
-        title={hasMultipleAccounts ? 'Switch Account' : 'Add Account'}
       >
-        {hasMultipleAccounts ? (
-          <ChevronUp size={12} strokeWidth={3} />
-        ) : (
-          <Plus size={12} strokeWidth={3} />
-        )}
-      </button>
+        {/* Icon Button - Shows + when single account, ^ when multiple */}
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (hasMultipleAccounts) {
+              setIsOpen(!isOpen);
+            } else {
+              await handleAddAccount();
+            }
+          }}
+          disabled={addingAccount}
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 4,
+            width: 20,
+            height: 20,
+            minWidth: 20,
+            minHeight: 20,
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent)',
+            color: '#fff',
+            border: '2px solid var(--bg-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: addingAccount ? 'not-allowed' : 'pointer',
+            padding: 0,
+            zIndex: 11,
+            opacity: addingAccount ? 0.6 : 1,
+            flexShrink: 0,
+          }}
+          title={hasMultipleAccounts ? 'Switch Account' : 'Add Account'}
+        >
+          {hasMultipleAccounts ? (
+            <ChevronUp size={12} strokeWidth={3} />
+          ) : (
+            <Plus size={12} strokeWidth={3} />
+          )}
+        </button>
+      </div>
 
       {/* Dropdown - Only shown when multiple accounts exist and dropdown is open */}
       {isOpen && hasMultipleAccounts && (
@@ -193,9 +213,16 @@ export const AccountSwitcher: React.FC = () => {
               zIndex: 40,
               backgroundColor: isMobile ? 'rgba(0, 0, 0, 0.5)' : 'transparent',
             }}
-            onClick={() => setIsOpen(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsOpen(false);
+            }}
           />
           <div
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
             style={{
               position: 'fixed',
               ...(isMobile ? {
@@ -228,7 +255,11 @@ export const AccountSwitcher: React.FC = () => {
                   Switch Account
                 </div>
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsOpen(false);
+                  }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -251,7 +282,11 @@ export const AccountSwitcher: React.FC = () => {
               {accounts.map((account) => (
                 <button
                   key={account.uid}
-                  onClick={() => handleSwitchAccount(account.uid)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSwitchAccount(account.uid);
+                  }}
                   disabled={switching}
                   style={{
                     width: '100%',
@@ -283,8 +318,11 @@ export const AccountSwitcher: React.FC = () => {
                     style={{
                       width: 40,
                       height: 40,
+                      minWidth: 40,
+                      minHeight: 40,
                       borderRadius: '50%',
                       objectFit: 'cover',
+                      flexShrink: 0,
                     }}
                   />
                   <div style={{ flex: 1, textAlign: 'left' }}>
@@ -300,11 +338,14 @@ export const AccountSwitcher: React.FC = () => {
                       style={{
                         width: 20,
                         height: 20,
+                        minWidth: 20,
+                        minHeight: 20,
                         borderRadius: '50%',
                         backgroundColor: 'var(--accent)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        flexShrink: 0,
                       }}
                     >
                       <svg
@@ -326,7 +367,11 @@ export const AccountSwitcher: React.FC = () => {
             {/* Add Account Button */}
             <div style={{ borderTop: '1px solid var(--border)', padding: 8 }}>
               <button
-                onClick={handleAddAccount}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddAccount();
+                }}
                 disabled={addingAccount}
                 style={{
                   width: '100%',
@@ -354,11 +399,14 @@ export const AccountSwitcher: React.FC = () => {
                   style={{
                     width: 40,
                     height: 40,
+                    minWidth: 40,
+                    minHeight: 40,
                     borderRadius: '50%',
                     backgroundColor: 'var(--bg-hover)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
                   <Plus size={20} color="var(--accent)" />
@@ -373,6 +421,6 @@ export const AccountSwitcher: React.FC = () => {
           </div>
         </>
       )}
-    </div>
+    </>
   );
-};
+}
