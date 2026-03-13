@@ -619,6 +619,13 @@ lock chat for specific user
     if matched then open else show wrong pin and also show forgot option so that user can enter 6 digit code which has received in their account created email and user will set new pin .
 set app lock & if forgot enter registered email and verify it with 6 digit code
 
+it's not unlocking any chat, implement the logic like this "
+for 1st time when user click lock icon/ lock folder then it should ask for pin and after entering pin it should unlock the chat 
+    user are able to switch the chat from locked folder without entering pin
+when user navigate to other chat than locked chat or any other navigation then it should lock the chat
+for 2nd time when user click lock icon then it should ask for pin and after entering pin it should unlock the chat
+and so on
+
 allow multiple account to login and switch between them without logout
 show logged in devices and allow user to logout from specific device
 check network connection status (

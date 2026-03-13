@@ -29,9 +29,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const { chats, activeChat, setActiveChat, onlineUsers, userProfiles, unreadCounts, removeChat, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, lockedChatIds, toggleLockChat } =
     useChatStore();
   
-  const totalLockedUnread = useMemo(() => {
-    return lockedChatIds.reduce((sum, id) => sum + (unreadCounts[id] || 0), 0);
-  }, [lockedChatIds, unreadCounts]);
 
   const { currentUser } = useAuthStore();
   const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived, showLocked, setShowLocked, isUnlocked, setIsUnlocked } = useUIStore();
@@ -198,7 +195,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = chats.filter((chat) => {
+      list = list.filter((chat) => {
         const info = getChatDisplayInfo(chat);
         return (
           info.name.toLowerCase().includes(q) ||
@@ -217,9 +214,15 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bt - at;
       });
-  }, [chats, searchQuery, getChatDisplayInfo, pinnedChatIds, archivedChatIds]);
+  }, [chats, searchQuery, getChatDisplayInfo, pinnedChatIds, archivedChatIds, lockedChatIds, showLocked, showArchived]);
 
   const handleChatClick = (chat: Chat) => {
+    // Only lock if we are navigating out of the locked view/group
+    const isTargetLocked = lockedChatIds.includes(chat.chatId);
+    if (!isTargetLocked) {
+      setIsUnlocked(false);
+      setShowLocked(false);
+    }
     setActiveChat(chat);
     navigate(`/chats/${chat.chatId}`);
   };
@@ -341,14 +344,6 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>Locked Chats</span>
-                  {totalLockedUnread > 0 && (
-                    <span style={{
-                      backgroundColor: 'var(--accent)', color: '#fff', fontSize: 10, fontWeight: 700,
-                      padding: '2px 6px', borderRadius: 10, minWidth: 20, textAlign: 'center'
-                    }}>
-                      {totalLockedUnread}
-                    </span>
-                  )}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   {lockedChatIds.length} {lockedChatIds.length === 1 ? 'chat' : 'chats'}
@@ -396,75 +391,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         style={{ flex: 1, overflowY: 'auto' }}
       >
         {/* ─── Filtered Chats View ──────────────────────────────────────── */}
-        {(showArchived || showLocked) && (() => {
-          const list = showArchived 
-            ? chats.filter((c) => archivedChatIds.includes(c.chatId))
-            : chats.filter((c) => lockedChatIds.includes(c.chatId));
-
-          if (list.length === 0) return (
-            <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)', fontSize: 14 }}>
-              No {showArchived ? 'archived' : 'locked'} chats
-            </div>
-          );
-          return list.map((chat) => {
-            const info = getChatDisplayInfo(chat);
-            const unread = unreadCounts[chat.chatId] || 0;
-            const isActive = activeChat?.chatId === chat.chatId;
-            return (
-              <div
-                key={chat.chatId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '10px 16px',
-                  backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
-                  transition: 'background-color 0.15s',
-                }}
-                onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
-              >
-                <div
-                  onClick={() => handleChatClick(chat)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}
-                >
-                  <UserAvatar name={info.name} avatar={info.avatar} size={42} online={undefined} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: unread > 0 ? 700 : 500, fontSize: 14, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {info.name}
-                      </span>
-                      {chat.lastMessage && (
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>
-                          {formatTime(chat.lastMessage.timestamp)}
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {chat.lastMessage ? (
-                        <>
-                          <PreviewIcon msg={chat.lastMessage} color={getMessagePreviewColor(chat.lastMessage) ?? undefined} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: getMessagePreviewColor(chat.lastMessage) ?? undefined }}>{truncate(getMessagePreview(chat.lastMessage), 40)}</span>
-                        </>
-                      ) : 'No messages'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (showArchived) toggleArchiveChat(chat.chatId);
-                    else toggleLockChat(chat.chatId, false);
-                  }}
-                  title={showArchived ? "Unarchive" : "Unlock"}
-                  style={{ ...iconBtnStyle, flexShrink: 0 }}
-                >
-                  {showArchived ? <ArchiveRestore size={16} /> : <Unlock size={16} />}
-                </button>
-              </div>
-            );
-          });
-        })()}
+        {(showArchived || showLocked) && filteredChats.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-secondary)', fontSize: 14 }}>
+            No {showArchived ? 'archived' : 'locked'} chats {searchQuery ? 'matching your search' : ''}
+          </div>
+        )}
         {filteredChats.length === 0 && !showArchived && !showLocked && (
           <div
             style={{
@@ -481,19 +412,19 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           const info = getChatDisplayInfo(chat);
           const unread = unreadCounts[chat.chatId] || 0;
           const isActive = activeChat?.chatId === chat.chatId;
-           const isChatPinned = pinnedChatIds.includes(chat.chatId);
-           if (showArchived || showLocked) return null;
+          const isChatPinned = pinnedChatIds.includes(chat.chatId);
+          const isContextView = showArchived || showLocked;
 
           return (
             <div
               key={chat.chatId}
               onClick={() => handleChatClick(chat)}
-              onContextMenu={(e) => handleContextMenu(e, chat.chatId)}
+              onContextMenu={(e) => !isContextView && handleContextMenu(e, chat.chatId)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '12px 16px',
+                padding: isContextView ? '10px 16px' : '12px 16px',
                 cursor: 'pointer',
                 backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
                 transition: 'background-color 0.15s',
@@ -515,95 +446,106 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               <UserAvatar
                 name={info.name}
                 avatar={info.avatar}
-                size={46}
+                size={isContextView ? 42 : 46}
                 online={chat.type === 'private' ? info.online : undefined}
               />
               <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
-                {/* Left: name + preview */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    style={{
-                      fontWeight: unread > 0 ? 700 : 500,
-                      fontSize: 15,
-                      color: 'var(--text-primary)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    {isChatPinned && <Pin size={11} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
-                    {info.name}
-                  </span>
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 13,
-                      fontWeight: unread > 0 ? 600 : 400,
-                      color: chat.lastMessage ? (getMessagePreviewColor(chat.lastMessage) ?? (unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)')) : 'var(--text-secondary)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      marginTop: 2,
-                    }}
-                  >
-                    {chat.lastMessage ? (
-                      <>
-                        <PreviewIcon msg={chat.lastMessage} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncate(getMessagePreview(chat.lastMessage), 50)}</span>
-                      </>
-                    ) : 'Start a conversation'}
-                  </span>
-                </div>
-                {/* Right: time on top, unread badge below */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 4 }}>
-                  {chat.lastMessage && (
-                    <span style={{ fontSize: 11, color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {formatTime(chat.lastMessage.timestamp)}
-                    </span>
-                  )}
-                  {unread > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span
                       style={{
-                        backgroundColor: 'var(--accent)',
-                        color: '#fff',
-                        borderRadius: 10,
-                        padding: '1px 7px',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        minWidth: 18,
-                        textAlign: 'center',
+                        fontWeight: unread > 0 ? 700 : 500,
+                        fontSize: isContextView ? 14 : 15,
+                        color: 'var(--text-primary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
                       }}
                     >
-                      {unread > 99 ? '99+' : unread}
+                      {!isContextView && isChatPinned && <Pin size={11} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
+                      {info.name}
                     </span>
-                  )}
+                    <span style={{ fontSize: 11, color: unread > 0 ? 'var(--accent)' : 'var(--text-secondary)', flexShrink: 0 }}>
+                      {chat.lastMessage?.timestamp ? formatTime(chat.lastMessage.timestamp) : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: isContextView ? 12 : 13,
+                        fontWeight: unread > 0 ? 600 : 400,
+                        color: chat.lastMessage ? (getMessagePreviewColor(chat.lastMessage) ?? (unread > 0 ? 'var(--text-primary)' : 'var(--text-secondary)')) : 'var(--text-secondary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flex: 1
+                      }}
+                    >
+                      {chat.lastMessage ? (
+                        <>
+                          <PreviewIcon msg={chat.lastMessage} color={getMessagePreviewColor(chat.lastMessage) ?? undefined} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{truncate(getMessagePreview(chat.lastMessage), 50)}</span>
+                        </>
+                      ) : (isContextView ? 'No messages' : 'Start a conversation')}
+                    </span>
+                    {unread > 0 && (
+                      <span
+                        style={{
+                          backgroundColor: 'var(--accent)',
+                          color: '#fff',
+                          borderRadius: 10,
+                          padding: '1px 7px',
+                          fontSize: isContextView ? 10 : 11,
+                          fontWeight: 700,
+                          minWidth: 18,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {isContextView ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (showArchived) toggleArchiveChat(chat.chatId);
+                      else toggleLockChat(chat.chatId, false);
+                    }}
+                    title={showArchived ? "Unarchive" : "Unlock"}
+                    style={{ ...iconBtnStyle, flexShrink: 0 }}
+                  >
+                    {showArchived ? <ArchiveRestore size={16} /> : <Unlock size={16} />}
+                  </button>
+                ) : (
+                  <button
+                    className="chat-menu-btn"
+                    onClick={(e) => { e.stopPropagation(); handleContextMenu(e, chat.chatId); }}
+                    style={{
+                      display: 'none',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--bg-tertiary)',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: 28,
+                      height: 28,
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                )}
               </div>
-              {/* Three-dot menu button (shown on hover) */}
-              <button
-                className="chat-menu-btn"
-                onClick={(e) => { e.stopPropagation(); handleContextMenu(e, chat.chatId); }}
-                style={{
-                  display: 'none',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'var(--bg-tertiary)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: 28,
-                  height: 28,
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  flexShrink: 0,
-                }}
-              >
-                <MoreVertical size={16} />
-              </button>
             </div>
           );
         })}

@@ -1,4 +1,4 @@
-import React, { useEffect, Component } from 'react';
+import React, { useEffect, Component, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark, Lock, Unlock } from 'lucide-react';
@@ -113,20 +113,30 @@ const AppInner: React.FC = () => {
     import('./services/notificationService').then(m => m.requestNotificationPermission());
   }, [isAuthenticated, currentUser?.uid]);
 
-  // Auto-lock when navigating away from locked chats or switching tabs
+  // Auto-lock logic: re-locks only if navigating to a non-locked chat or away from chats.
+  const lastPathRef = useRef(location.pathname);
   useEffect(() => {
     if (!isAuthenticated) return;
     
-    const isChatsPage = location.pathname.startsWith('/chats');
-    const isLockedView = showLocked;
-
-    // If we were in locked view and moved away from chats, or if we switched back to normal chats
-    // We should lock again for security.
-    if (isLockedView && !isChatsPage) {
-       setIsUnlocked(false);
-       setShowLocked(false);
+    const pathChanged = location.pathname !== lastPathRef.current;
+    if (pathChanged && isUnlocked) {
+      const isChatsPage = location.pathname.startsWith('/chats/');
+      const currentChatId = isChatsPage ? location.pathname.split('/')[2] : null;
+      
+      // If we are on a chats page, only re-lock if the destination chat is NOT locked
+      if (isChatsPage && currentChatId) {
+        if (!lockedChatIds.includes(currentChatId)) {
+          setIsUnlocked(false);
+          setShowLocked(false);
+        }
+      } else if (!location.pathname.startsWith('/chats')) {
+        // If we moved away from chats entirely
+        setIsUnlocked(false);
+        setShowLocked(false);
+      }
     }
-  }, [location.pathname, showLocked, setIsUnlocked, setShowLocked, isAuthenticated]);
+    lastPathRef.current = location.pathname;
+  }, [location.pathname, isUnlocked, setIsUnlocked, setShowLocked, isAuthenticated, lockedChatIds]);
 
   // ─── Popup window mode (bypass loading screen — auth resolves inside) ────
   if (isPopupWindow) {
@@ -345,7 +355,10 @@ const AppInner: React.FC = () => {
                 } else if (pinModal.mode === 'verify' || pinModal.mode === 'reset') {
                   setIsUnlocked(true);
                   setShowLocked(true);
-                  navigate('/chats');
+                  // Only navigate to base /chats if we are not already in a chat view
+                  if (!location.pathname.startsWith('/chats/')) {
+                    navigate('/chats');
+                  }
                   if (pinModal.mode === 'reset' && currentUser) {
                      setCurrentUser({ ...currentUser, chatLockPin: '********' });
                   }
