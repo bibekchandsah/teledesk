@@ -5,13 +5,13 @@
 (fixed) allow user to remove their profile picture 
 (fixed) show border-radius on grid image layout individually
 (fixed) while downloading it redirect to new tab instead of it should download directly 
-(partially) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
 (fixed) in grid layout right click replace "copy link" with "copy image" which will copy image and show toast notification about copied image
+(fixed) caption isn't attached with files, it shows on another message bubble
+(fixed) it don't show caption for more than 1 image file and other files
+(fixed) show sidebar context menu inside view port
+(fixed) move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
+(partially) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
 (partially) hovering on grid layout isn't showing any reaction row
-caption isn't attached with files, it shows on another message bubble
-it don't show caption for more than 1 image file and other files
-show reactions on grid layout not on individual image
+show reactions on grid layout not on individual image 
 copy isn't working for text/sticker/GIFs
 for files like audio/video/pdf etc. instead of 'copy link' show 'download'
-(fixed) move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
-(fixed) show sidebar context menu inside view port

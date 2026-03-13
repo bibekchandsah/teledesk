@@ -631,17 +631,17 @@ check if username is available or not during registration and show message
 user should be able to send message themslef too: search, forward
 store save chat history in database and show them when user login from another device
 
-move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
 enhance online status 
 update calling window as in image
 add calling sound 
 add notification sound for new message
 during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
-show sidebar menu inside view port
 allow user to import and export chat history
 for touch screen devices add single tap to show right click menu in chat window
 when
 
+move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
+show sidebar menu inside view port
 allow copy and paste and open images in the same window and allow user to send file size limit 100mb
 allow user to send multiple files at once   
 allow user to send voice & video records show voice frequency for voice messaage 

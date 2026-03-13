@@ -20,7 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -71,6 +71,7 @@ const MediaGroupBubble = ({
 }) => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
   const [isGroupHovered, setIsGroupHovered] = useState(false);
+  const [showExtended, setShowExtended] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -158,12 +159,15 @@ const MediaGroupBubble = ({
           </span>
         </div>
       )}
-      <div
-        style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}
+      <div 
+        style={{ position: 'relative' }}
         onMouseEnter={() => setIsGroupHovered(true)}
-        onMouseLeave={() => setIsGroupHovered(false)}
+        onMouseLeave={() => { setIsGroupHovered(false); setShowExtended(false); }}
       >
-        <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}
+        >
+          <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
           {/* Caption — shown above the grid when last message has custom text */}
           {(() => {
             const cap = lastMsg.content;
@@ -331,25 +335,83 @@ const MediaGroupBubble = ({
 
           {/* Group-level hover reaction bar */}
           {!selectionMode && isGroupHovered && onMessageReaction && (
-            <div style={{
-              display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start',
-              marginTop: 4,
-            }}>
+            <div 
+              onMouseLeave={() => setShowExtended(false)}
+              style={{
+                position: 'absolute',
+                [isOwn ? 'right' : 'left']: 0,
+                bottom: '100%',
+                paddingBottom: 6,
+                zIndex: 200,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: isOwn ? 'flex-end' : 'flex-start',
+                gap: 4,
+                animation: 'reactionBarSlideUp 0.15s ease-out',
+              }}>
+              {showExtended && (
+                <div style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: 12,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(12px)',
+                  overflow: 'hidden',
+                }}>
+                  <Picker 
+                    data={data} 
+                    onEmojiSelect={(emojiId: any) => {
+                      handleEmojiClick(firstMsg.messageId, emojiId.native);
+                      setShowExtended(false);
+                    }} 
+                    theme="auto" 
+                    previewPosition="none"
+                    skinTonePosition="none"
+                    navPosition="bottom"
+                  />
+                </div>
+              )}
               <div style={{
-                display: 'flex', gap: 4, padding: '4px 10px',
+                display: 'flex', alignItems: 'center', gap: 2, padding: '4px 8px',
                 backgroundColor: 'var(--bg-secondary)',
                 border: '1px solid var(--border)',
-                borderRadius: 20,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                borderRadius: 24,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                backdropFilter: 'blur(12px)',
               }}>
-                {['❤️','👍','😂','😮','😢','👎'].map(em => (
-                  <button key={em}
-                    onClick={(e) => { e.stopPropagation(); handleEmojiClick(firstMsg.messageId, em); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px', borderRadius: '50%', transition: 'transform 0.1s' }}
-                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
-                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                  >{em}</button>
-                ))}
+                {['❤️','👍','😂','😮','😢','👎'].map(em => {
+                  const alreadyReacted = Object.entries(combinedReactions).some(([emoji, users]) => emoji === em && currentUser?.uid && users.includes(currentUser.uid));
+                  return (
+                    <button key={em}
+                      onClick={(e) => { e.stopPropagation(); handleEmojiClick(firstMsg.messageId, em); }}
+                      style={{ 
+                        background: alreadyReacted ? 'rgba(var(--accent-rgb,99,102,241),0.15)' : 'none', 
+                        border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '4px', borderRadius: '50%', transition: 'transform 0.12s' 
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
+                      onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                      title={em}
+                    >{em}</button>
+                  );
+                })}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowExtended(v => !v); }}
+                  title="More reactions"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    padding: '4px 6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--text-secondary, #aaa)',
+                    transition: 'transform 0.12s, color 0.12s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary, #aaa)'; }}
+                >
+                  <SmilePlus size={18} />
+                </button>
               </div>
             </div>
           )}
@@ -395,6 +457,7 @@ const MediaGroupBubble = ({
           </div>
         </div>
       </div>
+    </div>
       {ctxMenu && (
         <MessageContextMenu
           message={ctxMenu.msg}
