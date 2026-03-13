@@ -1,17 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../store/authStore';
+import { useMultiAccountStore } from '../store/multiAccountStore';
+import { QuickAccountPicker } from '../components/QuickAccountPicker';
 import { MessageCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const { loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail } = useAuth();
   const { isLoading, error } = useAuthStore();
+  const { accounts } = useMultiAccountStore();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showAccountPicker, setShowAccountPicker] = useState(false);
+
+  // Check URL parameters for account switching
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const switchEmail = params.get('switch');
+    const addAccount = params.get('add');
+
+    if (switchEmail) {
+      // Pre-fill email when switching accounts
+      setEmail(decodeURIComponent(switchEmail));
+      setShowAccountPicker(false);
+    } else if (addAccount) {
+      // Adding new account, don't show picker
+      setShowAccountPicker(false);
+    } else if (accounts.length > 0) {
+      // Show account picker if we have saved accounts
+      setShowAccountPicker(true);
+    }
+  }, [accounts.length]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +112,45 @@ const LoginPage: React.FC = () => {
           maxWidth: 420,
         }}
       >
-        {/* Logo */}
+        {/* Show Account Picker or Login Form */}
+        {showAccountPicker ? (
+          <>
+            {/* Logo */}
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
+                <MessageCircle size={52} color="var(--accent)" />
+              </div>
+              <h1
+                style={{
+                  margin: '0 0 6px',
+                  fontSize: 28,
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                TeleDesk
+              </h1>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0 }}>
+                Choose an account to continue
+              </p>
+            </div>
+
+            {/* Quick Account Picker */}
+            <QuickAccountPicker
+              onSelectAccount={(selectedEmail) => {
+                setEmail(selectedEmail);
+                setShowAccountPicker(false);
+                setMode('signin');
+              }}
+              onAddNewAccount={() => setShowAccountPicker(false)}
+            />
+          </>
+        ) : (
+          <>
+            {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
             <MessageCircle size={52} color="var(--accent)" />
@@ -265,6 +326,36 @@ const LoginPage: React.FC = () => {
         <p style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 20, textAlign: 'center' }}>
           By continuing, you agree to TeleDesk's Terms of Service and Privacy Policy.
         </p>
+
+        {/* Back to Account Picker */}
+        {accounts.length > 0 && !showAccountPicker && (
+          <button
+            onClick={() => setShowAccountPicker(true)}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: '10px',
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              borderRadius: 8,
+              transition: 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            ← Back to account selection
+          </button>
+        )}
+      </>
+        )}
       </div>
     </div>
   );
