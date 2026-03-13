@@ -34,6 +34,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   // ─── Context Menu State ───────────────────────────────────────────────────
   type CtxMenu = { chatId: string; x: number; y: number };
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
+  const [adjustedCtxPos, setAdjustedCtxPos] = useState<{ x: number; y: number } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ chatId: string; scope: 'me' | 'both' } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showTopBar, setShowTopBar] = useState(false);
@@ -98,7 +99,22 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     e.preventDefault();
     e.stopPropagation();
     setCtxMenu({ chatId, x: e.clientX, y: e.clientY });
+    setAdjustedCtxPos(null);
   };
+
+  useEffect(() => {
+    if (ctxMenu && ctxRef.current) {
+      const rect = ctxRef.current.getBoundingClientRect();
+      const padding = 12;
+      let newX = ctxMenu.x;
+      let newY = ctxMenu.y;
+      if (newX + rect.width > window.innerWidth) newX = window.innerWidth - rect.width - padding;
+      if (newY + rect.height > window.innerHeight) newY = window.innerHeight - rect.height - padding;
+      setAdjustedCtxPos({ x: newX, y: newY });
+    } else {
+      setAdjustedCtxPos(null);
+    }
+  }, [ctxMenu]);
 
   const requestDelete = (chatId: string, scope: 'me' | 'both') => {
     setCtxMenu(null);
@@ -528,8 +544,10 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           ref={ctxRef}
           style={{
             position: 'fixed',
-            top: ctxMenu.y,
-            left: ctxMenu.x,
+            top: adjustedCtxPos ? adjustedCtxPos.y : ctxMenu.y,
+            left: adjustedCtxPos ? adjustedCtxPos.x : ctxMenu.x,
+            opacity: adjustedCtxPos ? 1 : 0,
+            pointerEvents: adjustedCtxPos ? 'auto' : 'none',
             zIndex: 1000,
             backgroundColor: 'var(--bg-secondary)',
             border: '1px solid var(--border)',

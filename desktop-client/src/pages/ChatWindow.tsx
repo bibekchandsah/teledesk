@@ -70,7 +70,7 @@ const MediaGroupBubble = ({
   onToggleSelect?: (id: string) => void;
 }) => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
-  const [hoveredGridId, setHoveredGridId] = useState<string | null>(null);
+  const [isGroupHovered, setIsGroupHovered] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -158,18 +158,40 @@ const MediaGroupBubble = ({
           </span>
         </div>
       )}
-      <div style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+      <div
+        style={{ display: 'flex', padding: '0 16px', marginBottom: 4, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}
+        onMouseEnter={() => setIsGroupHovered(true)}
+        onMouseLeave={() => setIsGroupHovered(false)}
+      >
         <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column' }}>
+          {/* Caption — shown above the grid when last message has custom text */}
+          {(() => {
+            const cap = lastMsg.content;
+            const isDefaultContent = !cap || cap.startsWith('Sent a ');
+            if (isDefaultContent) return null;
+            return (
+              <div style={{
+                fontSize: 13,
+                color: '#fff',
+                padding: '7px 12px 8px',
+                wordBreak: 'break-word',
+                maxWidth: '100%',
+                background: 'var(--accent)',
+                borderRadius: '12px 12px 0px 0px',
+              }}>{cap}</div>
+            );
+          })()}
           <div style={{
             display: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'flex' : 'grid',
             flexDirection: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'column' : undefined,
             gridTemplateColumns: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? undefined : 'repeat(6, 1fr)',
             gridAutoRows: msgs.length === 1 ? undefined : '110px', 
             gap: 3,
-            borderRadius: 12, overflow: 'hidden', 
+            borderRadius: (!lastMsg.content || lastMsg.content.startsWith('Sent a ')) ? 12 : '0px 0px 12px 12px',
+            overflow: 'hidden', 
             maxWidth: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 300 : 340,
             width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined,
-            backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'var(--bg-secondary)' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
+            backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'var(--accent)' : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
             border: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '1px solid var(--border)' : 'none',
             padding: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '4px 0' : '4px',
             color: isOwn ? '#fff' : 'var(--text-primary)',
@@ -257,8 +279,6 @@ const MediaGroupBubble = ({
               return (
                 <div
                   key={m.messageId}
-                  onMouseEnter={() => setHoveredGridId(m.messageId)}
-                  onMouseLeave={() => setHoveredGridId(null)}
                   style={{ position: 'relative', gridColumn: colSpan, overflow: 'hidden', cursor: 'pointer', backgroundColor: '#111', borderRadius: cellRadius, maxHeight: msgs.length === 1 ? 320 : undefined }}
                   onClick={() => {
                     if (selectionMode && onToggleSelect) {
@@ -282,23 +302,6 @@ const MediaGroupBubble = ({
                     </div>
                   )}
                   
-                  {/* Hover reaction bar */}
-                  {!selectionMode && hoveredGridId === m.messageId && onMessageReaction && !m.deleted && (
-                    <div style={{
-                      position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)',
-                      display: 'flex', gap: 4, padding: '4px 8px',
-                      backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 20,
-                      backdropFilter: 'blur(6px)', zIndex: 10,
-                    }}>
-                      {['❤️','👍','😂','😮','😢','👎'].map(em => (
-                        <button key={em} onClick={(e) => { e.stopPropagation(); handleEmojiClick(m.messageId, em); }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px', borderRadius: '50%', transition: 'transform 0.1s' }}
-                          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
-                          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                        >{em}</button>
-                      ))}
-                    </div>
-                  )}
                   {/* Selection Overlay */}
                   {selectionMode && (
                     <div style={{
@@ -322,7 +325,32 @@ const MediaGroupBubble = ({
               );
             })}
           </div>
-          
+
+          {/* Group-level hover reaction bar */}
+          {!selectionMode && isGroupHovered && onMessageReaction && (
+            <div style={{
+              display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start',
+              marginTop: 4,
+            }}>
+              <div style={{
+                display: 'flex', gap: 4, padding: '4px 10px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 20,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              }}>
+                {['❤️','👍','😂','😮','😢','👎'].map(em => (
+                  <button key={em}
+                    onClick={(e) => { e.stopPropagation(); handleEmojiClick(firstMsg.messageId, em); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px', borderRadius: '50%', transition: 'transform 0.1s' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.3)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  >{em}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Reaction Pill Badges for Group */}
           {Object.keys(combinedReactions).length > 0 && (
             <div style={{

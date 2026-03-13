@@ -486,25 +486,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     onStartEdit?.(message);
   };
 
-  const handleCopy = async () => {
-    const isImage = message.type === 'image' || message.type === 'gif' || message.type === 'sticker';
-    if (isImage && message.fileUrl) {
+  const handleCopy = async (msg?: Message) => {
+    const target = msg || message;
+    const isImage = target.type === 'image' || target.type === 'gif' || target.type === 'sticker';
+    if (isImage && target.fileUrl) {
       try {
         if (window.electronAPI?.copyImageToClipboard) {
-          const ok = await window.electronAPI.copyImageToClipboard(message.fileUrl);
-          if (ok) { showToast(`${message.type === 'sticker' ? 'Sticker' : message.type === 'gif' ? 'GIF' : 'Image'} copied`); return; }
+          const ok = await window.electronAPI.copyImageToClipboard(target.fileUrl);
+          if (ok) { showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`); return; }
         }
-        const res = await fetch(message.fileUrl);
+        const res = await fetch(target.fileUrl);
         const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        showToast(`${message.type === 'sticker' ? 'Sticker' : message.type === 'gif' ? 'GIF' : 'Image'} copied`);
+        showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
       } catch {
-        // fallback: copy URL
-        if (message.fileUrl) navigator.clipboard.writeText(message.fileUrl).catch(() => {});
+        if (target.fileUrl) navigator.clipboard.writeText(target.fileUrl).catch(() => {});
         showToast('Link copied');
       }
-    } else if (message.content) {
-      navigator.clipboard.writeText(message.content).catch(() => {});
+    } else if (target.content) {
+      navigator.clipboard.writeText(target.content).catch(() => {});
       showToast('Text copied');
     }
   };

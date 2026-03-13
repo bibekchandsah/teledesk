@@ -27,6 +27,7 @@ import { SocketProvider } from './context/SocketContext';
 import { CallProvider } from './context/CallContext';
 import { useAuthStore } from './store/authStore';
 import { useUIStore } from './store/uiStore';
+import UserAvatar from './components/UserAvatar';
 import LoginPage from './pages/LoginPage';
 import ChatListPage from './pages/ChatListPage';
 import ChatWindow from './pages/ChatWindow';
@@ -212,13 +213,7 @@ const AppInner: React.FC = () => {
             >
               <Bookmark size={22} />
             </NavLink>
-            <NavLink
-              to="/profile"
-              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
-              title="Profile"
-            >
-              <User size={22} />
-            </NavLink>
+
             {hasArchived && (
               <button
                 className={`nav-btn nav-btn--archive${showArchived ? ' active' : ''}`}
@@ -236,6 +231,18 @@ const AppInner: React.FC = () => {
               style={{ marginTop: 'auto' }}
             >
               <Settings size={22} />
+            </NavLink>
+            <NavLink
+              to="/profile"
+              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+              title="Profile"
+              style={{ marginTop: 8 }}
+            >
+              {currentUser?.avatar ? (
+                <img src={currentUser.avatar} alt="Profile" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <UserAvatar name={currentUser?.name || 'User'} size={28} />
+              )}
             </NavLink>
           </nav>
 

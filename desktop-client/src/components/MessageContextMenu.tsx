@@ -182,16 +182,22 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
           <CornerUpLeft size={14} style={{ marginRight: 6 }} />Reply message
         </button>
       )}
-      {!message.deleted && (message.content || message.fileUrl) && onCopy && (
-        <button onClick={() => { onClose(); onCopy(message); }} style={menuItemStyle}>
-          <Copy size={14} style={{ marginRight: 6 }} />
-          {message.type === 'image' ? 'Copy image'
-            : message.type === 'gif' ? 'Copy GIF'
-            : message.type === 'sticker' ? 'Copy sticker'
-            : message.type === 'text' ? 'Copy message'
-            : 'Copy link'}
-        </button>
-      )}
+      {!message.deleted && (message.content || message.fileUrl) && onCopy && (() => {
+        const type = message.type;
+        const isMedia = type === 'image' || type === 'gif' || type === 'sticker';
+        const isText = type === 'text';
+        const isDownloadOnly = type === 'audio' || type === 'voice_note' || type === 'video' || type === 'video_note' || type === 'file' || type === 'pdf';
+        if (isDownloadOnly) return null; // Show Download button instead
+        const label = isMedia
+          ? (type === 'image' ? 'Copy image' : type === 'gif' ? 'Copy GIF' : 'Copy sticker')
+          : isText ? 'Copy message' : 'Copy link';
+        return (
+          <button onClick={() => { onClose(); onCopy(message); }} style={menuItemStyle}>
+            <Copy size={14} style={{ marginRight: 6 }} />
+            {label}
+          </button>
+        );
+      })()}
       {!message.deleted && message.fileUrl && onDownload && (
         <button onClick={() => { onClose(); onDownload(message); }} style={menuItemStyle}>
           <Download size={14} style={{ marginRight: 6 }} />Download
