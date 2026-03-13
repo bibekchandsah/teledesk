@@ -27,6 +27,20 @@ import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import MessageContextMenu from '../components/MessageContextMenu';
 
+export const downloadMessageFile = (m: Message) => {
+  if (!m.fileUrl) return;
+  if (window.electronAPI?.downloadFile) {
+    window.electronAPI.downloadFile(m.fileUrl, m.fileName);
+  } else {
+    const link = document.createElement('a');
+    link.href = m.fileUrl;
+    link.download = m.fileName || 'download';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+};
+
 // --- MediaGroupBubble Subcomponent ---
 const MediaGroupBubble = ({
   msgs,
@@ -39,6 +53,7 @@ const MediaGroupBubble = ({
   onReply,
   onForward,
   onBookmark,
+  onDownload,
   onPin,
   isPinned,
   bookmarkedIds,
@@ -59,6 +74,7 @@ const MediaGroupBubble = ({
   onReply?: (message: Message) => void;
   onForward?: (message: Message) => void;
   onBookmark?: (message: Message) => void;
+  onDownload?: (message: Message) => void;
   onPin?: (message: Message, action: 'pin' | 'unpin') => void;
   isPinned: (messageId: string) => boolean;
   bookmarkedIds: Set<string>;
@@ -114,20 +130,6 @@ const MediaGroupBubble = ({
         showToast('Image copied to clipboard');
       }
     } catch { showToast('Failed to copy image'); }
-  };
-
-  const handleDownload = (m: Message) => {
-    if (!m.fileUrl) return;
-    if (window.electronAPI?.downloadFile) {
-      window.electronAPI.downloadFile(m.fileUrl, m.fileName);
-    } else {
-      const link = document.createElement('a');
-      link.href = m.fileUrl;
-      link.download = m.fileName || 'download';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
   };
 
   const handleEmojiClick = (msgId: string, emoji: string) => {
@@ -480,7 +482,7 @@ const MediaGroupBubble = ({
               showToast('Link copied to clipboard');
             }
           }}
-          onDownload={handleDownload}
+          onDownload={onDownload}
           onEnterSelect={onEnterSelect}
           onMessageReaction={onMessageReaction}
         />
@@ -2646,6 +2648,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   onForward={selectionMode ? undefined : handleForward}
                   onBookmark={selectionMode ? undefined : handleBookmarkMessage}
                   onPin={selectionMode ? undefined : handlePin}
+                  onDownload={downloadMessageFile}
                   isPinned={(msgId) => (activeChat?.pinnedMessageIds ?? []).includes(msgId)}
                   bookmarkedIds={bookmarkedIds}
                   currentUser={currentUser}
@@ -2718,6 +2721,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     showSender={activeChat?.type === 'group'}
                     onDelete={selectionMode ? undefined : handleDeleteMessage}
                     onPreview={(msg) => setPreviewFile({ messages: [msg], initialIndex: 0 })}
+                    onDownload={downloadMessageFile}
                     onStartEdit={selectionMode ? undefined : (msg) => {
                       setEditingMsg(msg);
                       setReplyingTo(null);

@@ -402,6 +402,7 @@ interface MessageBubbleProps {
   onReply?: (message: Message) => void;
   onForward?: (message: Message) => void;
   onBookmark?: (message: Message) => void;
+  onDownload?: (message: Message) => void;
   onPin?: (message: Message, action: 'pin' | 'unpin') => void;
   isPinned?: boolean;
   onScrollToMessage?: (messageId: string) => void;
@@ -431,6 +432,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onReply,
   onForward,
   onBookmark,
+  onDownload,
   onPin,
   isPinned = false,
   onScrollToMessage,
@@ -1053,6 +1055,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         onDelete={onDelete}
         onStartEdit={onStartEdit}
         onCopy={handleCopy}
+        onDownload={onDownload}
         onEnterSelect={onEnterSelect}
         onMessageReaction={onMessageReaction}
         onCloseChat={onCloseChat}

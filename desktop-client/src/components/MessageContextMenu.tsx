@@ -184,13 +184,15 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       )}
       {!message.deleted && (message.content || message.fileUrl) && onCopy && (() => {
         const type = message.type;
-        const isMedia = type === 'image' || type === 'gif' || type === 'sticker';
-        const isText = type === 'text';
-        const isDownloadOnly = type === 'audio' || type === 'voice_note' || type === 'video' || type === 'video_note' || type === 'file' || type === 'pdf';
-        if (isDownloadOnly) return null; // Show Download button instead
-        const label = isMedia
-          ? (type === 'image' ? 'Copy image' : type === 'gif' ? 'Copy GIF' : 'Copy sticker')
-          : isText ? 'Copy message' : 'Copy link';
+        if (type === 'audio' || type === 'voice_note' || type === 'video' || type === 'video_note' || type === 'file' || type === 'pdf') {
+          return null; // Don't show copy button for these, only download
+        }
+        
+        let label = 'Copy message';
+        if (type === 'image') label = 'Copy image';
+        else if (type === 'gif') label = 'Copy GIF';
+        else if (type === 'sticker') label = 'Copy sticker';
+        
         return (
           <button onClick={() => { onClose(); onCopy(message); }} style={menuItemStyle}>
             <Copy size={14} style={{ marginRight: 6 }} />
