@@ -48,6 +48,7 @@ Last seen Invalid Date
 (fixed) in new chat if user signup with google then it don't show profile picture there
 (fixed) sidebar "delete for everyone" is not working - now shows confirmation modal for both delete options
 (fixed) show warning modal for 'delete for me" and "delete for everyone" in sidebar
+(fixed) show warning modal for 'delete for me" and "delete for everyone" in chat window three dot menu
 (fixed) avatar is not shown in notification as profile picture if there is no profile picture - now generates default avatar
 
 

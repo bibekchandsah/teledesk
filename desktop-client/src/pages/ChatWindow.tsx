@@ -2510,7 +2510,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </button>
               <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
               <button
-                onClick={() => { setHeaderMenu(null); handleDeleteChat('me'); }}
+                onClick={() => { setChatConfirmDelete('me'); setHeaderMenu(null); }}
                 style={headerCtxItemStyle}
               >
                 <Trash2 size={14} style={{ marginRight: 8 }} />Delete for me
@@ -4000,7 +4000,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       </button>
                       <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
                       <button
-                        onClick={() => { setShowProfileMore(false); handleDeleteChat('me'); }}
+                        onClick={() => { setChatConfirmDelete('me'); setShowProfileMore(false); }}
                         style={headerCtxItemStyle}
                       >
                         <Trash2 size={14} style={{ marginRight: 8 }} />Delete for me
@@ -4264,7 +4264,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
 
       {/* ─── Confirm delete chat for everyone ────────────────────────────── */}
-      {chatConfirmDelete === 'both' && (
+      {chatConfirmDelete && (
         <div
           style={{
             position: 'fixed',
@@ -4287,9 +4287,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
             }}
           >
-            <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 17 }}>Delete for everyone?</h3>
+            <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: 17 }}>
+              {chatConfirmDelete === 'both' ? 'Delete for everyone?' : 'Delete chat?'}
+            </h3>
             <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
-              This will permanently delete the chat and all messages for all participants. This action cannot be undone.
+              {chatConfirmDelete === 'both'
+                ? 'This will permanently delete the chat and all messages for all participants. This action cannot be undone.'
+                : 'This will delete the chat from your device. Other participants will still have access to it.'}
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button
@@ -4300,11 +4304,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 Cancel
               </button>
               <button
-                onClick={() => handleDeleteChat('both')}
+                onClick={() => handleDeleteChat(chatConfirmDelete)}
                 disabled={chatDeleting}
                 style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, backgroundColor: '#f87171', color: '#fff' }}
               >
-                {chatDeleting ? 'Deleting…' : 'Delete for everyone'}
+                {chatDeleting ? 'Deleting…' : chatConfirmDelete === 'both' ? 'Delete for everyone' : 'Delete'}
               </button>
             </div>
           </div>
