@@ -2,6 +2,7 @@ import React, { useEffect, Component, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark, Lock, Unlock } from 'lucide-react';
+import { AccountSwitcher } from './components/AccountSwitcher';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────
 class ErrorBoundary extends Component<
@@ -287,18 +288,21 @@ const AppInner: React.FC = () => {
             >
               <Settings size={22} />
             </NavLink>
-            <NavLink
-              to="/profile"
-              className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
-              title="Profile"
-              style={{ marginTop: 8 }}
-            >
-              {currentUser?.avatar ? (
-                <img src={currentUser.avatar} alt="Profile" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <UserAvatar name={currentUser?.name || 'User'} size={28} />
-              )}
-            </NavLink>
+            <div style={{ position: 'relative', marginTop: 8 }}>
+              <NavLink
+                to="/profile"
+                className={({ isActive }) => `nav-btn ${isActive ? 'active' : ''}`}
+                title="Profile"
+                style={{ position: 'relative' }}
+              >
+                {currentUser?.avatar ? (
+                  <img src={currentUser.avatar} alt="Profile" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <UserAvatar name={currentUser?.name || 'User'} size={28} />
+                )}
+              </NavLink>
+              <AccountSwitcher />
+            </div>
           </nav>
 
           {/* Main Content */}

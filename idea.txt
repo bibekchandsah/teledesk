@@ -12,6 +12,19 @@ npx tsc -p tsconfig.electron.json; npm run electron:dev (powershell)
 npm run build:client
 npx electron-builder --win --x64
 
+in profile nav show + icon in top right corner when no account is added and when more than one account is there then show ^ icon
+clicking in + icon will show to add another account
+clickin in ^ will show the dropdown of logged in user like this 
+-----------------------------------
+profile picture     username
+profile picture     username
++ icon  add account
+-----------------------------------
+clicking on specific account will switch to that account 
+
+
+
+
 
 http://localhost:5173/
 
@@ -618,7 +631,6 @@ lock chat for specific user
     while opening lock chat folder it ask pin and checks whether it matches with database
     if matched then open else show wrong pin and also show forgot option so that user can enter 6 digit code which has received in their account created email and user will set new pin .
 set app lock & if forgot enter registered email and verify it with 6 digit code
-
 it's not unlocking any chat, implement the logic like this "
 for 1st time when user click lock icon/ lock folder then it should ask for pin and after entering pin it should unlock the chat 
     user are able to switch the chat from locked folder without entering pin
@@ -634,7 +646,6 @@ reset chat pin
       → Enter password → Submit
         → Verified ✓ → Set new PIN
           → Enter PIN → Confirm PIN → Done!
-
 Forgot PIN → Verify Identity
   → Password users: Enter password → reset-input → reset-confirm → Done!
   → Google/GitHub: Re-auth popup → reset-input → reset-confirm → Done!

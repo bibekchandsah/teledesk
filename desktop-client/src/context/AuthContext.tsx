@@ -16,6 +16,7 @@ import { clearAllKeys } from '../services/encryptionService';
 import { requestNotificationPermission } from '../services/notificationService';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
+import { useMultiAccountStore } from '../store/multiAccountStore';
 
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
@@ -23,7 +24,7 @@ interface AuthContextValue {
   loginWithGithub: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (switchingAccount?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -33,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pendingDisplayNameRef = useRef<string | null>(null);
   const { setCurrentUser, setLoading, setError, logout: storeLogout } = useAuthStore();
   const { setUserProfile } = useChatStore();
+  const { addAccount, setActiveAccount } = useMultiAccountStore();
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
@@ -95,6 +97,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
               useChatStore.getState().setLockedChatIds(userProfile.lockedChatIds ?? []);
               useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
+              
+              // Store account in multi-account store
+              addAccount({
+                uid: userProfile.uid,
+                email: userProfile.email,
+                name: userProfile.name,
+                avatar: userProfile.avatar,
+                refreshToken: fbUser.uid, // Placeholder - Firebase manages tokens internally
+                lastUsed: new Date().toISOString(),
+              });
+              setActiveAccount(userProfile.uid);
             }
             
             // Clear pending name after sync completes
@@ -163,12 +176,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async (): Promise<void> => {
+  const logout = async (switchingAccount = false): Promise<void> => {
     try {
       await signOutUser();
       disconnectSocket();
       clearAllKeys();
       storeLogout();
+      
+      // Don't clear multi-account store when switching accounts
+      if (!switchingAccount) {
+        // User is fully logging out, not switching
+        // Keep accounts stored for quick re-login
+      }
     } catch (err) {
       console.error('[Auth] Logout error:', err);
     }
