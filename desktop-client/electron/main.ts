@@ -11,14 +11,81 @@ import {
   session,
   desktopCapturer,
   clipboard,
+  screen,
 } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { execFileSync } from 'child_process';
 
 // ─── Keep reference to prevent garbage collection ─────────────────────────
 let mainWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+// ─── Window state persistence ─────────────────────────────────────────────
+const userDataPath = app.getPath('userData');
+const windowStateFile = path.join(userDataPath, 'window-state.json');
+
+interface WindowState {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  isMaximized?: boolean;
+}
+
+const loadWindowState = (): WindowState => {
+  try {
+    if (fs.existsSync(windowStateFile)) {
+      const data = fs.readFileSync(windowStateFile, 'utf8');
+      const state = JSON.parse(data) as WindowState;
+      
+      // Validate that the window position is within screen bounds
+      const displays = screen.getAllDisplays();
+      const isWithinBounds = displays.some(display => {
+        const { x, y, width, height } = display.bounds;
+        return state.x !== undefined && state.y !== undefined &&
+               state.x >= x && state.x < x + width &&
+               state.y >= y && state.y < y + height;
+      });
+      
+      if (!isWithinBounds) {
+        // Window is off-screen, reset position
+        delete state.x;
+        delete state.y;
+      }
+      
+      return state;
+    }
+  } catch (error) {
+    console.error('Failed to load window state:', error);
+  }
+  
+  // Default window state
+  return {
+    width: 1200,
+    height: 780,
+  };
+};
+
+const saveWindowState = () => {
+  if (!mainWindow) return;
+  
+  try {
+    const bounds = mainWindow.getBounds();
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized(),
+    };
+    
+    fs.writeFileSync(windowStateFile, JSON.stringify(state, null, 2));
+  } catch (error) {
+    console.error('Failed to save window state:', error);
+  }
+};
 
 // ─── Call window relay buffering ──────────────────────────────────────────
 let callWindowReady = false;
@@ -50,10 +117,14 @@ const registerWindowsAUMID = () => {
 
 // ─── Create Main Window ────────────────────────────────────────────────────
 const createWindow = () => {
+  const windowState = loadWindowState();
+  
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 780,
-    minWidth: 900,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
+    minWidth: 425,
     minHeight: 600,
     title: 'TeleDesk',
     backgroundColor: '#1a1a2e',
@@ -65,6 +136,30 @@ const createWindow = () => {
       sandbox: false,
       webSecurity: true,
     },
+  });
+
+  // Restore maximized state
+  if (windowState.isMaximized) {
+    mainWindow.maximize();
+  }
+
+  // Save window state on resize, move, maximize, unmaximize
+  const saveStateDebounced = (() => {
+    let timeout: NodeJS.Timeout | null = null;
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => saveWindowState(), 500);
+    };
+  })();
+
+  mainWindow.on('resize', saveStateDebounced);
+  mainWindow.on('move', saveStateDebounced);
+  mainWindow.on('maximize', saveWindowState);
+  mainWindow.on('unmaximize', saveWindowState);
+
+  // Save state before closing
+  mainWindow.on('close', () => {
+    saveWindowState();
   });
 
   // Load the app
