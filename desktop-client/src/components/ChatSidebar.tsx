@@ -142,6 +142,16 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     }
   };
 
+  useEffect(() => {
+    if (showLocked && lockedChatIds.length === 0) {
+      setShowLocked(false);
+      setIsUnlocked(false);
+    }
+    if (showArchived && archivedChatIds.length === 0) {
+      setShowArchived(false);
+    }
+  }, [showLocked, lockedChatIds.length, showArchived, archivedChatIds.length, setShowLocked, setIsUnlocked, setShowArchived]);
+
   const { nicknames } = useChatStore();
 
   const getChatDisplayInfo = useCallback(

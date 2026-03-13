@@ -261,7 +261,7 @@ const AppInner: React.FC = () => {
               </button>
             )}
 
-            {(hasLocked || currentUser?.chatLockPin) && (
+            {hasLocked && (
               <button
                 className={`nav-btn nav-btn--lock desktop-only${showLocked ? ' active' : ''}`}
                 title="Locked chats"

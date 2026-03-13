@@ -14,11 +14,11 @@
 (fixed) show reactions on grid layout not on individual image 
 (fixed) for files like audio/video/pdf etc. instead of 'copy link' show 'download'
 (fixed) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
-
 (fixed) when user is unlocking chat then it's not reflecting immediately in chat window 
 (fixed) in locked user chat it don't show unread message count
 (fixed) don't show lock navigation bar for small devices
 (fixed) when user close chat of locked user and navigate to other user chat or any other navigation then unlock icon should be locked and user need to enter pin to see locked chat
 (fixed)when user lock the chat then it still shows in sidebar chat and reloading page it's gone 
-
-when lock folder is empty then remove it from nav bar and when user lock the chat then it should show in nav bar
+(fixed) when lock folder is empty then remove it from nav bar and when user lock the chat then it should show in nav bar
+improve the design of "next", "confirm" and "continue" button in enter pin popup
+allow user to change pin from settings
