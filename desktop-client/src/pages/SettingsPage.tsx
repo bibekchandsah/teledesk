@@ -541,6 +541,30 @@ const SettingsPage: React.FC = () => {
             />
           </button>
         </SettingRow>
+
+        <SettingRow
+          label="Chat Lock PIN"
+          description={currentUser?.chatLockPin ? "Change your 6-digit chat lock PIN" : "Set up a 6-digit PIN to lock specific chats"}
+        >
+          <button
+            onClick={() => {
+              const { setPinModal } = useUIStore.getState();
+              setPinModal({ mode: currentUser?.chatLockPin ? 'change' : 'setup' });
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            {currentUser?.chatLockPin ? 'Change PIN' : 'Set Up PIN'}
+          </button>
+        </SettingRow>
       </Section>
 
       {/* Audio */}

@@ -14,7 +14,7 @@ interface UIState {
   lastActiveChatId: string | null;
   showLocked: boolean;
   isUnlocked: boolean;
-  pinModal: { mode: 'setup' | 'verify' | 'reset', chatId?: string } | null;
+  pinModal: { mode: 'setup' | 'verify' | 'reset' | 'change', chatId?: string } | null;
 
   setSidebarOpen: (open: boolean) => void;
   setSelectedMicId: (id: string) => void;
@@ -29,7 +29,7 @@ interface UIState {
   setShowArchived: (val: boolean) => void;
   setShowLocked: (val: boolean) => void;
   setIsUnlocked: (val: boolean) => void;
-  setPinModal: (val: { mode: 'setup' | 'verify' | 'reset', chatId?: string } | null) => void;
+  setPinModal: (val: { mode: 'setup' | 'verify' | 'reset' | 'change', chatId?: string } | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({

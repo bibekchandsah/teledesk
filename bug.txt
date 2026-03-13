@@ -20,5 +20,5 @@
 (fixed) when user close chat of locked user and navigate to other user chat or any other navigation then unlock icon should be locked and user need to enter pin to see locked chat
 (fixed)when user lock the chat then it still shows in sidebar chat and reloading page it's gone 
 (fixed) when lock folder is empty then remove it from nav bar and when user lock the chat then it should show in nav bar
-improve the design of "next", "confirm" and "continue" button in enter pin popup
-allow user to change pin from settings
+(fixed) improve the design of "next", "confirm" and "continue" button in enter pin popup
+(fixed) allow user to change pin from settings

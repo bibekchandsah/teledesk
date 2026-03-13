@@ -362,6 +362,11 @@ const AppInner: React.FC = () => {
                   if (pinModal.mode === 'reset' && currentUser) {
                      setCurrentUser({ ...currentUser, chatLockPin: '********' });
                   }
+                } else if (pinModal.mode === 'change') {
+                  // PIN change successful
+                  if (currentUser) {
+                    setCurrentUser({ ...currentUser, chatLockPin: '********' });
+                  }
                 }
                 setPinModal(null);
               }}
