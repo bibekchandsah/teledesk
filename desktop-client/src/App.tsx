@@ -244,7 +244,10 @@ const AppInner: React.FC = () => {
                 } else {
                   // Navigate to chats from another page
                   setSidebarOpen(true);
-                  navigate(lastActiveChatId ? `/chats/${lastActiveChatId}` : '/chats');
+                  // Check if lastActiveChatId still exists in chats
+                  const { chats } = useChatStore.getState();
+                  const chatExists = lastActiveChatId && chats.some(c => c.chatId === lastActiveChatId);
+                  navigate(chatExists ? `/chats/${lastActiveChatId}` : '/chats');
                 }
               }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
