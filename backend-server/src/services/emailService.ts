@@ -1,38 +1,37 @@
-import nodemailer from 'nodemailer';
+import axios from 'axios';
 import logger from '../utils/logger';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '465'),
-  secure: true, // Use SSL/TLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // Increase timeouts for production environments like Railway
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,
-  socketTimeout: 30000,
-});
+const RESEND_API_URL = 'https://api.resend.com/emails';
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      logger.warn('Email credentials not configured. Skipping email send.');
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      logger.warn('RESEND_API_KEY not configured. Skipping email send.');
       logger.info(`Email intended for ${to}: ${subject}`);
       return;
     }
 
-    const info = await transporter.sendMail({
-      from: `"TeleDesk Security" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html,
-    });
+    const response = await axios.post(
+      RESEND_API_URL,
+      {
+        from: 'TeleDesk Security <onboarding@resend.dev>',
+        to,
+        subject,
+        html,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-    logger.info(`Email sent: ${info.messageId}`);
-  } catch (error) {
-    logger.error(`Error sending email: ${(error as Error).message}`);
+    logger.info(`Email sent via Resend: ${response.data.id}`);
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.message || error.message;
+    logger.error(`Error sending email via Resend: ${errorMsg}`);
     throw new Error('Failed to send verification email');
   }
 };
