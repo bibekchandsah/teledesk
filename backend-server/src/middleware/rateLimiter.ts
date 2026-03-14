@@ -6,7 +6,7 @@ const isDev = process.env.NODE_ENV === 'development';
 
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 1000 : 200, // Higher limit in development
+  max: isDev ? 1000 : 1000, // 1000 requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later.' },
@@ -25,7 +25,7 @@ export const globalRateLimiter = rateLimit({
 
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 100 : 20, // Higher limit in development
+  max: isDev ? 100 : 50, // 50 auth attempts per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many auth attempts, try again in 15 minutes.' },
@@ -33,7 +33,7 @@ export const authRateLimiter = rateLimit({
 
 export const uploadRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: isDev ? 50 : 10, // Higher limit in development
+  max: isDev ? 50 : 30, // 30 uploads per minute
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Upload rate limit exceeded.' },
