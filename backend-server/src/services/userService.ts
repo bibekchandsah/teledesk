@@ -30,6 +30,8 @@ type UserRow = {
   two_factor_enabled: boolean | null;
   two_factor_secret: string | null;
   two_factor_backup_codes: string[] | null;
+  two_factor_pending_secret: string | null;
+  two_factor_pending_backup_codes: string[] | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -367,31 +369,49 @@ export const generate2FASecret = async (uid: string): Promise<{ secret: string; 
 
 /**
  * Verify TOTP code and enable 2FA
+ * Handles both initial setup and regeneration (activates pending secret if exists)
  */
 export const verify2FACode = async (uid: string, token: string): Promise<boolean> => {
   const { data: user } = await supabase
     .from('users')
-    .select('two_factor_secret')
+    .select('two_factor_secret, two_factor_pending_secret, two_factor_pending_backup_codes')
     .eq('uid', uid)
     .single();
 
-  if (!user?.two_factor_secret) {
+  // Check if there's a pending secret (regeneration flow)
+  const secretToVerify = user?.two_factor_pending_secret || user?.two_factor_secret;
+
+  if (!secretToVerify) {
     throw new Error('2FA not set up');
   }
 
   const verified = speakeasy.totp.verify({
-    secret: user.two_factor_secret,
+    secret: secretToVerify,
     encoding: 'base32',
     token,
     window: 2, // Allow 2 time steps before/after for clock skew
   });
 
   if (verified) {
-    // Enable 2FA
-    await supabase
-      .from('users')
-      .update({ two_factor_enabled: true })
-      .eq('uid', uid);
+    // If there's a pending secret, activate it (regeneration flow)
+    if (user?.two_factor_pending_secret) {
+      await supabase
+        .from('users')
+        .update({
+          two_factor_secret: user.two_factor_pending_secret,
+          two_factor_backup_codes: user.two_factor_pending_backup_codes,
+          two_factor_pending_secret: null,
+          two_factor_pending_backup_codes: null,
+          two_factor_enabled: true,
+        })
+        .eq('uid', uid);
+    } else {
+      // Initial setup - just enable 2FA
+      await supabase
+        .from('users')
+        .update({ two_factor_enabled: true })
+        .eq('uid', uid);
+    }
   }
 
   return verified;
@@ -477,6 +497,7 @@ export const disable2FA = async (uid: string, token: string): Promise<boolean> =
 
 /**
  * Regenerate QR code (requires valid TOTP code from current secret)
+ * This generates a NEW secret and stores it as pending - user must verify to activate it
  */
 export const regenerate2FASecret = async (uid: string, currentToken: string): Promise<{ qrCode: string; backupCodes: string[] } | null> => {
   // Verify current token first
@@ -486,19 +507,55 @@ export const regenerate2FASecret = async (uid: string, currentToken: string): Pr
     return null;
   }
 
-  // Generate new secret and QR code
-  const result = await generate2FASecret(uid);
+  // Generate new secret WITHOUT replacing the active one yet
+  const user = await getUserById(uid);
+  if (!user) throw new Error('User not found');
+
+  const secret = speakeasy.generateSecret({
+    name: `TeleDesk (${user.email})`,
+    issuer: 'TeleDesk',
+    length: 32,
+  });
+
+  const qrCode = await QRCode.toDataURL(secret.otpauth_url!);
+
+  // Generate 10 backup codes
+  const backupCodes: string[] = [];
+  const hashedBackupCodes: string[] = [];
   
-  // Keep 2FA enabled status
+  for (let i = 0; i < 10; i++) {
+    const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+    backupCodes.push(code);
+    hashedBackupCodes.push(await bcrypt.hash(code, 10));
+  }
+
+  // Store the NEW secret as PENDING (not active yet)
+  // The old secret remains active until user verifies the new one
   await supabase
     .from('users')
-    .update({ two_factor_enabled: true })
+    .update({
+      two_factor_pending_secret: secret.base32,
+      two_factor_pending_backup_codes: hashedBackupCodes,
+    })
     .eq('uid', uid);
 
   return {
-    qrCode: result.qrCode,
-    backupCodes: result.backupCodes,
+    qrCode,
+    backupCodes,
   };
+};
+
+/**
+ * Cancel pending 2FA regeneration (clear pending secret)
+ */
+export const cancelPending2FA = async (uid: string): Promise<void> => {
+  await supabase
+    .from('users')
+    .update({
+      two_factor_pending_secret: null,
+      two_factor_pending_backup_codes: null,
+    })
+    .eq('uid', uid);
 };
 
 /**

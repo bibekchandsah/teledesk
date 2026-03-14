@@ -767,6 +767,24 @@ export const regenerate2FAHandler = async (req: Request, res: Response): Promise
 };
 
 /**
+ * POST /api/users/me/2fa/cancel-pending
+ * Cancel pending 2FA regeneration
+ */
+export const cancelPending2FAHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    
+    const { cancelPending2FA } = await import('../services/userService');
+    await cancelPending2FA(uid);
+    
+    res.json({ success: true, message: 'Pending 2FA regeneration cancelled' });
+  } catch (error) {
+    logger.error(`cancelPending2FA error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to cancel pending 2FA' });
+  }
+};
+
+/**
  * GET /api/users/me/2fa/status
  * Check if 2FA is enabled for the current user
  */

@@ -301,5 +301,10 @@ export const regenerate2FA = (token: string) =>
     body: JSON.stringify({ token }),
   });
 
+export const cancelPending2FA = () =>
+  authFetch<{ success: boolean; message: string }>('/api/users/me/2fa/cancel-pending', {
+    method: 'POST',
+  });
+
 export const get2FAStatus = () =>
   authFetch<{ enabled: boolean }>('/api/users/me/2fa/status');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, Copy, Check, Shield, Smartphone, AlertCircle } from 'lucide-react';
-import { setup2FA, verify2FA, regenerate2FA } from '../../services/apiService';
+import { setup2FA, verify2FA, regenerate2FA, cancelPending2FA } from '../../services/apiService';
 
 interface TwoFactorSetupModalProps {
   onClose: () => void;
@@ -125,6 +125,18 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
     onClose();
   };
 
+  const handleClose = async () => {
+    // If regenerating and user hasn't completed verification, cancel pending changes
+    if (isRegenerate && qrCode && step !== 'backup') {
+      try {
+        await cancelPending2FA();
+      } catch (err) {
+        console.error('Failed to cancel pending 2FA:', err);
+      }
+    }
+    onClose();
+  };
+
   return (
     <div
       style={{
@@ -139,7 +151,7 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
         padding: 20,
         animation: 'fadeIn 0.2s ease-out',
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         style={{
@@ -175,7 +187,7 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               background: 'none',
               border: 'none',
