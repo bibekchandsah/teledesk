@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat, setAppLockPin, verifyAppLockPin, toggleAppLock, removeAppLockPin } from '../services/userService';
+import { sendOtpEmail } from '../services/emailService';
+import { createVerificationToken, verifyToken, generateOtp, VerificationAction } from '../services/verificationService';
 import { getUserChats } from '../services/chatService';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import { Chat, User as SharedUser } from '../../../shared/types';
@@ -378,6 +380,19 @@ export const toggleLock = async (req: Request, res: Response): Promise<void> => 
 export const deleteAccount = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
+    const { otp } = req.body as { otp: string };
+
+    if (!otp) {
+      res.status(400).json({ success: false, error: 'Verification code is required to delete account' });
+      return;
+    }
+
+    const isValid = await verifyToken(uid, 'otp', 'delete_account', otp);
+    if (!isValid) {
+      res.status(400).json({ success: false, error: 'Invalid or expired verification code' });
+      return;
+    }
+
     const { deleteUserAccount } = await import('../services/userService');
     
     // 1. Delete from database (marks as deleted, removes from chats, etc.)
@@ -709,15 +724,15 @@ export const verify2FABackupHandler = async (req: Request, res: Response): Promi
 export const disable2FAHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const { token } = req.body as { token: string };
+    const { token, emailOtp } = req.body as { token?: string; emailOtp?: string };
     
-    if (!token || token.length !== 6) {
-      res.status(400).json({ success: false, error: 'Invalid token format' });
+    if ((!token || token.length !== 6) && (!emailOtp || emailOtp.length !== 6)) {
+      res.status(400).json({ success: false, error: 'Valid code is required (TOTP or Email OTP)' });
       return;
     }
     
     const { disable2FA } = await import('../services/userService');
-    const disabled = await disable2FA(uid, token);
+    const disabled = await disable2FA(uid, token, emailOtp);
     
     if (!disabled) {
       res.status(400).json({ success: false, error: 'Invalid verification code' });
@@ -738,15 +753,15 @@ export const disable2FAHandler = async (req: Request, res: Response): Promise<vo
 export const regenerate2FAHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const { token } = req.body as { token: string };
+    const { token, emailOtp } = req.body as { token?: string; emailOtp?: string };
     
-    if (!token || token.length !== 6) {
-      res.status(400).json({ success: false, error: 'Invalid token format' });
+    if ((!token || token.length !== 6) && (!emailOtp || emailOtp.length !== 6)) {
+      res.status(400).json({ success: false, error: 'Valid code is required (TOTP or Email OTP)' });
       return;
     }
     
     const { regenerate2FASecret } = await import('../services/userService');
-    const result = await regenerate2FASecret(uid, token);
+    const result = await regenerate2FASecret(uid, token, emailOtp);
     
     if (!result) {
       res.status(400).json({ success: false, error: 'Invalid verification code' });
@@ -799,5 +814,71 @@ export const get2FAStatusHandler = async (req: Request, res: Response): Promise<
   } catch (error) {
     logger.error(`get2FAStatus error: ${(error as Error).message}`);
     res.status(500).json({ success: false, error: 'Failed to get 2FA status' });
+  }
+};
+
+/**
+ * POST /api/users/me/request-email-verification
+ */
+export const requestEmailVerificationHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { action } = req.body as { action: VerificationAction };
+    
+    if (!action) {
+      res.status(400).json({ success: false, error: 'Action is required' });
+      return;
+    }
+
+    const user = await getUserById(uid);
+    if (!user || !user.email) {
+      res.status(404).json({ success: false, error: 'User email not found' });
+      return;
+    }
+
+    const otp = generateOtp();
+    const actionNames: Record<VerificationAction, string> = {
+      delete_account: 'delete your account',
+      reset_chat_pin: 'reset your chat lock PIN',
+      app_lock: 'change app lock settings',
+      two_factor: 'change two-factor authentication settings',
+    };
+
+    const actionName = actionNames[action] || action;
+
+    await createVerificationToken(uid, 'otp', action, otp);
+    await sendOtpEmail(user.email, otp, actionName);
+
+    res.json({ success: true, message: 'Verification code sent to your email' });
+  } catch (error) {
+    logger.error(`requestEmailVerification error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to send verification code' });
+  }
+};
+
+/**
+ * POST /api/users/me/verify-email-otp
+ */
+export const verifyEmailOtpHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { otp, action } = req.body as { otp: string; action: VerificationAction };
+
+    if (!otp || !action) {
+      res.status(400).json({ success: false, error: 'OTP and action are required' });
+      return;
+    }
+
+    const isValid = await verifyToken(uid, 'otp', action, otp);
+
+    if (!isValid) {
+      res.status(400).json({ success: false, error: 'Invalid or expired verification code' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Verification successful' });
+  } catch (error) {
+    logger.error(`verifyEmailOtp error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify code' });
   }
 };

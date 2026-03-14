@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useMultiAccountStore } from '../store/multiAccountStore';
 import { useAuthStore } from '../store/authStore';
 import { useAuth } from '../context/AuthContext';
-import { Plus, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronUp, Plus, Trash2 } from 'lucide-react';
 import ConfirmationModal from './modals/ConfirmationModal';
 
 export const AccountSwitcher: React.FC = () => {
@@ -122,12 +122,19 @@ export const AccountSwitcher: React.FC = () => {
     
     const uid = confirmingRemove;
     setConfirmingRemove(null);
-    removeAccount(uid);
+    
+    try {
+      // 1. Remove from local store
+      removeAccount(uid);
 
-    // If removing active account, sign out
-    if (uid === activeAccountUid) {
-      await logout(false);
-      window.location.href = '/login';
+      // 2. If it was the active account, sign out and redirect
+      if (uid === activeAccountUid) {
+        await logout(false);
+        window.location.href = '/login';
+      }
+    } catch (err) {
+      console.error('Failed to remove account:', err);
+      alert('Failed to remove account. Please try again.');
     }
   };
 
@@ -493,14 +500,15 @@ export const AccountSwitcher: React.FC = () => {
         </>
       )}
 
+        {/* Confirmation Modal */}
       <ConfirmationModal
         isOpen={!!confirmingRemove}
-        title="Remove Account?"
-        message="Are you sure you want to remove this account? You can always add it back later if you need to."
+        onCancel={() => setConfirmingRemove(null)}
+        onConfirm={confirmRemoveAccount}
+        title="Remove Account ?"
+        message="Are you sure you want to remove this account from this device? You will need to sign in again to access it."
         confirmText="Remove Account"
         cancelText="Cancel"
-        onConfirm={confirmRemoveAccount}
-        onCancel={() => setConfirmingRemove(null)}
         isDestructive={true}
         icon={<Trash2 size={18} color="#fff" />}
       />

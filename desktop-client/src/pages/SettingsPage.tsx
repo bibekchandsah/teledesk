@@ -4,11 +4,12 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
-import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA } from '../services/apiService';
+import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA, requestEmailVerification } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
 import { Pencil, Sun, Moon, Trash2 } from 'lucide-react';
 import { firebaseAuth } from '../services/firebaseService';
 import TwoFactorSetupModal from '../components/modals/TwoFactorSetupModal';
+import VerificationModal from '../components/modals/VerificationModal';
 
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
@@ -18,9 +19,11 @@ const SettingsPage: React.FC = () => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showDeleteVerification, setShowDeleteVerification] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletionVerifyError, setDeletionVerifyError] = useState<string | null>(null);
   const [showDisableAppLockConfirm, setShowDisableAppLockConfirm] = useState(false);
   const [isDisablingAppLock, setIsDisablingAppLock] = useState(false);
   
@@ -30,6 +33,9 @@ const SettingsPage: React.FC = () => {
   const [show2FARegenerate, setShow2FARegenerate] = useState(false);
   const [showDisable2FAConfirm, setShowDisable2FAConfirm] = useState(false);
   const [disable2FAToken, setDisable2FAToken] = useState('');
+  const [disable2FAEmailOtp, setDisable2FAEmailOtp] = useState('');
+  const [disable2FAMode, setDisable2FAMode] = useState<'totp' | 'email'>('totp');
+  const [isRequestingEmailOtp, setIsRequestingEmailOtp] = useState(false);
   const [isDisabling2FA, setIsDisabling2FA] = useState(false);
   const [disable2FAError, setDisable2FAError] = useState('');
 
@@ -254,25 +260,63 @@ const SettingsPage: React.FC = () => {
         }
       }
 
-      // Call backend — which deletes from DB AND Firebase Auth (via Admin SDK).
-      // Admin SDK bypasses requires-recent-login, so no re-auth needed for OAuth users.
-      const { deleteMyAccount } = await import('../services/apiService');
-      const result = await deleteMyAccount();
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete account');
+      // 1. Request the verification code
+      const reqRes = await requestEmailVerification('delete_account');
+      if (reqRes.success) {
+        setShowDeleteVerification(true);
+        setShowDeleteConfirm(false);
+      } else {
+        setDeleteError(reqRes.error || 'Failed to send verification code');
       }
-
-      // Sign out locally and redirect
-      await logout();
-      window.location.href = '/login?logout=true';
     } catch (error: any) {
       console.error('[Delete] Error:', error);
-      setDeleteError(error.message || 'Failed to delete account');
+      setDeleteError(error.message || 'Failed to request deletion code');
+    } finally {
       setIsDeleting(false);
     }
   };
 
+  const handleDeletionVerificationSuccess = async (otp: string) => {
+    setIsDeleting(true);
+    setDeletionVerifyError(null);
+    try {
+      // 2. Call the deletion API directly with the OTP
+      // This performs ATOMIC verification on the backend
+      const { deleteMyAccount } = await import('../services/apiService');
+      const result = await deleteMyAccount(otp);
+
+      if (!result.success) {
+        setDeletionVerifyError(result.error || 'Failed to delete account');
+        setIsDeleting(false);
+        return;
+      }
+
+      setShowDeleteVerification(false);
+      await logout();
+      window.location.href = '/login?logout=true';
+    } catch (error: any) {
+      console.error('[Delete] Verification Error:', error);
+      setDeletionVerifyError(error.message || 'Failed to delete account');
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRequestDisable2FAEmail = async () => {
+    setIsRequestingEmailOtp(true);
+    setDisable2FAError('');
+    try {
+      const res = await requestEmailVerification('two_factor');
+      if (res.success) {
+        setDisable2FAMode('email');
+      } else {
+        setDisable2FAError(res.error || 'Failed to send verification code');
+      }
+    } catch (err) {
+      setDisable2FAError('Failed to send verification code');
+    } finally {
+      setIsRequestingEmailOtp(false);
+    }
+  };
 
   const handleToggleActiveStatus = async () => {
     const newVal = !showActiveStatus;
@@ -1151,7 +1195,7 @@ const SettingsPage: React.FC = () => {
                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
                 }}
               >
-                {isDeleting ? 'Deleting...' : 'Delete My Account'}
+                {isDeleting ? 'Requesting Code...' : 'Send Verification Code'}
               </button>
             </div>
           </div>
@@ -1177,6 +1221,8 @@ const SettingsPage: React.FC = () => {
           onSuccess={() => {}}
         />
       )}
+
+
 
       {/* Disable 2FA Confirmation Modal */}
       {showDisable2FAConfirm && (
@@ -1230,22 +1276,51 @@ const SettingsPage: React.FC = () => {
                 Disable Two-Factor Authentication?
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
-                Your account will be less secure. Enter your current 6-digit code to confirm.
+                Your account will be less secure. {disable2FAMode === 'totp' ? 'Enter your current 6-digit code to confirm.' : `Enter the 6-digit code we sent to ${currentUser?.email}.`}
               </p>
             </div>
 
             <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginBottom: 16 }}>
+                <button
+                  onClick={() => setDisable2FAMode('totp')}
+                  style={{
+                    background: 'none', border: 'none', padding: '4px 8px', fontSize: 13,
+                    color: disable2FAMode === 'totp' ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontWeight: disable2FAMode === 'totp' ? 700 : 400,
+                    borderBottom: disable2FAMode === 'totp' ? '2px solid var(--accent)' : 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  App Code
+                </button>
+                <button
+                  onClick={handleRequestDisable2FAEmail}
+                  disabled={isRequestingEmailOtp}
+                  style={{
+                    background: 'none', border: 'none', padding: '4px 8px', fontSize: 13,
+                    color: disable2FAMode === 'email' ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontWeight: disable2FAMode === 'email' ? 700 : 400,
+                    borderBottom: disable2FAMode === 'email' ? '2px solid var(--accent)' : 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {isRequestingEmailOtp ? 'Sending...' : 'Email OTP'}
+                </button>
+              </div>
+
               <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-                Verification Code
+                {disable2FAMode === 'totp' ? 'Authenticator App Code' : 'Email Verification Code'}
               </label>
               <input
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
-                value={disable2FAToken}
+                value={disable2FAMode === 'totp' ? disable2FAToken : disable2FAEmailOtp}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, '');
-                  setDisable2FAToken(val);
+                  if (disable2FAMode === 'totp') setDisable2FAToken(val);
+                  else setDisable2FAEmailOtp(val);
                   setDisable2FAError('');
                 }}
                 placeholder="000000"
@@ -1308,7 +1383,14 @@ const SettingsPage: React.FC = () => {
               </button>
               <button
                 onClick={async () => {
-                  if (disable2FAToken.length !== 6) {
+                  const token = disable2FAMode === 'totp' ? disable2FAToken : undefined;
+                  const emailOtp = disable2FAMode === 'email' ? disable2FAEmailOtp : undefined;
+
+                  if (disable2FAMode === 'totp' && (!token || token.length !== 6)) {
+                    setDisable2FAError('Please enter a 6-digit code');
+                    return;
+                  }
+                  if (disable2FAMode === 'email' && (!emailOtp || emailOtp.length !== 6)) {
                     setDisable2FAError('Please enter a 6-digit code');
                     return;
                   }
@@ -1316,12 +1398,13 @@ const SettingsPage: React.FC = () => {
                   setIsDisabling2FA(true);
                   setDisable2FAError('');
                   try {
-                    const res = await disable2FA(disable2FAToken);
+                    const res = await disable2FA(token, emailOtp);
                     if (res.success) {
                       setTwoFactorEnabled(false);
                       setCurrentUser({ ...currentUser!, twoFactorEnabled: false });
                       setShowDisable2FAConfirm(false);
                       setDisable2FAToken('');
+                      setDisable2FAEmailOtp('');
                     } else {
                       setDisable2FAError(res.error || 'Invalid verification code');
                     }
@@ -1332,7 +1415,7 @@ const SettingsPage: React.FC = () => {
                     setIsDisabling2FA(false);
                   }
                 }}
-                disabled={isDisabling2FA || disable2FAToken.length !== 6}
+                disabled={isDisabling2FA || (disable2FAMode === 'totp' ? disable2FAToken.length !== 6 : disable2FAEmailOtp.length !== 6)}
                 style={{
                   flex: 1,
                   padding: '12px 24px',
@@ -1354,6 +1437,19 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Account Deletion Verification Modal */}
+      <VerificationModal
+        isOpen={showDeleteVerification}
+        onClose={() => setShowDeleteVerification(false)}
+        onVerified={handleDeletionVerificationSuccess}
+        action="delete_account"
+        title="Verify Account Deletion"
+        description="To permanently delete your account, please enter the 6-digit code we sent to your email."
+        shouldVerify={false}
+        isExternalLoading={isDeleting}
+        externalError={deletionVerifyError}
+      />
     </div>
   );
 };

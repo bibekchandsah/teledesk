@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, AlertCircle, Key } from 'lucide-react';
 import { verify2FALogin, verify2FABackup } from '../../services/apiService';
+import TwoFactorSetupModal from './TwoFactorSetupModal';
 
 interface TwoFactorVerifyModalProps {
   onSuccess: () => void;
@@ -13,6 +14,7 @@ const TwoFactorVerifyModal: React.FC<TwoFactorVerifyModalProps> = ({ onSuccess, 
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false);
 
   const handleVerify = async () => {
     if (useBackupCode) {
@@ -327,7 +329,38 @@ const TwoFactorVerifyModal: React.FC<TwoFactorVerifyModalProps> = ({ onSuccess, 
             {loading ? 'Verifying...' : 'Verify'}
           </button>
         </div>
+
+        {/* Regenerate Link */}
+        <div style={{ marginTop: 20, textAlign: 'center' }}>
+          <button
+            onClick={() => setShowRegenerateModal(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent)',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              opacity: 0.8,
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+          >
+            Regenerate QR Code
+          </button>
+        </div>
       </div>
+
+      {showRegenerateModal && (
+        <TwoFactorSetupModal
+          isRegenerate
+          onClose={() => setShowRegenerateModal(false)}
+          onSuccess={() => {
+            setShowRegenerateModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

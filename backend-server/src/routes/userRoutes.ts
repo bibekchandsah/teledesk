@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler, setChatThemeHandler, getChatThemeHandler, removeChatThemeHandler, getAllChatThemesHandler, setup2FAHandler, verify2FAHandler, verify2FALoginHandler, verify2FABackupHandler, disable2FAHandler, regenerate2FAHandler, cancelPending2FAHandler, get2FAStatusHandler } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler, setChatThemeHandler, getChatThemeHandler, removeChatThemeHandler, getAllChatThemesHandler, setup2FAHandler, verify2FAHandler, verify2FALoginHandler, verify2FABackupHandler, disable2FAHandler, regenerate2FAHandler, cancelPending2FAHandler, get2FAStatusHandler, requestEmailVerificationHandler, verifyEmailOtpHandler } from '../controllers/userController';
 import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions, cleanupDuplicateDeviceSessions, debugSessionInfo } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
@@ -165,5 +165,12 @@ router.post('/me/2fa/cancel-pending', cancelPending2FAHandler);
 
 // GET /api/users/me/2fa/status - Check if 2FA is enabled
 router.get('/me/2fa/status', get2FAStatusHandler);
+
+// ─── Email Verification Routes ─────────────────────────────────────────────
+// POST /api/users/me/request-email-verification
+router.post('/me/request-email-verification', requestEmailVerificationHandler);
+
+// POST /api/users/me/verify-email-otp
+router.post('/me/verify-email-otp', verifyEmailOtpHandler);
 
 export default router;

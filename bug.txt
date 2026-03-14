@@ -1,44 +1,9 @@
-FIXED: 2FA Should Only Prompt on Manual Login, Not Page Reload
+to be implemented:
+1. playbar for audio message
+2. user a = user b and user b = user a chat theme should be same if enabled for both
+    if both enabled then show theme for both
+    if both disabled then show no theme for both
+    if one enabled and one disabled then show 
+    if one disabled and one enabled then show no theme for both
 
-Issue: 2FA verification modal was appearing on every page reload, which is annoying for users who just refreshed the page.
-
-Root Cause:
-- The 2FA check was running on every auth state change
-- Firebase Auth persists user session across page reloads
-- No way to distinguish between manual login and automatic session restore
-
-Solution Applied:
-- Use `isManualLoginRef` to track whether login is manual or automatic
-- Only check 2FA when `isManualLoginRef.current === true`
-- Set flag to `true` in all manual login functions
-- Reset flag after 2FA check or on error
-
-Implementation:
-1. Added `isManualLoginRef` useRef to track manual vs auto login
-2. Set `isManualLoginRef.current = true` in:
-   - `loginWithGoogle()`
-   - `loginWithGithub()`
-   - `loginWithEmail()`
-   - `onAuthExternalToken()` (Electron deep linking)
-3. Check flag in `onAuthChange` before showing 2FA modal
-4. Reset flag after 2FA check or on error
-
-Files Modified:
-- desktop-client/src/context/AuthContext.tsx
-
-Result:
-- 2FA verification only required on manual login
-- Page reloads skip 2FA check entirely
-- User can refresh page without re-entering 2FA code
-- Firebase Auth session persists normally
-- 2FA still required when:
-  - User logs in with email/password
-  - User logs in with Google
-  - User logs in with GitHub
-  - User logs in via Electron deep link
-- 2FA NOT required when:
-  - Page reloads/refreshes
-  - Browser restores session
-  - App restarts with saved session
-
-This provides better UX while maintaining security - 2FA is only checked at the actual login point, not on every page load.
+3. exit application from system tray menu error 

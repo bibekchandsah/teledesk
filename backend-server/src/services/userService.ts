@@ -352,12 +352,12 @@ export const generate2FASecret = async (uid: string): Promise<{ secret: string; 
     hashedBackupCodes.push(await bcrypt.hash(code, 10));
   }
 
-  // Store secret and backup codes (not enabled yet)
+  // Store secret and backup codes as PENDING (not active yet)
   await supabase
     .from('users')
     .update({
-      two_factor_secret: secret.base32,
-      two_factor_backup_codes: hashedBackupCodes,
+      two_factor_pending_secret: secret.base32,
+      two_factor_pending_backup_codes: hashedBackupCodes,
       two_factor_enabled: false, // Not enabled until verified
     })
     .eq('uid', uid);
@@ -476,10 +476,19 @@ export const verify2FABackupCode = async (uid: string, code: string): Promise<bo
 };
 
 /**
- * Disable 2FA (requires valid TOTP code)
+ * Disable 2FA (requires valid TOTP code OR email OTP)
  */
-export const disable2FA = async (uid: string, token: string): Promise<boolean> => {
-  const verified = await verify2FALogin(uid, token);
+export const disable2FA = async (uid: string, token?: string, emailOtp?: string): Promise<boolean> => {
+  let verified = false;
+  
+  if (token) {
+    verified = await verify2FALogin(uid, token);
+  } else if (emailOtp) {
+    const { verifyToken } = await import('./verificationService');
+    verified = await verifyToken(uid, 'otp', 'two_factor', emailOtp);
+  } else {
+    return false;
+  }
   
   if (!verified) {
     return false;
@@ -498,12 +507,19 @@ export const disable2FA = async (uid: string, token: string): Promise<boolean> =
 };
 
 /**
- * Regenerate QR code (requires valid TOTP code from current secret)
+ * Regenerate QR code (requires valid TOTP code OR email OTP)
  * This generates a NEW secret and stores it as pending - user must verify to activate it
  */
-export const regenerate2FASecret = async (uid: string, currentToken: string): Promise<{ qrCode: string; backupCodes: string[] } | null> => {
-  // Verify current token first
-  const verified = await verify2FALogin(uid, currentToken);
+export const regenerate2FASecret = async (uid: string, currentToken?: string, emailOtp?: string): Promise<{ qrCode: string; backupCodes: string[] } | null> => {
+  // Verify current identity
+  let verified = false;
+  
+  if (currentToken) {
+    verified = await verify2FALogin(uid, currentToken);
+  } else if (emailOtp) {
+    const { verifyToken } = await import('./verificationService');
+    verified = await verifyToken(uid, 'otp', 'two_factor', emailOtp);
+  }
   
   if (!verified) {
     return null;

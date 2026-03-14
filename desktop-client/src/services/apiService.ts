@@ -24,6 +24,7 @@ const authFetch = async <T>(
   });
 
   const data = await response.json();
+
   return data as ApiResponse<T>;
 };
 
@@ -103,9 +104,24 @@ export const removeAppLockPin = () =>
     method: 'DELETE',
   });
 
-export const deleteMyAccount = () =>
+export const deleteMyAccount = (otp: string) =>
   authFetch<{ message: string }>('/api/users/me', {
     method: 'DELETE',
+    body: JSON.stringify({ otp }),
+  });
+
+export type VerificationAction = 'delete_account' | 'reset_chat_pin' | 'app_lock' | 'two_factor';
+
+export const requestEmailVerification = (action: VerificationAction) =>
+  authFetch<{ message: string }>('/api/users/me/request-email-verification', {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  });
+
+export const verifyEmailOtp = (otp: string, action: VerificationAction) =>
+  authFetch<{ message: string }>('/api/users/me/verify-email-otp', {
+    method: 'POST',
+    body: JSON.stringify({ otp, action }),
   });
 
 // ─── Draft API ─────────────────────────────────────────────────────────────
@@ -289,16 +305,16 @@ export const verify2FABackup = (code: string) =>
     body: JSON.stringify({ code }),
   });
 
-export const disable2FA = (token: string) =>
+export const disable2FA = (token?: string, emailOtp?: string) =>
   authFetch<{ success: boolean; message: string }>('/api/users/me/2fa/disable', {
     method: 'POST',
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, emailOtp }),
   });
 
-export const regenerate2FA = (token: string) =>
+export const regenerate2FA = (token?: string, emailOtp?: string) =>
   authFetch<{ qrCode: string; backupCodes: string[] }>('/api/users/me/2fa/regenerate', {
     method: 'POST',
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, emailOtp }),
   });
 
 export const cancelPending2FA = () =>

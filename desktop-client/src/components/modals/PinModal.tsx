@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Lock, Key, Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { setLockPin, verifyLockPin } from '../../services/apiService';
+import { setLockPin, verifyLockPin, requestEmailVerification, verifyEmailOtp } from '../../services/apiService';
 import { reauthenticate, reauthenticateWithPassword } from '../../services/firebaseService';
 import { useAuthStore } from '../../store/authStore';
 import { Eye, EyeOff } from 'lucide-react';
@@ -16,7 +16,8 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
   const [confirmPin, setConfirmPin] = useState('');
   const [password, setPassword] = useState('');
   const [resetCode, setResetCode] = useState('');
-  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'verify-current' | 'reauth-password' | 'reset-input' | 'reset-confirm'>('input');
+  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'verify-current' | 'reauth-password' | 'verify-email' | 'reset-input' | 'reset-confirm'>('input');
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -184,30 +185,53 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
       }
       return;
     }
+
+    if (step === 'verify-email') {
+      if (otp.length !== 6) { setError('Please enter 6-digit OTP'); return; }
+      setLoading(true);
+      try {
+        const res = await verifyEmailOtp(otp, 'reset_chat_pin');
+        if (res.success) {
+          setStep('reset-input');
+          setPin('');
+          setError(null);
+          setMessage('Identity verified. Please set a new PIN.');
+        } else {
+          setError(res.error || 'Invalid or expired code');
+        }
+      } catch (err) {
+        setError('Verification failed');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
   };
 
   const handleForgotPin = async () => {
-    const user = useAuthStore.getState().currentUser;
-    // We can't check providerData easily from the custom User type, 
-    // but we can check if they have a 'password' provider in firebase.
-    // For simplicity, let's try the reauthenticate() first which handles Google/GitHub.
-    
     setLoading(true);
     setError(null);
     try {
-      const success = await reauthenticate();
-      if (success) {
-        setStep('reset-input');  // go to new-PIN entry after OAuth re-auth
-        setPin('');
+      // Use the new Email OTP flow as requested
+      const res = await requestEmailVerification('reset_chat_pin');
+      if (res.success) {
+        setStep('verify-email');
+        setOtp('');
         setError(null);
-        setMessage('Identity verified. Please set a new PIN.');
       } else {
-        // OAuth popup dismissed/failed — try password re-auth
-        setStep('reauth-password');
-        setError(null);
+        // Fallback to Firebase re-auth if email fails
+        const success = await reauthenticate();
+        if (success) {
+          setStep('reset-input');
+          setPin('');
+          setError(null);
+          setMessage('Identity verified. Please set a new PIN.');
+        } else {
+          setStep('reauth-password');
+        }
       }
     } catch (err) {
-      setError('Verification failed');
+      setError('Failed to initiate reset. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -215,6 +239,7 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
 
   const getTitle = () => {
     if (step === 'reauth-password') return 'Verify Your Password';
+    if (step === 'verify-email') return 'Verify Email OTP';
     if (step === 'reset-input') return 'Set New PIN';
     if (step === 'reset-confirm') return 'Confirm New PIN';
     if (step === 'forgot') return 'Reset Your PIN';
@@ -230,14 +255,15 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
     if (loading) return 'Processing...';
     if (step === 'input' && (mode === 'setup' || mode === 'change' || mode === 'reset')) return 'Next';
     if (step === 'reset-input') return 'Next';
-    if (step === 'verify-current' || step === 'reauth-password') return 'Continue';
-    if (step === 'forgot') return 'Verify Identity';
+    if (step === 'verify-current' || step === 'reauth-password' || step === 'verify-email') return 'Continue';
+    if (step === 'forgot') return 'Send Reset Code';
     return 'Confirm';
   };
 
   const getAltText = () => {
     if (step === 'verify-current') return 'Enter your current 6-digit PIN to proceed.';
     if (step === 'reauth-password') return 'Enter your account password to verify your identity.';
+    if (step === 'verify-email') return `Enter the 6-digit code we sent to ${currentUser?.email}.`;
     if (step === 'reset-input') return 'Enter a new 6-digit PIN.';
     if (step === 'reset-confirm') return 'Re-enter your new PIN to confirm.';
     if (step === 'confirm') return 'Re-enter your 6-digit PIN to confirm.';
@@ -306,7 +332,9 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
               {step !== 'reauth-password' && (
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>
-                    {(step === 'confirm' || step === 'reset-confirm') ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN')}
+                    {step === 'verify-email' ? 'Verification Code (OTP)' : (
+                      (step === 'confirm' || step === 'reset-confirm') ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN')
+                    )}
                   </label>
                   <input
                     ref={inputRef}
@@ -314,9 +342,18 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={6}
-                    value={(step === 'confirm' || step === 'reset-confirm') ? confirmPin : pin}
-                    onChange={(e) => (step === 'confirm' || step === 'reset-confirm') ? handleConfirmChange(e.target.value) : handlePinChange(e.target.value)}
-                    placeholder="••••••"
+                    value={step === 'verify-email' ? otp : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin : pin)}
+                    onChange={(e) => {
+                      if (step === 'verify-email') {
+                        setOtp(e.target.value.replace(/\D/g, '').slice(0,6));
+                        setError(null);
+                      } else if (step === 'confirm' || step === 'reset-confirm') {
+                        handleConfirmChange(e.target.value);
+                      } else {
+                        handlePinChange(e.target.value);
+                      }
+                    }}
+                    placeholder={step === 'verify-email' ? "••••••" : "••••••"}
                     style={pinInputStyle}
                     required
                   />
@@ -340,11 +377,21 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
               <button 
                 type="submit" 
                 className="premium-pin-btn"
-                disabled={loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6))}
+                disabled={loading || (
+                  step === 'reauth-password' ? !password : 
+                  step === 'verify-email' ? otp.length !== 6 :
+                  (step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : 
+                  pin.length !== 6
+                )}
                 style={{ 
                   ...premiumBtnStyle, 
                   marginTop: 12,
-                  opacity: loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6)) ? 0.6 : 1,
+                  opacity: loading || (
+                    step === 'reauth-password' ? !password : 
+                    step === 'verify-email' ? otp.length !== 6 :
+                    (step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : 
+                    pin.length !== 6
+                  ) ? 0.6 : 1,
                   cursor: loading ? 'not-allowed' : 'pointer'
                 }}
               >

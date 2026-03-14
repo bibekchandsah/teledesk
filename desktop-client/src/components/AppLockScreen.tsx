@@ -15,12 +15,14 @@ const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
   const [loading, setLoading] = useState(false);
   const [showForgotFlow, setShowForgotFlow] = useState(false);
   const [showPasswordAuth, setShowPasswordAuth] = useState(false);
+  const [showOtpFlow, setShowOtpFlow] = useState(false);
+  const [otp, setOtp] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const { currentUser } = useAuthStore();
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, [showForgotFlow, showPasswordAuth]);
+  }, [showForgotFlow, showPasswordAuth, showOtpFlow]);
 
   const handlePinChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 6);
@@ -45,6 +47,46 @@ const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
       } else {
         setError('Incorrect PIN');
         setPin('');
+      }
+    } catch (err) {
+      setError('Verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestOtp = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { requestEmailVerification } = await import('../services/apiService');
+      const res = await requestEmailVerification('app_lock');
+      if (res.success) {
+        setShowOtpFlow(true);
+        setShowForgotFlow(false);
+        setOtp('');
+      } else {
+        setError(res.error || 'Failed to send verification code');
+      }
+    } catch (err) {
+      setError('Failed to request OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { verifyEmailOtp } = await import('../services/apiService');
+      const res = await verifyEmailOtp(otp, 'app_lock');
+      if (res.success) {
+        onUnlock();
+      } else {
+        setError(res.error || 'Invalid verification code');
       }
     } catch (err) {
       setError('Verification failed');
@@ -145,6 +187,63 @@ const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
     );
   }
 
+  if (showOtpFlow) {
+    return (
+      <div style={overlayStyle}>
+        <div style={modalStyle}>
+          <div style={iconBoxStyle}>
+            <Lock size={32} style={{ color: '#fff' }} />
+          </div>
+          <h2 style={{ margin: '20px 0 8px', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Verify OTP
+          </h2>
+          <p style={{ margin: '0 0 24px', color: 'var(--text-secondary)', fontSize: 14, textAlign: 'center', lineHeight: 1.6 }}>
+            Enter the 6-digit code we sent to<br />
+            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{currentUser?.email}</span>
+          </p>
+          <form onSubmit={handleVerifyOtp} style={{ width: '100%' }}>
+            <input
+              ref={inputRef}
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={otp}
+              onChange={(e) => {
+                setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
+                setError(null);
+              }}
+              placeholder="••••••"
+              style={pinInputStyle}
+              required
+            />
+            {error && (
+              <div style={errorStyle}>
+                <AlertCircle size={14} />
+                <span>{error}</span>
+              </div>
+            )}
+            <button type="submit" disabled={loading || otp.length !== 6} style={buttonStyle}>
+              {loading ? 'Verifying...' : 'Unlock'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowOtpFlow(false);
+                setShowForgotFlow(true);
+                setOtp('');
+                setError(null);
+              }}
+              style={secondaryButtonStyle}
+            >
+              Back
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (showForgotFlow) {
     return (
       <div style={overlayStyle}>
@@ -156,10 +255,13 @@ const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
             Reset App Lock PIN
           </h2>
           <p style={{ margin: '0 0 24px', color: 'var(--text-secondary)', fontSize: 14, textAlign: 'center', lineHeight: 1.6 }}>
-            To reset your PIN, we'll ask you to quickly re-authenticate with your login provider.
+            To reset your PIN, we'll ask you to quickly re-authenticate or use email verification.
           </p>
-          <button onClick={handleForgotPin} disabled={loading} style={buttonStyle}>
-            {loading ? 'Verifying...' : 'Verify Identity'}
+          <button onClick={handleRequestOtp} disabled={loading} style={buttonStyle}>
+            {loading ? 'Sending OTP...' : 'Send OTP to Email'}
+          </button>
+          <button onClick={handleForgotPin} disabled={loading} style={secondaryButtonStyle}>
+            {loading ? 'Verifying...' : 'Verify with OAuth'}
           </button>
           <button
             type="button"
@@ -167,7 +269,7 @@ const AppLockScreen: React.FC<AppLockScreenProps> = ({ onUnlock }) => {
               setShowForgotFlow(false);
               setError(null);
             }}
-            style={secondaryButtonStyle}
+            style={{ ...secondaryButtonStyle, border: 'none', color: 'var(--text-secondary)', marginTop: 8 }}
           >
             Back to PIN
           </button>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Lock, Key, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { setAppLockPin, verifyAppLockPin } from '../../services/apiService';
+import { setAppLockPin, verifyAppLockPin, requestEmailVerification, verifyEmailOtp } from '../../services/apiService';
 import { reauthenticate, reauthenticateWithPassword } from '../../services/firebaseService';
 import { useAuthStore } from '../../store/authStore';
 
@@ -14,7 +14,8 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [password, setPassword] = useState('');
-  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'verify-current' | 'reauth-password' | 'reset-input' | 'reset-confirm'>('input');
+  const [step, setStep] = useState<'input' | 'confirm' | 'forgot' | 'verify-current' | 'reauth-password' | 'verify-email' | 'reset-input' | 'reset-confirm'>('input');
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -176,24 +177,52 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
       }
       return;
     }
+
+    if (step === 'verify-email') {
+      if (otp.length !== 6) { setError('Please enter 6-digit OTP'); return; }
+      setLoading(true);
+      try {
+        const res = await verifyEmailOtp(otp, 'app_lock');
+        if (res.success) {
+          setStep('reset-input');
+          setPin('');
+          setError(null);
+          setMessage('Identity verified. Please set a new PIN.');
+        } else {
+          setError(res.error || 'Invalid or expired code');
+        }
+      } catch (err) {
+        setError('Verification failed');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
   };
 
   const handleForgotPin = async () => {
     setLoading(true);
     setError(null);
     try {
-      const success = await reauthenticate();
-      if (success) {
-        setStep('reset-input');
-        setPin('');
+      const res = await requestEmailVerification('app_lock');
+      if (res.success) {
+        setStep('verify-email');
+        setOtp('');
         setError(null);
-        setMessage('Identity verified. Please set a new PIN.');
       } else {
-        setStep('reauth-password');
-        setError(null);
+        const success = await reauthenticate();
+        if (success) {
+          setStep('reset-input');
+          setPin('');
+          setError(null);
+          setMessage('Identity verified. Please set a new PIN.');
+        } else {
+          setStep('reauth-password');
+          setError(null);
+        }
       }
     } catch (err) {
-      setError('Verification failed');
+      setError('Failed to initiate reset. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -201,6 +230,7 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
 
   const getTitle = () => {
     if (step === 'reauth-password') return 'Verify Your Password';
+    if (step === 'verify-email') return 'Verify Email OTP';
     if (step === 'reset-input') return 'Set New App Lock PIN';
     if (step === 'reset-confirm') return 'Confirm New PIN';
     if (step === 'forgot') return 'Reset Your PIN';
@@ -216,14 +246,15 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
     if (loading) return 'Processing...';
     if (step === 'input' && (mode === 'setup' || mode === 'change' || mode === 'reset')) return 'Next';
     if (step === 'reset-input') return 'Next';
-    if (step === 'verify-current' || step === 'reauth-password') return 'Continue';
-    if (step === 'forgot') return 'Verify Identity';
+    if (step === 'verify-current' || step === 'reauth-password' || step === 'verify-email') return 'Continue';
+    if (step === 'forgot') return 'Send Reset Code';
     return 'Confirm';
   };
 
   const getAltText = () => {
     if (step === 'verify-current') return 'Enter your current 6-digit PIN to proceed.';
     if (step === 'reauth-password') return 'Enter your account password to verify your identity.';
+    if (step === 'verify-email') return `Enter the 6-digit code we sent to ${currentUser?.email}.`;
     if (step === 'reset-input') return 'Enter a new 6-digit PIN.';
     if (step === 'reset-confirm') return 'Re-enter your new PIN to confirm.';
     if (step === 'confirm') return 'Re-enter your 6-digit PIN to confirm.';
@@ -291,7 +322,9 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
               {step !== 'reauth-password' && (
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>
-                    {(step === 'confirm' || step === 'reset-confirm') ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN')}
+                    {step === 'verify-email' ? 'Verification Code (OTP)' : (
+                      (step === 'confirm' || step === 'reset-confirm') ? 'Confirm PIN' : (step === 'verify-current' ? 'Current PIN' : '6-Digit PIN')
+                    )}
                   </label>
                   <input
                     ref={inputRef}
@@ -299,9 +332,18 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={6}
-                    value={(step === 'confirm' || step === 'reset-confirm') ? confirmPin : pin}
-                    onChange={(e) => (step === 'confirm' || step === 'reset-confirm') ? handleConfirmChange(e.target.value) : handlePinChange(e.target.value)}
-                    placeholder="••••••"
+                    value={step === 'verify-email' ? otp : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin : pin)}
+                    onChange={(e) => {
+                      if (step === 'verify-email') {
+                        setOtp(e.target.value.replace(/\D/g, '').slice(0,6));
+                        setError(null);
+                      } else if (step === 'confirm' || step === 'reset-confirm') {
+                        handleConfirmChange(e.target.value);
+                      } else {
+                        handlePinChange(e.target.value);
+                      }
+                    }}
+                    placeholder={step === 'verify-email' ? "••••••" : "••••••"}
                     style={pinInputStyle}
                     required
                   />
@@ -325,11 +367,21 @@ const AppLockPinModal: React.FC<AppLockPinModalProps> = ({ mode, onSuccess, onCa
               <button 
                 type="submit" 
                 className="premium-pin-btn"
-                disabled={loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6))}
+                disabled={loading || (
+                  step === 'reauth-password' ? !password : 
+                  step === 'verify-email' ? otp.length !== 6 :
+                  (step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : 
+                  pin.length !== 6
+                )}
                 style={{ 
                   ...premiumBtnStyle, 
                   marginTop: 12,
-                  opacity: loading || (step === 'reauth-password' ? !password : ((step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : pin.length !== 6)) ? 0.6 : 1,
+                  opacity: loading || (
+                    step === 'reauth-password' ? !password : 
+                    step === 'verify-email' ? otp.length !== 6 :
+                    (step === 'confirm' || step === 'reset-confirm') ? confirmPin.length !== 6 : 
+                    pin.length !== 6
+                  ) ? 0.6 : 1,
                   cursor: loading ? 'not-allowed' : 'pointer'
                 }}
               >

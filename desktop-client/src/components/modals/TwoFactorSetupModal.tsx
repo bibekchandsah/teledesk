@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, Copy, Check, Shield, Smartphone, AlertCircle } from 'lucide-react';
-import { setup2FA, verify2FA, regenerate2FA, cancelPending2FA } from '../../services/apiService';
+import { setup2FA, verify2FA, regenerate2FA, cancelPending2FA, requestEmailVerification } from '../../services/apiService';
 
 interface TwoFactorSetupModalProps {
   onClose: () => void;
@@ -15,16 +15,40 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
   const [qrCode, setQrCode] = useState<string>('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [token, setToken] = useState('');
+  const [otp, setOtp] = useState('');
   const [regenerateToken, setRegenerateToken] = useState('');
+  const [regenerateMode, setRegenerateMode] = useState<'totp' | 'email'>('totp');
+  const [isRequestingEmailOtp, setIsRequestingEmailOtp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!isRegenerate) {
+    if (isRegenerate) {
+      setStep('qr'); // We'll show the OTP input specifically for regeneration
+      handleRequestEmail();
+    } else {
+      setStep('qr');
       loadSetup();
     }
   }, [isRegenerate]);
+
+  const handleRequestEmail = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await requestEmailVerification('two_factor');
+      if (!res.success) {
+        setError(res.error || 'Failed to send verification code');
+      }
+    } catch (err) {
+      setError('Failed to send verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
 
   const loadSetup = async () => {
     setLoading(true);
@@ -44,8 +68,16 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
     }
   };
 
-  const handleRegenerateSubmit = async () => {
-    if (regenerateToken.length !== 6) {
+  const handleRegenerateSubmit = async (forceEmail = false) => {
+    const isEmail = forceEmail || regenerateMode === 'email';
+    const tokenVal = isEmail ? undefined : regenerateToken;
+    const emailOtp = isEmail ? otp : undefined;
+
+    if (!isEmail && regenerateToken.length !== 6) {
+      setError('Please enter a 6-digit code');
+      return;
+    }
+    if (isEmail && otp.length !== 6) {
       setError('Please enter a 6-digit code');
       return;
     }
@@ -53,12 +85,13 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
     setLoading(true);
     setError('');
     try {
-      const result = await regenerate2FA(regenerateToken);
+      const result = await regenerate2FA(tokenVal, emailOtp);
       if (result.success && result.data) {
         setQrCode(result.data.qrCode);
         setBackupCodes(result.data.backupCodes);
         setStep('qr');
         setRegenerateToken('');
+        setOtp('');
       } else {
         setError(result.error || 'Invalid verification code');
       }
@@ -208,7 +241,7 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
 
         {/* Regenerate Token Input */}
         {isRegenerate && step === 'qr' && !qrCode && (
-          <div>
+          <>
             <div style={{
               padding: 16,
               borderRadius: 12,
@@ -220,22 +253,67 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
             }}>
               <AlertCircle size={20} color="var(--accent)" style={{ flexShrink: 0, marginTop: 2 }} />
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                Enter your current 6-digit code from your authenticator app to regenerate your QR code.
+                {regenerateMode === 'totp' ? 'Enter your current 6-digit code from your authenticator app to regenerate your QR code.' : 'Enter the 6-digit code we sent to your email.'}
               </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginBottom: 20 }}>
+              <button
+                onClick={() => setRegenerateMode('totp')}
+                style={{
+                  background: 'none', border: 'none', padding: '4px 8px', fontSize: 13,
+                  color: regenerateMode === 'totp' ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontWeight: regenerateMode === 'totp' ? 700 : 400,
+                  borderBottom: regenerateMode === 'totp' ? '2px solid var(--accent)' : 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                App Code
+              </button>
+              <button
+                onClick={async () => {
+                  if (regenerateMode === 'email') return;
+                  setIsRequestingEmailOtp(true);
+                  setError('');
+                  try {
+                    const res = await requestEmailVerification('two_factor');
+                    if (res.success) {
+                      setRegenerateMode('email');
+                    } else {
+                      setError(res.error || 'Failed to send verification code');
+                    }
+                  } catch (err) {
+                    setError('Failed to send verification code');
+                  } finally {
+                    setIsRequestingEmailOtp(false);
+                  }
+                }}
+                disabled={isRequestingEmailOtp}
+                style={{
+                  background: 'none', border: 'none', padding: '4px 8px', fontSize: 13,
+                  color: regenerateMode === 'email' ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontWeight: regenerateMode === 'email' ? 700 : 400,
+                  borderBottom: regenerateMode === 'email' ? '2px solid var(--accent)' : 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {isRequestingEmailOtp ? 'Sending...' : 'Email OTP'}
+              </button>
             </div>
 
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-                Current Verification Code
+                {regenerateMode === 'totp' ? 'Current Verification Code' : 'Email Verification Code'}
               </label>
               <input
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
-                value={regenerateToken}
+                value={regenerateMode === 'totp' ? regenerateToken : otp}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, '');
-                  setRegenerateToken(val);
+                  if (regenerateMode === 'totp') setRegenerateToken(val);
+                  else setOtp(val);
                   setError('');
                 }}
                 placeholder="000000"
@@ -272,8 +350,8 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
             )}
 
             <button
-              onClick={handleRegenerateSubmit}
-              disabled={loading || regenerateToken.length !== 6}
+              onClick={() => handleRegenerateSubmit()}
+              disabled={loading || (regenerateMode === 'totp' ? regenerateToken.length !== 6 : otp.length !== 6)}
               style={{
                 width: '100%',
                 padding: '12px 24px',
@@ -282,17 +360,39 @@ const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({ onClose, onSu
                 background: 'linear-gradient(135deg, var(--accent) 0%, #818cf8 100%)',
                 color: '#fff',
                 fontWeight: 600,
-                cursor: loading || regenerateToken.length !== 6 ? 'not-allowed' : 'pointer',
+                cursor: loading || (regenerateMode === 'totp' ? regenerateToken.length !== 6 : otp.length !== 6) ? 'not-allowed' : 'pointer',
                 fontSize: 15,
-                opacity: loading || regenerateToken.length !== 6 ? 0.5 : 1,
+                opacity: loading || (regenerateMode === 'totp' ? regenerateToken.length !== 6 : otp.length !== 6) ? 0.5 : 1,
                 transition: 'all 0.2s ease',
                 boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
               }}
             >
               {loading ? 'Verifying...' : 'Continue'}
             </button>
-          </div>
+            {regenerateMode === 'email' && (
+              <button
+                onClick={handleRequestEmail}
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  marginTop: 12,
+                  padding: '8px',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Resend Code
+              </button>
+            )}
+          </>
         )}
+
+
+
+
 
         {/* Step 1: QR Code */}
         {step === 'qr' && qrCode && (

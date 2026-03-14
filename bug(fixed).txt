@@ -81,11 +81,17 @@ Last seen Invalid Date
     enable / disable 2FA
     regenerate / reset 
 (fixed) add delete icon on account switcher which will remove the account and signout that respective account
+(fixed) send otp & link to user email to verify user/ reset chat lock pin/ delete account/ change password (through link too)/ app lock/ two step verification
+    account switcher don't need otp (working)
+    deleting account from setting page require otp (working)
+    changing chat lock pin require otp (working)
+    forgot app lock pin require otp (working) remove reauthenticate button
+    regenerate/reset two step verification require otp
+    verify user email require otp
+(fixed) when user signin with google authentication how user will delete account it requires password to delete account, we should verify the user with google authentication to delete account
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
-(partially)when user signin with google authentication how user will delete account it requires password to delete account, we should verify the user with google authentication to delete account
-send otp & link to user email to verify user/ reset pin/ delete account/ change password (through link too)/ app lock/ two step verification
 show logged in devices and allow user to logout from specific device
 redesign calling functions and sound for calling 
 allow user to import and export chat History
