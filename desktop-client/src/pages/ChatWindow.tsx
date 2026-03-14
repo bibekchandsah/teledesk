@@ -558,7 +558,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const navigateRouter = useNavigate();
   // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
   const navigate = chatIdProp ? () => {} : navigateRouter;
-  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat } =
+  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat, setUserProfile } =
     useChatStore();
   const { currentUser, setCurrentUser } = useAuthStore();
   const { startCall } = useCallContext();
@@ -1324,7 +1324,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     const handlePeerThemeUpdate = ({ chatId, peerId, theme }: any) => {
       // Update peer's profile in userProfiles cache
-      const { setUserProfile } = useChatStore.getState();
       const peerProfile = userProfiles[peerId];
       if (peerProfile) {
         const updatedThemes = { ...peerProfile.chatThemes, [chatId]: theme };
@@ -1334,7 +1333,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     const handlePeerThemeRemove = ({ chatId, peerId }: any) => {
       // Remove theme from peer's profile
-      const { setUserProfile } = useChatStore.getState();
       const peerProfile = userProfiles[peerId];
       if (peerProfile) {
         const updatedThemes = { ...peerProfile.chatThemes };
@@ -1354,7 +1352,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       socket.off('PEER_CHAT_THEME_UPDATED', handlePeerThemeUpdate);
       socket.off('PEER_CHAT_THEME_REMOVED', handlePeerThemeRemove);
     };
-  }, [currentUser, setCurrentUser, userProfiles]);
+  }, [currentUser, setCurrentUser, userProfiles, setUserProfile]);
 
   // ─── Typing indicator ─────────────────────────────────────────────────────
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

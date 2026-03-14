@@ -491,7 +491,7 @@ export const setChatThemeHandler = async (req: Request, res: Response): Promise<
 
     // Emit socket event to sync across user's devices
     if (_io) {
-      _io.to(uid).emit('CHAT_THEME_UPDATED', { chatId, theme });
+      _io.to(`user:${uid}`).emit('CHAT_THEME_UPDATED', { chatId, theme });
       
       // If showToOthers is enabled, notify the peer
       if (theme.showToOthers) {
@@ -502,7 +502,7 @@ export const setChatThemeHandler = async (req: Request, res: Response): Promise<
           const peerUid = chat.members.find((m: string) => m !== uid);
           if (peerUid) {
             // Emit to peer so they see the theme immediately
-            _io.to(peerUid).emit('PEER_CHAT_THEME_UPDATED', { chatId, peerId: uid, theme });
+            _io.to(`user:${peerUid}`).emit('PEER_CHAT_THEME_UPDATED', { chatId, peerId: uid, theme });
           }
         }
       }
@@ -548,7 +548,7 @@ export const removeChatThemeHandler = async (req: Request, res: Response): Promi
 
     // Emit socket event to sync across user's devices
     if (_io) {
-      _io.to(uid).emit('CHAT_THEME_REMOVED', { chatId });
+      _io.to(`user:${uid}`).emit('CHAT_THEME_REMOVED', { chatId });
       
       // Notify peer that theme was removed
       const { getChatById } = await import('../services/chatService');
@@ -556,7 +556,7 @@ export const removeChatThemeHandler = async (req: Request, res: Response): Promi
       if (chat) {
         const peerUid = chat.members.find((m: string) => m !== uid);
         if (peerUid) {
-          _io.to(peerUid).emit('PEER_CHAT_THEME_REMOVED', { chatId, peerId: uid });
+          _io.to(`user:${peerUid}`).emit('PEER_CHAT_THEME_REMOVED', { chatId, peerId: uid });
         }
       }
     }

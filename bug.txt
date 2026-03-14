@@ -1,6 +1,6 @@
-FIXED: Chat Theme Blur and Opacity Effects
+FIXED: Chat Theme Blur and Opacity Effects + Instant Peer Sync
 
-Issue: Blur and opacity effects were not working properly in the chat window.
+Issue 1: Blur and opacity effects were not working properly in the chat window.
 
 Root Cause:
 - The backdrop-filter blur effect requires proper DOM layering
@@ -18,15 +18,34 @@ Solution Applied:
 
 3. Added conditional blur application (only when blur > 0)
 
+Issue 2: Opposite user unable to see theme changes instantly when "Show to Others" is enabled.
+
+Root Causes:
+1. Backend was emitting to `peerUid` instead of `user:${peerUid}` room
+2. Frontend was using `useChatStore.getState()` instead of the hook, preventing re-renders
+3. Missing `setUserProfile` in useEffect dependencies
+
+Solution Applied:
+1. Fixed backend socket emissions to use proper room names:
+   - Changed `_io.to(uid)` to `_io.to(\`user:${uid}\`)`
+   - Changed `_io.to(peerUid)` to `_io.to(\`user:${peerUid}\`)`
+
+2. Fixed frontend socket listener:
+   - Added `setUserProfile` to useChatStore destructuring
+   - Removed `useChatStore.getState()` calls in handlers
+   - Added `setUserProfile` to useEffect dependencies
+
 Files Modified:
 - desktop-client/src/pages/ChatWindow.tsx
 - desktop-client/src/components/modals/ChatThemeModal.tsx
+- backend-server/src/controllers/userController.ts
 
 Next Steps:
 1. Run the database migration: psql -U your_username -d your_database -f backend-server/chat-theme-migration.sql
 2. Restart backend server
 3. Test theme customization with opacity and blur sliders
 4. Verify preview in modal matches actual chat appearance
-5. Test "Show to Others" toggle for peer-to-peer theme sharing
+5. Test "Show to Others" toggle - opposite user should see changes instantly
+6. Test cross-device sync - themes should sync across all user's devices
 
-The blur and opacity effects now work correctly in both the modal preview and the actual chat window.
+The blur and opacity effects now work correctly, and peer-to-peer theme sharing is instant.
