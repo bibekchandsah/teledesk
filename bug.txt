@@ -58,10 +58,10 @@ Last seen Invalid Date
         at this time in device A draft is also cleared 
     it's like user should open two devices at same time for using this feature, but it should be like they came to any chat of user anytime in anydevice and will see the draft message if it's there in any devices.
     if I have written draft message for 2 users then in another device openining that user chat should show draft message 
-
+(fixed) active status database now updates every 5 minutes
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
 
 
-when user signin with google authentication how user will delete account it requires password to delete account 
+(partially)when user signin with google authentication how user will delete account it requires password to delete account, we should verify the user with google authentication to delete account

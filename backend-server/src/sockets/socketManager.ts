@@ -8,8 +8,10 @@ import { generateId, now, sanitizeString, extractClientIP } from '../utils/helpe
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import logger from '../utils/logger';
 
-// Map of userId -> socketId for presence tracking
-const onlineUsers = new Map<string, string>();
+// Map of userId -> Set of socketIds for presence tracking (supports multiple tabs)
+const onlineUsers = new Map<string, Set<string>>();
+// Map of userId -> last DB update timestamp (for throttling)
+const lastDbUpdate = new Map<string, number>();
 // Map of sessionFingerprint -> socketId for device-specific targeting
 const sessionSockets = new Map<string, string>();
 // Cache of userId -> showActiveStatus so late-joining users get accurate state
@@ -74,7 +76,12 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     const sessionFingerprint = socket.user.sessionFingerprint;
 
     logger.info(`Socket connected: ${socket.id} (user: ${uid}, session: ${sessionFingerprint})`);
-    onlineUsers.set(uid, socket.id);
+    
+    // Manage multi-socket presence
+    const userSockets = onlineUsers.get(uid) || new Set<string>();
+    const wasOffline = userSockets.size === 0;
+    userSockets.add(socket.id);
+    onlineUsers.set(uid, userSockets);
     
     // Track session fingerprint for device-specific targeting
     if (sessionFingerprint) {
@@ -82,18 +89,21 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       logger.debug(`Mapped session ${sessionFingerprint} to socket ${socket.id}`);
     }
 
-    // Update Firestore presence
-    await updatePresence(uid, 'online').catch(() => {});
+    // Only update DB and broadcast to others if this is the first connection for this user
+    if (wasOffline) {
+      await updatePresence(uid, 'online').catch(() => {});
+      lastDbUpdate.set(uid, Date.now());
 
-    // Fetch user's active-status visibility preference (default: true)
-    const userDoc = await getUserById(uid).catch(() => null);
-    const showActiveStatus = userDoc?.showActiveStatus !== false;
+      // Fetch user's active-status visibility preference (default: true)
+      const userDoc = await getUserById(uid).catch(() => null);
+      const showActiveStatus = userDoc?.showActiveStatus !== false;
 
-    // Cache for later use (ACTIVE_STATUS_CHANGED and late-joiner sync)
-    userShowStatus.set(uid, showActiveStatus);
+      // Cache for later use
+      userShowStatus.set(uid, showActiveStatus);
 
-    // Broadcast online status + visibility preference to all other connected clients
-    socket.broadcast.emit(SOCKET_EVENTS.USER_ONLINE, { userId: uid, status: 'online', showActiveStatus });
+      // Broadcast online status to all other connected clients
+      socket.broadcast.emit(SOCKET_EVENTS.USER_ONLINE, { userId: uid, status: 'online', showActiveStatus });
+    }
 
     // ── Send all currently-online users to this newly connected socket ──────
     // Without this, users who were already online before this socket connected
@@ -525,42 +535,60 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
     // ─── Heartbeat ─────────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.HEARTBEAT, () => {
-      updatePresence(uid, 'online').catch(() => {});
+      const lastUpdate = lastDbUpdate.get(uid) || 0;
+      const throttleInterval = 5 * 60 * 1000; // 5 minutes
+      if (Date.now() - lastUpdate > throttleInterval) {
+        updatePresence(uid, 'online').catch(() => {});
+        lastDbUpdate.set(uid, Date.now());
+        logger.debug(`Presence heartbeat updated in DB for user ${uid}`);
+      }
     });
 
     // ─── Disconnect ────────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.DISCONNECT, async () => {
       logger.info(`Socket disconnected: ${socket.id} (user: ${uid})`);
-      onlineUsers.delete(uid);
-      userShowStatus.delete(uid);
       
-      // Clean up session fingerprint mapping
+      const userSockets = onlineUsers.get(uid);
+      if (userSockets) {
+        userSockets.delete(socket.id);
+        
+        // Only mark user as offline if this was their last active socket (all tabs closed)
+        if (userSockets.size === 0) {
+          onlineUsers.delete(uid);
+          userShowStatus.delete(uid);
+          lastDbUpdate.delete(uid);
+          
+          await updatePresence(uid, 'offline').catch(() => {});
+          socket.broadcast.emit(SOCKET_EVENTS.USER_OFFLINE, {
+            userId: uid,
+            status: 'offline',
+            lastSeen: now(),
+          });
+          
+          // If this user was in an active call, notify the other party
+          const activeCallId = userActiveCall.get(uid);
+          if (activeCallId) {
+            const call = activeCalls.get(activeCallId);
+            if (call) {
+              const otherId = call.callerId === uid ? call.receiverId : call.callerId;
+              io.to(`user:${otherId}`).emit(SOCKET_EVENTS.CALL_ENDED, {
+                callId: activeCallId,
+                endedBy: uid,
+                byDisconnect: true,
+              });
+              activeCalls.delete(activeCallId);
+              userActiveCall.delete(otherId);
+            }
+            userActiveCall.delete(uid);
+          }
+        }
+      }
+      
+      // Always clean up session fingerprint mapping for the specific socket
       if (sessionFingerprint) {
         sessionSockets.delete(sessionFingerprint);
         logger.debug(`Removed session ${sessionFingerprint} from socket mapping`);
       }
-      // If this user was in an active call, notify the other party
-      const activeCallId = userActiveCall.get(uid);
-      if (activeCallId) {
-        const call = activeCalls.get(activeCallId);
-        if (call) {
-          const otherId = call.callerId === uid ? call.receiverId : call.callerId;
-          io.to(`user:${otherId}`).emit(SOCKET_EVENTS.CALL_ENDED, {
-            callId: activeCallId,
-            endedBy: uid,
-            byDisconnect: true,
-          });
-          activeCalls.delete(activeCallId);
-          userActiveCall.delete(otherId);
-        }
-        userActiveCall.delete(uid);
-      }
-      await updatePresence(uid, 'offline').catch(() => {});
-      socket.broadcast.emit(SOCKET_EVENTS.USER_OFFLINE, {
-        userId: uid,
-        status: 'offline',
-        lastSeen: now(),
-      });
     });
   });
 
