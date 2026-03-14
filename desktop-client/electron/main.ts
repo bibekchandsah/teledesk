@@ -221,6 +221,7 @@ const createWindow = () => {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const isAuthUrl =
       url.includes('accounts.google.com') ||
+      url.includes('github.com/login') ||
       url.includes('firebaseapp.com/__/auth') ||
       url.includes('googleapis.com');
 
@@ -233,6 +234,9 @@ const createWindow = () => {
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: false, // Disable sandbox for auth to work properly
+            webSecurity: false, // Disable web security to bypass CORS
+            partition: 'persist:auth', // Use a separate session for auth
           },
         },
       };
@@ -686,6 +690,29 @@ app.whenReady().then(() => {
 
   // Allow getUserMedia / enumerateDevices unconditionally in the renderer
   session.defaultSession.setDevicePermissionHandler(() => true);
+
+  // Configure session for Firebase OAuth - remove CORS headers
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    
+    // Remove restrictive COOP/COEP headers that block OAuth popups
+    delete responseHeaders['cross-origin-opener-policy'];
+    delete responseHeaders['cross-origin-embedder-policy'];
+    
+    callback({ responseHeaders });
+  });
+
+  // Also configure the auth partition session
+  const authSession = session.fromPartition('persist:auth');
+  authSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    
+    // Remove restrictive COOP/COEP headers
+    delete responseHeaders['cross-origin-opener-policy'];
+    delete responseHeaders['cross-origin-embedder-policy'];
+    
+    callback({ responseHeaders });
+  });
 
   createWindow();
 

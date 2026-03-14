@@ -47,6 +47,10 @@ const getSupabase = (): SupabaseClient => {
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('profile');
 googleProvider.addScope('email');
+// Force account selection every time (prevents auto-login to previous account)
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 const githubProvider = new GithubAuthProvider();
 githubProvider.addScope('read:user');
@@ -54,11 +58,14 @@ githubProvider.addScope('user:email');
 
 // ─── Auth Functions ────────────────────────────────────────────────────────
 export const signInWithGoogle = async (): Promise<FirebaseUser> => {
+  // Use popup for both web and Electron
+  // The popup will open within the Electron window
   const result = await signInWithPopup(firebaseAuth, googleProvider);
   return result.user;
 };
 
 export const signInWithGithub = async (): Promise<FirebaseUser> => {
+  // Use popup for both web and Electron
   const result = await signInWithPopup(firebaseAuth, githubProvider);
   return result.user;
 };

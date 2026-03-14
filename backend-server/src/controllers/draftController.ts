@@ -13,7 +13,14 @@ export const setIo = (io: Server) => { _io = io; };
  */
 export const saveDraftHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.uid;
+    // Check if user is authenticated
+    if (!req.user || !req.user.uid) {
+      logger.error('saveDraft: req.user is undefined or missing uid');
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const userId = req.user.uid;
     const { chatId } = req.params;
     const { content } = req.body as { content: string };
 
@@ -37,7 +44,15 @@ export const saveDraftHandler = async (req: Request, res: Response): Promise<voi
     // If it's a table not found error, return success but log warning
     if (errorMessage.includes('relation "drafts" does not exist')) {
       logger.warn('Drafts table does not exist. Feature disabled until migration is run.');
-      res.json({ success: true, data: { userId: req.user!.uid, chatId: req.params.chatId, content: req.body.content, updatedAt: new Date().toISOString() } });
+      res.json({ 
+        success: true, 
+        data: { 
+          userId: req.user?.uid || 'unknown', 
+          chatId: req.params.chatId, 
+          content: req.body.content, 
+          updatedAt: new Date().toISOString() 
+        } 
+      });
       return;
     }
     
@@ -51,7 +66,13 @@ export const saveDraftHandler = async (req: Request, res: Response): Promise<voi
  */
 export const getDraftHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.uid;
+    if (!req.user || !req.user.uid) {
+      logger.error('getDraft: req.user is undefined or missing uid');
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const userId = req.user.uid;
     const { chatId } = req.params;
 
     const draft = await getDraft(userId, chatId);
@@ -69,7 +90,13 @@ export const getDraftHandler = async (req: Request, res: Response): Promise<void
  */
 export const getUserDraftsHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.uid;
+    if (!req.user || !req.user.uid) {
+      logger.error('getUserDrafts: req.user is undefined or missing uid');
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const userId = req.user.uid;
 
     const drafts = await getUserDrafts(userId);
 
@@ -86,7 +113,13 @@ export const getUserDraftsHandler = async (req: Request, res: Response): Promise
  */
 export const deleteDraftHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user!.uid;
+    if (!req.user || !req.user.uid) {
+      logger.error('deleteDraft: req.user is undefined or missing uid');
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return;
+    }
+
+    const userId = req.user.uid;
     const { chatId } = req.params;
 
     await deleteDraft(userId, chatId);
