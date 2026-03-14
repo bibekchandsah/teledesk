@@ -68,6 +68,7 @@ const AppInner: React.FC = () => {
   
   // App lock state - check immediately on mount, before any content renders
   const [appLockReady, setAppLockReady] = React.useState(false);
+  const [isAppUnlocked, setIsAppUnlocked] = React.useState(false);
   const appUnlockedRef = useRef(false);
 
   // Check app lock status IMMEDIATELY when user data becomes available
@@ -247,11 +248,12 @@ const AppInner: React.FC = () => {
   }
 
   // Show app lock screen if enabled and not unlocked this session
-  if (currentUser?.appLockEnabled && !appUnlockedRef.current) {
+  if (currentUser?.appLockEnabled && !isAppUnlocked && !appUnlockedRef.current) {
     return (
       <AppLockScreen
         onUnlock={() => {
           appUnlockedRef.current = true;
+          setIsAppUnlocked(true);
         }}
       />
     );
