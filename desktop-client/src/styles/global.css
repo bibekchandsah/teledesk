@@ -299,6 +299,25 @@ body {
 
 /* ─── Responsive: Mobile (≤ 768px) ─────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Disable text selection on touch devices */
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Allow text selection in input fields and textareas */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
   /* Collapsible search + archived row in chat sidebar */
   .sidebar-topbar {
     max-height: 0;

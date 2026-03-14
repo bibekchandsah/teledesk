@@ -607,3 +607,36 @@ export const removeReaction = async (
   logger.info(`Reaction ${emoji} removed from ${messageId} by ${uid}`);
   return { chatId: msgData.chat_id as string, members: chatData.members as string[], reactions };
 };
+
+// ─── Get Call Logs ────────────────────────────────────────────────────────
+/**
+ * Fetch all call messages for a user across all their chats
+ */
+export const getUserCallLogs = async (uid: string): Promise<Message[]> => {
+  // Get all chat IDs where this user is a member
+  const { data: chatData } = await supabase
+    .from('chats')
+    .select('chat_id')
+    .contains('members', [uid]);
+
+  if (!chatData || chatData.length === 0) return [];
+
+  const chatIds = chatData.map((c) => c.chat_id);
+
+  // Fetch all call messages from these chats
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .in('chat_id', chatIds)
+    .eq('type', 'call')
+    .not('deleted_for', 'cs', `{${uid}}`) // Exclude messages deleted for this user
+    .order('timestamp', { ascending: false })
+    .limit(500); // Limit to last 500 call logs
+
+  if (error) {
+    logger.error(`getUserCallLogs error: ${error.message}`);
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as MessageRow[]).map(rowToMessage);
+};

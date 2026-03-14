@@ -12,6 +12,7 @@ import {
   editMessage as editMessageService,
   pinMessage as pinMessageService,
   unpinMessage as unpinMessageService,
+  getUserCallLogs,
 } from '../services/chatService';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import logger from '../utils/logger';
@@ -230,5 +231,20 @@ export const updatePins = async (req: Request, res: Response): Promise<void> => 
   } catch (error) {
     logger.error(`updatePins error: ${(error as Error).message}`);
     res.status(500).json({ success: false, error: 'Failed to update pins' });
+  }
+};
+
+/**
+ * GET /api/chats/call-logs
+ * Get all call logs for the current user
+ */
+export const getCallLogs = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const callLogs = await getUserCallLogs(uid);
+    res.json({ success: true, data: callLogs });
+  } catch (error) {
+    logger.error(`getCallLogs error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to get call logs' });
   }
 };

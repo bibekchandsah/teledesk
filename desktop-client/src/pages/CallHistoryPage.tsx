@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Phone, Video, VideoOff, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff } from 'lucide-react';
+import { Phone, Video, VideoOff, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, MoreVertical, Trash2, CheckSquare, X } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { Message } from '@shared/types';
@@ -32,16 +32,51 @@ const formatCallTime = (date: Date): string =>
   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 const CallHistoryPage: React.FC = () => {
-  const { messages, userProfiles, chats, nicknames } = useChatStore();
+  const { userProfiles, chats, nicknames } = useChatStore();
   const { currentUser } = useAuthStore();
   const navigate = useNavigate();
+
+  // State for menu and selection
+  const [showMenu, setShowMenu] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; messageId: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<'all' | 'selected' | 'single' | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [callLogs, setCallLogs] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const menuRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Load call logs from backend
+  useEffect(() => {
+    const loadCallLogs = async () => {
+      try {
+        setIsLoading(true);
+        const { getCallLogs } = await import('../services/apiService');
+        const result = await getCallLogs();
+        if (result.success && result.data) {
+          setCallLogs(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to load call logs:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (currentUser) {
+      loadCallLogs();
+    }
+  }, [currentUser]);
 
   const callEntries = useMemo<CallEntry[]>(() => {
     if (!currentUser) return [];
     const entries: CallEntry[] = [];
 
-    for (const [chatId, msgs] of Object.entries(messages)) {
-      const chat = chats.find((c) => c.chatId === chatId);
+    for (const msg of callLogs) {
+      const chat = chats.find((c) => c.chatId === msg.chatId);
       if (!chat) continue;
 
       const peerUid = chat.members.find((m) => m !== currentUser.uid) ?? '';
@@ -49,23 +84,20 @@ const CallHistoryPage: React.FC = () => {
       const peerName = nicknames[peerUid] || peer?.name || 'Unknown';
       const peerAvatar = peer?.avatar ?? '';
 
-      for (const msg of msgs) {
-        if (msg.type !== 'call') continue;
-        entries.push({
-          message: msg,
-          chatId,
-          peerName,
-          peerAvatar,
-          peerUid,
-          direction: msg.senderId === currentUser.uid ? 'outgoing' : 'incoming',
-          date: new Date(msg.timestamp),
-        });
-      }
+      entries.push({
+        message: msg,
+        chatId: msg.chatId,
+        peerName,
+        peerAvatar,
+        peerUid,
+        direction: msg.senderId === currentUser.uid ? 'outgoing' : 'incoming',
+        date: new Date(msg.timestamp),
+      });
     }
 
     // Sort newest first
     return entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [messages, userProfiles, chats, currentUser, nicknames]);
+  }, [callLogs, userProfiles, chats, currentUser, nicknames]);
 
   // Group by day label
   const grouped = useMemo(() => {
@@ -130,6 +162,116 @@ const CallHistoryPage: React.FC = () => {
     return 'var(--text-secondary)';
   };
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Toggle selection
+  const toggleSelection = (messageId: string) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select all
+  const selectAll = () => {
+    setSelectedIds(new Set(callEntries.map((e) => e.message.messageId)));
+  };
+
+  // Deselect all
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Toggle select/deselect all
+  const toggleSelectAll = () => {
+    if (selectedIds.size === callEntries.length) {
+      deselectAll();
+    } else {
+      selectAll();
+    }
+  };
+
+  // Check if all items are selected
+  const allSelected = callEntries.length > 0 && selectedIds.size === callEntries.length;
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  };
+
+  // Delete call logs
+  const deleteCallLogs = async (messageIds: string[]) => {
+    setIsDeleting(true);
+    try {
+      const { deleteMessage } = await import('../services/apiService');
+      
+      // Delete each message
+      for (const messageId of messageIds) {
+        const entry = callEntries.find((e) => e.message.messageId === messageId);
+        if (entry) {
+          await deleteMessage(entry.chatId, messageId, 'me');
+        }
+      }
+      
+      // Remove deleted logs from state
+      setCallLogs((prev) => prev.filter((log) => !messageIds.includes(log.messageId)));
+      
+      // Clear selection and close modals
+      clearSelection();
+      setShowDeleteConfirm(null);
+      setContextMenu(null);
+    } catch (error) {
+      console.error('Failed to delete call logs:', error);
+      alert('Failed to delete call logs. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handle delete all
+  const handleDeleteAll = () => {
+    setShowDeleteConfirm('all');
+  };
+
+  // Handle delete selected
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    setShowDeleteConfirm('selected');
+  };
+
+  // Handle delete single (from context menu)
+  const handleDeleteSingle = (messageId: string) => {
+    setSelectedIds(new Set([messageId]));
+    setShowDeleteConfirm('single');
+  };
+
+  // Confirm delete
+  const confirmDelete = () => {
+    if (showDeleteConfirm === 'all') {
+      deleteCallLogs(callEntries.map((e) => e.message.messageId));
+    } else if (showDeleteConfirm === 'selected' || showDeleteConfirm === 'single') {
+      deleteCallLogs(Array.from(selectedIds));
+    }
+  };
+
   return (
     <div
       style={{
@@ -149,16 +291,223 @@ const CallHistoryPage: React.FC = () => {
           padding: '20px 20px 12px',
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-          Calls
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {selectionMode && (
+            <button
+              onClick={clearSelection}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <X size={20} />
+            </button>
+          )}
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {selectionMode ? `${selectedIds.size} selected` : 'Calls'}
+          </h2>
+        </div>
+
+        <div style={{ position: 'relative' }} ref={menuRef}>
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-primary)',
+              borderRadius: 6,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <MoreVertical size={20} />
+          </button>
+
+          {showMenu && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: 4,
+                backgroundColor: 'var(--bg-primary)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                minWidth: 180,
+                zIndex: 1000,
+                overflow: 'hidden',
+              }}
+            >
+              {selectionMode ? (
+                <>
+                  <button
+                    onClick={() => {
+                      toggleSelectAll();
+                      setShowMenu(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      color: 'var(--text-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <CheckSquare size={16} />
+                    {allSelected ? 'Deselect all' : 'Select all'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDeleteSelected();
+                      setShowMenu(false);
+                    }}
+                    disabled={selectedIds.size === 0}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+                      fontSize: 14,
+                      color: selectedIds.size === 0 ? 'var(--text-secondary)' : '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      opacity: selectedIds.size === 0 ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedIds.size > 0) {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                      }
+                    }}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setSelectionMode(true);
+                      setShowMenu(false);
+                    }}
+                    disabled={callEntries.length === 0}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: callEntries.length === 0 ? 'not-allowed' : 'pointer',
+                      fontSize: 14,
+                      color: callEntries.length === 0 ? 'var(--text-secondary)' : 'var(--text-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      opacity: callEntries.length === 0 ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (callEntries.length > 0) {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                      }
+                    }}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <CheckSquare size={16} />
+                    Select call logs
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDeleteAll();
+                      setShowMenu(false);
+                    }}
+                    disabled={callEntries.length === 0}
+                    style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'none',
+                      border: 'none',
+                      textAlign: 'left',
+                      cursor: callEntries.length === 0 ? 'not-allowed' : 'pointer',
+                      fontSize: 14,
+                      color: callEntries.length === 0 ? 'var(--text-secondary)' : '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      opacity: callEntries.length === 0 ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (callEntries.length > 0) {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
+                      }
+                    }}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <Trash2 size={16} />
+                    Clear call logs
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* List */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {callEntries.length === 0 ? (
+        {isLoading ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              gap: 12,
+              color: 'var(--text-secondary)',
+              padding: 32,
+            }}
+          >
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                border: '3px solid var(--border)',
+                borderTopColor: 'var(--accent)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+            <p style={{ margin: 0, fontSize: 14 }}>Loading call logs...</p>
+          </div>
+        ) : callEntries.length === 0 ? (
           <div
             style={{
               display: 'flex',
@@ -199,7 +548,21 @@ const CallHistoryPage: React.FC = () => {
               {entries.map((entry) => (
                 <div
                   key={entry.message.messageId}
-                  onClick={() => navigate(`/chats/${entry.chatId}`)}
+                  onClick={() => {
+                    if (selectionMode) {
+                      toggleSelection(entry.message.messageId);
+                    } else {
+                      navigate(`/chats/${entry.chatId}`);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      messageId: entry.message.messageId,
+                    });
+                  }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -207,14 +570,58 @@ const CallHistoryPage: React.FC = () => {
                     padding: '10px 16px',
                     cursor: 'pointer',
                     transition: 'background 0.15s',
+                    backgroundColor: selectedIds.has(entry.message.messageId)
+                      ? 'var(--bg-secondary)'
+                      : 'transparent',
                   }}
                   onMouseEnter={(e) =>
                     (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')
                   }
                   onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = 'transparent')
+                    (e.currentTarget.style.backgroundColor = selectedIds.has(entry.message.messageId)
+                      ? 'var(--bg-secondary)'
+                      : 'transparent')
                   }
                 >
+                  {/* Selection checkbox */}
+                  {selectionMode && (
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 4,
+                        border: `2px solid ${
+                          selectedIds.has(entry.message.messageId) ? 'var(--accent)' : 'var(--border)'
+                        }`,
+                        backgroundColor: selectedIds.has(entry.message.messageId)
+                          ? 'var(--accent)'
+                          : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {selectedIds.has(entry.message.messageId) && (
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            d="M10 3L4.5 8.5L2 6"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  )}
+
                   {/* Avatar */}
                   <div style={{ flexShrink: 0 }}>
                     <UserAvatar name={entry.peerName} avatar={entry.peerAvatar} size={44} />
@@ -271,6 +678,120 @@ const CallHistoryPage: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            minWidth: 160,
+            zIndex: 10000,
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            onClick={() => handleDeleteSingle(contextMenu.messageId)}
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              background: 'none',
+              border: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontSize: 14,
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Trash2 size={16} />
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001,
+          }}
+          onClick={() => !isDeleting && setShowDeleteConfirm(null)}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+              Delete Call Log{showDeleteConfirm === 'all' || selectedIds.size > 1 ? 's' : ''}?
+            </h3>
+            <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {showDeleteConfirm === 'all'
+                ? `Are you sure you want to delete all ${callEntries.length} call logs? This action cannot be undone.`
+                : showDeleteConfirm === 'selected'
+                ? `Are you sure you want to delete ${selectedIds.size} selected call log${selectedIds.size > 1 ? 's' : ''}? This action cannot be undone.`
+                : 'Are you sure you want to delete this call log? This action cannot be undone.'}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                disabled={isDeleting}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: 'none',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  color: 'var(--text-primary)',
+                  opacity: isDeleting ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: '#ef4444',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  color: '#fff',
+                  opacity: isDeleting ? 0.5 : 1,
+                }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

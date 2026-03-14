@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { getChats, createOrGetPrivateChat, getChatMessages, markChatRead, deleteChat, deleteMessage, editMessage, updatePins } from '../controllers/chatController';
+import { getChats, createOrGetPrivateChat, getChatMessages, markChatRead, deleteChat, deleteMessage, editMessage, updatePins, getCallLogs } from '../controllers/chatController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
 
@@ -10,6 +10,9 @@ router.use(authenticateToken);
 
 // GET /api/chats
 router.get('/', getChats);
+
+// GET /api/chats/call-logs
+router.get('/call-logs', getCallLogs);
 
 // POST /api/chats/private
 router.post(

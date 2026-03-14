@@ -132,6 +132,8 @@ export const searchUsers = (query: string) =>
 
 export const getChats = () => authFetch<Chat[]>('/api/chats');
 
+export const getCallLogs = () => authFetch<Message[]>('/api/chats/call-logs');
+
 export const createPrivateChat = (targetUid: string) =>
   authFetch<Chat>('/api/chats/private', {
     method: 'POST',
