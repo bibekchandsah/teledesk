@@ -15,6 +15,8 @@ interface UIState {
   showLocked: boolean;
   isUnlocked: boolean;
   pinModal: { mode: 'setup' | 'verify' | 'reset' | 'change', chatId?: string } | null;
+  toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null;
+  setToast: (toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null) => void;
 
   setSidebarOpen: (open: boolean) => void;
   setSelectedMicId: (id: string) => void;
@@ -47,6 +49,9 @@ export const useUIStore = create<UIState>((set) => ({
   showLocked: false,
   isUnlocked: false,
   pinModal: null,
+  toast: null,
+
+  setToast: (toast) => set({ toast }),
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSelectedMicId: (id) => {

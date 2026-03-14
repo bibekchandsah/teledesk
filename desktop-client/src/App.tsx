@@ -46,6 +46,8 @@ import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
 import { useBookmarkStore } from './store/bookmarkStore';
 import PinModal from './components/modals/PinModal';
+import ToastProvider from './components/ToastProvider';
+import NetworkListener from './components/NetworkListener';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
@@ -428,6 +430,10 @@ const AppInner: React.FC = () => {
               onCancel={() => setPinModal(null)}
             />
           )}
+
+          {/* Global Notifications & Listeners */}
+          <ToastProvider />
+          <NetworkListener />
         </div>
       </CallProvider>
     </SocketProvider>
