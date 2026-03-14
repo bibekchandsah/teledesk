@@ -2,11 +2,17 @@ import nodemailer from 'nodemailer';
 import logger from '../utils/logger';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // Or use SMTP settings from env
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '465'),
+  secure: true, // Use SSL/TLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Increase timeouts for production environments like Railway
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 30000,
 });
 
 export const sendEmail = async (to: string, subject: string, html: string) => {
