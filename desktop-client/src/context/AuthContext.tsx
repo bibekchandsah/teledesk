@@ -37,75 +37,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [show2FAVerify, setShow2FAVerify] = useState(false);
   const [pending2FAUser, setPending2FAUser] = useState<FirebaseUser | null>(null);
   const pendingDisplayNameRef = useRef<string | null>(null);
+  const isManualLoginRef = useRef(false); // Track if this is a manual login vs auto-restore
   const { setCurrentUser, setLoading, setError, logout: storeLogout } = useAuthStore();
   const { setUserProfile } = useChatStore();
   const { addAccount, setActiveAccount } = useMultiAccountStore();
-
-  // Check if user has verified 2FA in this session
-  const is2FAVerifiedInSession = (uid: string): boolean => {
-    try {
-      const verified = sessionStorage.getItem('2fa_verified_uid');
-      return verified === uid;
-    } catch {
-      return false;
-    }
-  };
-
-  // Mark user as 2FA verified in this session
-  const mark2FAVerified = (uid: string): void => {
-    try {
-      sessionStorage.setItem('2fa_verified_uid', uid);
-    } catch (err) {
-      console.error('Failed to save 2FA session:', err);
-    }
-  };
-
-  // Clear 2FA verification status
-  const clear2FAVerification = (): void => {
-    try {
-      sessionStorage.removeItem('2fa_verified_uid');
-    } catch (err) {
-      console.error('Failed to clear 2FA session:', err);
-    }
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
       setFirebaseUser(fbUser);
 
       if (fbUser) {
-        // Check if user already verified 2FA in this session
-        if (is2FAVerifiedInSession(fbUser.uid)) {
-          // Already verified in this session, proceed with login
-          await completeLogin(fbUser);
-          return;
-        }
-
-        // Check if 2FA is enabled for this user
-        try {
-          const token = await fbUser.getIdToken();
-          const result = await get2FAStatus();
-          
-          if (result.success && result.data?.enabled) {
-            // 2FA is enabled - show verification modal
-            setPending2FAUser(fbUser);
-            setShow2FAVerify(true);
-            setLoading(false);
-            return; // Don't proceed with login until 2FA is verified
+        // Only check 2FA on manual login, not on page reload/auto-restore
+        if (isManualLoginRef.current) {
+          // This is a manual login - check if 2FA is enabled
+          try {
+            const token = await fbUser.getIdToken();
+            const result = await get2FAStatus();
+            
+            if (result.success && result.data?.enabled) {
+              // 2FA is enabled - show verification modal
+              setPending2FAUser(fbUser);
+              setShow2FAVerify(true);
+              setLoading(false);
+              isManualLoginRef.current = false; // Reset flag
+              return; // Don't proceed with login until 2FA is verified
+            }
+          } catch (err) {
+            console.error('[Auth] Failed to check 2FA status:', err);
+            // Continue with login if 2FA check fails
           }
-        } catch (err) {
-          console.error('[Auth] Failed to check 2FA status:', err);
-          // Continue with login if 2FA check fails
+          
+          // Reset manual login flag
+          isManualLoginRef.current = false;
         }
 
-        // No 2FA or 2FA check failed - proceed with normal login
+        // No 2FA or page reload - proceed with normal login
         await completeLogin(fbUser);
       } else {
         setCurrentUser(null);
         disconnectSocket();
         clearAllKeys();
-        // Clear 2FA session tracking on logout
-        clear2FAVerification();
       }
     });
 
@@ -189,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           setLoading(true);
           setError(null);
+          isManualLoginRef.current = true; // Mark as manual login
           
           const startSignIn = Date.now();
           await signInWithCustomToken(token);
@@ -201,6 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('[Auth] External token login failed:', err);
           setLoading(false);
           setError((err as Error).message);
+          isManualLoginRef.current = false; // Reset on error
         }
       });
       return cleanup;
@@ -211,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       setError(null);
+      isManualLoginRef.current = true; // Mark as manual login
 
       // If in Electron, use the system browser
       if (window.electronAPI) {
@@ -223,6 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       setLoading(false);
       setError((err as Error).message);
+      isManualLoginRef.current = false; // Reset on error
     }
   };
 
@@ -230,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       setError(null);
+      isManualLoginRef.current = true; // Mark as manual login
 
       // If in Electron, use the system browser
       if (window.electronAPI) {
@@ -242,6 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       setLoading(false);
       setError((err as Error).message);
+      isManualLoginRef.current = false; // Reset on error
     }
   };
 
@@ -249,10 +226,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       setError(null);
+      isManualLoginRef.current = true; // Mark as manual login
       await signInWithEmail(email, password);
     } catch (err) {
       setLoading(false);
       setError((err as Error).message);
+      isManualLoginRef.current = false; // Reset on error
     }
   };
 
@@ -278,9 +257,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearAllKeys();
       storeLogout();
       
-      // Clear 2FA session tracking
-      clear2FAVerification();
-      
       // Don't clear multi-account store when switching accounts
       if (!switchingAccount) {
         // User is fully logging out, not switching
@@ -294,8 +270,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handle2FASuccess = async () => {
     setShow2FAVerify(false);
     if (pending2FAUser) {
-      // Mark this session as verified
-      mark2FAVerified(pending2FAUser.uid);
       await completeLogin(pending2FAUser);
       setPending2FAUser(null);
     }
