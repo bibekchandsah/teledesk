@@ -9,6 +9,7 @@ import {
   signOutUser,
   getUserProfile,
   upsertUserProfile,
+  signInWithCustomToken,
 } from '../services/firebaseService';
 import { syncUserProfile } from '../services/apiService';
 import { initSocket, disconnectSocket } from '../services/socketService';
@@ -128,10 +129,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, [setCurrentUser, setLoading, setError]);
 
+  // Handle external auth tokens (Deep Linking)
+  useEffect(() => {
+    if (window.electronAPI) {
+      const cleanup = window.electronAPI.onAuthExternalToken(async (token: string) => {
+        try {
+          setLoading(true);
+          setError(null);
+          await signInWithCustomToken(token);
+        } catch (err) {
+          setLoading(false);
+          setError((err as Error).message);
+        }
+      });
+      return cleanup;
+    }
+  }, [setLoading, setError]);
+
   const loginWithGoogle = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
+
+      // If in Electron, use the system browser
+      if (window.electronAPI) {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/google`);
+        return;
+      }
+
       await signInWithGoogle();
     } catch (err) {
       setLoading(false);
@@ -143,6 +169,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setLoading(true);
       setError(null);
+
+      // If in Electron, use the system browser
+      if (window.electronAPI) {
+        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/github`);
+        return;
+      }
+
       await signInWithGithub();
     } catch (err) {
       setLoading(false);

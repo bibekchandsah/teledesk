@@ -15,6 +15,7 @@ import {
   User as FirebaseUser,
   sendPasswordResetEmail,
   deleteUser,
+  signInWithCustomToken as firebaseSignInWithCustomToken,
 } from 'firebase/auth';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Message, Chat } from '@shared/types';
@@ -86,6 +87,11 @@ export const signUpWithEmail = async (
   // Reload the user to ensure displayName is available
   await result.user.reload();
   
+  return result.user;
+};
+
+export const signInWithCustomToken = async (token: string): Promise<FirebaseUser> => {
+  const result = await firebaseSignInWithCustomToken(firebaseAuth, token);
   return result.user;
 };
 

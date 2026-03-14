@@ -100,6 +100,51 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.teledesk.app');
 }
 
+// ─── Deep Linking / Custom Protocol ────────────────────────────────────────
+const PROTOCOL = 'teledesk';
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+const handleDeepLink = (url: string) => {
+  if (!url) return;
+  console.log('[DeepLink] Received URL:', url);
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol === `${PROTOCOL}:` && parsedUrl.hostname === 'auth') {
+      const token = parsedUrl.searchParams.get('token');
+      if (token && mainWindow) {
+        mainWindow.webContents.send('auth:external-token', token);
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  } catch (e) {
+    console.error('[DeepLink] Failed to parse URL:', e);
+  }
+};
+
+// Handle deep links when app is already running
+app.on('second-instance', (event, commandLine) => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  // Windows/Linux: handle deep link from command line
+  const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+  if (url) handleDeepLink(url);
+});
+
+// macOS: Handle deep link
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
 // Register our AUMID in the Windows registry so notifications show
 // the correct app name ("TeleDesk") and icon instead of the raw AUMID string.
 const registerWindowsAUMID = () => {
@@ -657,7 +702,12 @@ ipcMain.on('call:force-close', () => {
 
 
 // ─── App Lifecycle ─────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.whenReady().then(() => {
   registerWindowsAUMID();
 
   // Grant camera & microphone permissions for the renderer
@@ -735,3 +785,4 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   tray?.destroy();
 });
+}

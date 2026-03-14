@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.off('notification:reply', handler);
   },
 
+  // Auth
+  onAuthExternalToken: (cb: (token: string) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, token: string) => cb(token);
+    ipcRenderer.on('auth:external-token', handler);
+    return () => ipcRenderer.off('auth:external-token', handler);
+  },
+
   // Window controls
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
@@ -188,6 +195,7 @@ export interface ElectronAPI {
   acceptIncomingCallFromWindow?: () => void;
   rejectIncomingCallFromWindow?: () => void;
   closeIncomingCallWindow?: () => void;
+  onAuthExternalToken: (cb: (token: string) => void) => () => void;
   copyImageToClipboard: (url: string) => Promise<boolean>;
   copyTextToClipboard: (text: string) => void;
   openExternalUrl: (url: string) => Promise<boolean>;
