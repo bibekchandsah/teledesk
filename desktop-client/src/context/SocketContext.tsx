@@ -10,6 +10,7 @@ import { useUIStore } from '../store/uiStore';
 import { showNotification } from '../services/notificationService';
 import { Message, SavedMessage, User } from '@shared/types';
 import { useBookmarkStore } from '../store/bookmarkStore';
+import { useDraftStore } from '../store/draftStore';
 
 interface SocketContextValue {
   isConnected: boolean;
@@ -347,6 +348,17 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setUserProfile(user);
     };
 
+    // ─── Draft sync (cross-device) ──────────────────────────────────────────
+    const handleDraftUpdated = (draft: { chatId: string; content: string }) => {
+      console.log('[Draft] Received draft update:', draft);
+      useDraftStore.getState().setDraft(draft.chatId, draft.content);
+    };
+
+    const handleDraftDeleted = (data: { chatId: string }) => {
+      console.log('[Draft] Received draft deletion:', data);
+      useDraftStore.getState().clearDraft(data.chatId);
+    };
+
     socket.on(SOCKET_EVENTS.NEW_MESSAGE, handleNewMessage);
     socket.on(SOCKET_EVENTS.MESSAGE_READ_RECEIPT, handleReadReceipt);
     socket.on(SOCKET_EVENTS.MESSAGE_DELIVERED, handleDelivered);
@@ -366,6 +378,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
     socket.on(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
     socket.on(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
+    socket.on(SOCKET_EVENTS.DRAFT_UPDATED, handleDraftUpdated);
+    socket.on(SOCKET_EVENTS.DRAFT_DELETED, handleDraftDeleted);
 
     isConnectedRef.current = socket.connected;
 
@@ -389,6 +403,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.SESSION_REVOKED, handleSessionRevoked);
       socket.off(SOCKET_EVENTS.FORCE_LOGOUT, handleForceLogout);
       socket.off(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
+      socket.off(SOCKET_EVENTS.DRAFT_UPDATED, handleDraftUpdated);
+      socket.off(SOCKET_EVENTS.DRAFT_DELETED, handleDraftDeleted);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
 

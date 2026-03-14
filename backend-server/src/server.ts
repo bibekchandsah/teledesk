@@ -14,9 +14,11 @@ import fileRoutes from './routes/fileRoutes';
 import savedMessagesRoutes from './routes/savedMessagesRoutes';
 import deviceSessionRoutes from './routes/deviceSessionRoutes';
 import authRoutes from './routes/authRoutes';
+import draftRoutes from './routes/draftRoutes';
 import { initializeSocket } from './sockets/socketManager';
 import { setIo as setUserIo } from './controllers/userController';
 import { setIo } from './controllers/chatController';
+import { setIo as setDraftIo } from './controllers/draftController';
 import logger from './utils/logger';
 import fs from 'fs';
 
@@ -61,6 +63,7 @@ app.use('/api/files', fileRoutes);
 app.use('/api/saved-messages', savedMessagesRoutes);
 app.use('/api/device-sessions', deviceSessionRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/drafts', draftRoutes);
 
 // ─── Debug route to verify deployment ──────────────────────────────────────
 app.get('/api/debug/routes', (_req, res) => {
@@ -86,6 +89,7 @@ app.use(errorHandler);
 const io = initializeSocket(httpServer);
 setIo(io);
 setUserIo(io);
+setDraftIo(io);
 
 // ─── Start Server ──────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 3001;

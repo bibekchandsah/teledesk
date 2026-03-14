@@ -20,6 +20,7 @@ import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
+import { useDraftStore } from '../store/draftStore';
 import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
@@ -591,6 +592,70 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [inputText, setInputText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // ─── Draft management ────────────────────────────────────────────────────
+  const { getDraft, setDraft: setDraftInStore, clearDraft } = useDraftStore();
+  const draftSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load draft when chat changes
+  useEffect(() => {
+    if (!chatId) return;
+    const draft = getDraft(chatId);
+    setInputText(draft);
+  }, [chatId, getDraft]);
+
+  // Listen for draft updates from other devices
+  useEffect(() => {
+    if (!chatId) return;
+    
+    const unsubscribe = useDraftStore.subscribe((state, prevState) => {
+      const currentDraft = state.drafts[chatId];
+      const prevDraft = prevState.drafts[chatId];
+      
+      // Only update if the draft changed and we're on the same chat
+      if (currentDraft !== prevDraft && currentDraft !== undefined) {
+        setInputText(currentDraft);
+      }
+    });
+
+    return unsubscribe;
+  }, [chatId]);
+
+  // Save draft to backend with debounce
+  const saveDraftToBackend = useCallback(async (chatId: string, content: string) => {
+    try {
+      console.log('[Draft] Saving to backend:', { chatId, content: content.substring(0, 50) });
+      const { saveDraft } = await import('../services/apiService');
+      const result = await saveDraft(chatId, content);
+      console.log('[Draft] Saved successfully:', result);
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+    }
+  }, []);
+
+  // Update draft when input changes
+  useEffect(() => {
+    if (!chatId) return;
+    
+    // Update local store immediately
+    setDraftInStore(chatId, inputText);
+
+    // Debounce backend save
+    if (draftSaveTimeoutRef.current) {
+      clearTimeout(draftSaveTimeoutRef.current);
+    }
+
+    draftSaveTimeoutRef.current = setTimeout(() => {
+      saveDraftToBackend(chatId, inputText);
+    }, 1000); // Save after 1 second of inactivity
+
+    return () => {
+      if (draftSaveTimeoutRef.current) {
+        clearTimeout(draftSaveTimeoutRef.current);
+      }
+    };
+  }, [inputText, chatId, setDraftInStore, saveDraftToBackend]);
+
   // ─── Chat header three-dot menu ──────────────────────────────────────────
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
@@ -1315,6 +1380,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     });
     setInputText('');
     setReplyingTo(null);
+
+    // Clear draft after sending
+    if (chatId) {
+      clearDraft(chatId);
+      saveDraftToBackend(chatId, '');
+    }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTyping(chatId, false, currentUser.name);

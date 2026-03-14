@@ -69,6 +69,10 @@ export const SOCKET_EVENTS = {
   // Device session management
   SESSION_REVOKED: 'session_revoked',
   FORCE_LOGOUT: 'force_logout',
+
+  // Draft messages (cross-device sync)
+  DRAFT_UPDATED: 'draft_updated',
+  DRAFT_DELETED: 'draft_deleted',
 } as const;
 
 export type SocketEvent = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];

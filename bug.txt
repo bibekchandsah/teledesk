@@ -50,9 +50,10 @@ Last seen Invalid Date
 (fixed) show warning modal for 'delete for me" and "delete for everyone" in sidebar
 (fixed) show warning modal for 'delete for me" and "delete for everyone" in chat window three dot menu
 (fixed) avatar is not shown in notification as profile picture if there is no profile picture - now generates default avatar
+(fixed) draft message across the device - messages are now saved and synced across all devices 
 
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
 logged in with google and redirect to default browser for logged in same like other window app does for login it redirects to default browser and gets login in own application
-draft message across the device
+

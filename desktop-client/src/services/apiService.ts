@@ -85,6 +85,32 @@ export const deleteMyAccount = () =>
     method: 'DELETE',
   });
 
+// ─── Draft API ─────────────────────────────────────────────────────────────
+
+export interface Draft {
+  userId: string;
+  chatId: string;
+  content: string;
+  updatedAt: string;
+}
+
+export const saveDraft = (chatId: string, content: string) =>
+  authFetch<Draft>(`/api/drafts/${chatId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+
+export const getDraft = (chatId: string) =>
+  authFetch<Draft | null>(`/api/drafts/${chatId}`);
+
+export const getAllDrafts = () =>
+  authFetch<Draft[]>('/api/drafts');
+
+export const deleteDraft = (chatId: string) =>
+  authFetch(`/api/drafts/${chatId}`, {
+    method: 'DELETE',
+  });
+
 export const uploadAvatar = async (file: File): Promise<ApiResponse<{ url: string }>> => {
   const token = await getIdToken();
   const formData = new FormData();

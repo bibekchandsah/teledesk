@@ -110,6 +110,23 @@ const AppInner: React.FC = () => {
     if (!uid) return;
     useBookmarkStore.getState().initializeForUser(uid).catch(() => {});
     
+    // Load drafts from backend
+    import('./services/apiService').then(async (api) => {
+      try {
+        const result = await api.getAllDrafts();
+        if (result.success && result.data) {
+          const { useDraftStore } = await import('./store/draftStore');
+          const draftsMap: Record<string, string> = {};
+          result.data.forEach(draft => {
+            draftsMap[draft.chatId] = draft.content;
+          });
+          useDraftStore.getState().setDrafts(draftsMap);
+        }
+      } catch (error) {
+        console.error('Failed to load drafts:', error);
+      }
+    });
+    
     // Request notification permission
     import('./services/notificationService').then(m => m.requestNotificationPermission());
   }, [isAuthenticated, currentUser?.uid]);
