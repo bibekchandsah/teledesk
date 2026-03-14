@@ -351,7 +351,7 @@ const PinModal: React.FC<PinModalProps> = ({ mode, onSuccess, onCancel }) => {
                 {getButtonText()}
               </button>
 
-              {mode === 'verify' && step === 'input' && (
+              {((mode === 'verify' && step === 'input') || (mode === 'change' && step === 'verify-current')) && (
                 <button 
                   type="button" 
                   onClick={() => setStep('forgot')}

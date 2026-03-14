@@ -61,9 +61,11 @@ Last seen Invalid Date
 (fixed) active status database now updates every 5 minutes
 (fixed) delete call logs (individually, selected, all logs)
 (fixed) user have to manually open chat then navigate to call log to see call logs which is taking time to load call logs, load it without opening individually chats
-(fixed) for touch device disable selecting text globally
-(fixed) user have to manually open chat then navigate to call log to see call logs which is taking time to load call logs, load it without opening individually chats
 (fixed) for touch device disable selecting text globally except input box
+(fixed) in setting change pin don't has option to forgot pin
+(fixed) scrolling down in sidebar should show (search, archieve, locked folders) as like pulling down for touch devices
+(fixed) respect showing when user is on top not just scrolling up, so that user must be on top for pulling it or scrolling it
+(fixed) add scrolling for those also who don't have scrolling area and scrolling will pull down as like for touch devices
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
@@ -71,6 +73,7 @@ add flip camera in pip camera and hide icon after 3 second of mouse inactive
 
 (partially)when user signin with google authentication how user will delete account it requires password to delete account, we should verify the user with google authentication to delete account
 send otp to user email to verify user/ reset pin/ delete account/ change password (through link too)
-in setting change pin don't has option to forgot pin
-scrolling down in sidebar should show (search, archieve, locked folders) as like pulling down for touch devices
-
+show logged in devices and allow user to logout from specific device
+redesign calling functions and sound for calling 
+allow user to import and export chat history
+online status for small devices (no text or in short description)

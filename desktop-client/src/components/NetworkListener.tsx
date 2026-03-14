@@ -7,7 +7,8 @@ const NetworkListener: React.FC = () => {
   useEffect(() => {
     const handleOnline = () => {
       setToast({
-        message: 'You are back online. Connection restored.',
+        // message: 'You are back online. Connection restored.',
+        message: '!! Connection restored !!.',
         type: 'online',
         sticky: false,
       });
@@ -15,7 +16,8 @@ const NetworkListener: React.FC = () => {
 
     const handleOffline = () => {
       setToast({
-        message: 'You are offline. Please check your internet connection.',
+        // message: 'You are offline. Please check your internet connection.',
+        message: 'Connection lost!',
         type: 'offline',
         sticky: true,
       });

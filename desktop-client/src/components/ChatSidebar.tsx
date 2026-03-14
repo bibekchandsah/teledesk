@@ -41,11 +41,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const [confirmDelete, setConfirmDelete] = useState<{ chatId: string; scope: 'me' | 'both' } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showTopBar, setShowTopBar] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
   const ctxRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const lastScrollTopRef = useRef(0);
   const cooldownRef = useRef(false);       // prevents flicker on layout reflow
   const touchStartYRef = useRef<number | null>(null);
+  const isPullingRef = useRef(false);
 
   // Re-show top-bar when user types a search query
   useEffect(() => { if (searchQuery) setShowTopBar(true); }, [searchQuery]);
@@ -61,31 +63,93 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     });
   }, []);
 
-  // Scroll handler — hides on scroll-down, reveals on scroll-up
+  // Scroll handler — shows topbar only when at the top, hides when scrolling down
   const handleListScroll = useCallback(() => {
     const el = chatListRef.current;
     if (!el) return;
     const current = el.scrollTop;
     const diff = current - lastScrollTopRef.current;
     lastScrollTopRef.current = current;
-    if (diff > 10) setTopBarSafe(false);
-    else if (diff < -10 || current < 5) setTopBarSafe(true);
+    
+    // Show topbar only when at the top (within 5px)
+    if (current < 5) {
+      setTopBarSafe(true);
+    } 
+    // Hide topbar when scrolling down
+    else if (diff > 10) {
+      setTopBarSafe(false);
+    }
   }, [setTopBarSafe]);
 
-  // Touch handlers — swipe-down reveals even when list isn't scrollable
+  // Wheel handler — for desktop users, allow pull-down effect with mouse wheel
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const el = chatListRef.current;
+    if (!el) return;
+    
+    const atTop = el.scrollTop < 5;
+    const isScrollable = el.scrollHeight > el.clientHeight;
+    
+    // If at top or not scrollable, and scrolling up (negative deltaY), show topbar
+    if ((atTop || !isScrollable) && e.deltaY < 0) {
+      setTopBarSafe(true);
+    }
+    // Scrolling down hides the topbar
+    else if (e.deltaY > 0) {
+      setTopBarSafe(false);
+    }
+  }, [setTopBarSafe]);
+
+  // Touch handlers — pull-down reveals only when at top, swipe-up hides anywhere
+  // Works even when there's no scrollable area
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const el = chatListRef.current;
+    if (!el) return;
+    
+    // Always capture touch start for swipe detection
     touchStartYRef.current = e.touches[0].clientY;
+    isPullingRef.current = false;
   }, []);
+
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (touchStartYRef.current === null) return;
     const el = chatListRef.current;
-    const atTop = !el || el.scrollTop < 5;
+    if (!el) return;
+    
+    const atTop = el.scrollTop < 5;
+    const isScrollable = el.scrollHeight > el.clientHeight;
     const deltaY = e.touches[0].clientY - touchStartYRef.current;
-    if (atTop && deltaY > 45) setTopBarSafe(true);   // pull-down at top
-    else if (deltaY < -45) setTopBarSafe(false);      // swipe-up anywhere
+    
+    // Swipe-up hides the topbar (works anywhere)
+    if (deltaY < -45) {
+      setPullDistance(0);
+      setTopBarSafe(false);
+    }
+    // Pull-down to reveal (only works at top or when not scrollable)
+    else if ((atTop || !isScrollable) && deltaY > 0) {
+      // Prevent default scroll behavior when pulling down
+      if (deltaY > 10) {
+        e.preventDefault();
+        isPullingRef.current = true;
+      }
+      
+      // Apply resistance effect (diminishing returns as you pull further)
+      const resistance = 0.4;
+      const adjustedDistance = Math.min(deltaY * resistance, 80);
+      setPullDistance(adjustedDistance);
+      
+      // Reveal topbar when pulled enough
+      if (deltaY > 60) {
+        setTopBarSafe(true);
+      }
+    }
   }, [setTopBarSafe]);
+
   const handleTouchEnd = useCallback(() => {
     touchStartYRef.current = null;
+    isPullingRef.current = false;
+    
+    // Animate back to original position
+    setPullDistance(0);
   }, []);
 
   // Close context menu on outside click
@@ -305,6 +369,35 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         )}
       </div>
 
+      {/* Pull-to-reveal indicator */}
+      {pullDistance > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: pullDistance,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary)',
+            fontSize: 12,
+            opacity: Math.min(pullDistance / 60, 1),
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        >
+          <ChevronLeft 
+            size={16} 
+            style={{ 
+              transform: 'rotate(90deg)',
+              transition: 'transform 0.2s ease',
+            }} 
+          />
+        </div>
+      )}
+
       {/* Search + Folders — collapses on scroll-down on mobile */}
       {!showArchived && !showLocked && (
         <div className={`sidebar-topbar${showTopBar ? '' : ' sidebar-topbar--hidden'}`}>
@@ -392,10 +485,16 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       <div
         ref={chatListRef}
         onScroll={handleListScroll}
+        onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ flex: 1, overflowY: 'auto' }}
+        style={{ 
+          flex: 1, 
+          overflowY: 'auto',
+          transform: `translateY(${pullDistance}px)`,
+          transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none',
+        }}
       >
         {/* ─── Filtered Chats View ──────────────────────────────────────── */}
         {(showArchived || showLocked) && filteredChats.length === 0 && (
