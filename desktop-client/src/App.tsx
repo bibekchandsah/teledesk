@@ -66,9 +66,20 @@ const AppInner: React.FC = () => {
   const isCallWindow = location.pathname.startsWith('/call-window');
   const isIncomingCallWindow = location.pathname.startsWith('/incoming-call');
   
-  // App lock state - persists until app exit
-  const [isAppLocked, setIsAppLocked] = React.useState(true);
+  // App lock state - check immediately on mount, before any content renders
+  const [appLockReady, setAppLockReady] = React.useState(false);
   const appUnlockedRef = useRef(false);
+
+  // Check app lock status IMMEDIATELY when user data becomes available
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      // User data is loaded, we can now determine if app lock should show
+      setAppLockReady(true);
+    } else if (!isAuthenticated && !isLoading) {
+      // Not authenticated and not loading, safe to proceed
+      setAppLockReady(true);
+    }
+  }, [isAuthenticated, currentUser, isLoading]);
 
   // Apply theme immediately (before first paint)
   document.documentElement.setAttribute('data-theme', theme);
@@ -110,15 +121,6 @@ const AppInner: React.FC = () => {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Check app lock on mount
-  useEffect(() => {
-    if (isAuthenticated && currentUser?.appLockEnabled && !appUnlockedRef.current) {
-      setIsAppLocked(true);
-    } else {
-      setIsAppLocked(false);
-    }
-  }, [isAuthenticated, currentUser?.appLockEnabled]);
 
   // Hydrate Saved Messages from cloud (sync across devices)
   useEffect(() => {
@@ -223,12 +225,32 @@ const AppInner: React.FC = () => {
     );
   }
 
+  // CRITICAL: Wait for app lock check to complete before showing ANY content
+  // This prevents the sidebar/chat flash when app lock is enabled
+  if (!appLockReady) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-primary)',
+        }}
+      >
+        <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <Loader2 size={48} style={{ marginBottom: 16, opacity: 0.5, animation: 'spin 1s linear infinite' }} />
+          <p>Loading TeleDesk...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Show app lock screen if enabled and not unlocked this session
-  if (isAppLocked && currentUser?.appLockEnabled) {
+  if (currentUser?.appLockEnabled && !appUnlockedRef.current) {
     return (
       <AppLockScreen
         onUnlock={() => {
-          setIsAppLocked(false);
           appUnlockedRef.current = true;
         }}
       />
