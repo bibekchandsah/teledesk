@@ -31,9 +31,15 @@ export const saveDraftHandler = async (req: Request, res: Response): Promise<voi
 
     const draft = await saveDraft(userId, chatId, content);
 
-    // Notify other devices of this user about the draft update
+    // Notify other devices of this user about the draft update or deletion
     if (_io) {
-      _io.to(`user:${userId}`).emit(SOCKET_EVENTS.DRAFT_UPDATED, draft);
+      if (draft.content === '') {
+        // Draft was deleted (empty content)
+        _io.to(`user:${userId}`).emit(SOCKET_EVENTS.DRAFT_DELETED, { chatId });
+      } else {
+        // Draft was updated
+        _io.to(`user:${userId}`).emit(SOCKET_EVENTS.DRAFT_UPDATED, draft);
+      }
     }
 
     res.json({ success: true, data: draft });

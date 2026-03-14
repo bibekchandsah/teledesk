@@ -597,12 +597,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const { getDraft, setDraft: setDraftInStore, clearDraft } = useDraftStore();
   const draftSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load draft when chat changes
+  // Load draft when chat changes - fetch from backend to ensure sync across devices
   useEffect(() => {
     if (!chatId) return;
-    const draft = getDraft(chatId);
-    setInputText(draft);
-  }, [chatId, getDraft]);
+    
+    // First, load from local store immediately for instant UI
+    const localDraft = getDraft(chatId);
+    setInputText(localDraft);
+    
+    // Then fetch from backend to get the latest draft from any device
+    import('../services/apiService').then(async (api) => {
+      try {
+        const result = await api.getDraft(chatId);
+        if (result.success) {
+          const backendDraft = result.data?.content || '';
+          // Update local store and UI with backend draft
+          setDraftInStore(chatId, backendDraft);
+          setInputText(backendDraft);
+        }
+      } catch (error) {
+        console.error('Failed to fetch draft from backend:', error);
+      }
+    });
+  }, [chatId, getDraft, setDraftInStore]);
 
   // Listen for draft updates from other devices
   useEffect(() => {

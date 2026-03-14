@@ -51,16 +51,17 @@ Last seen Invalid Date
 (fixed) show warning modal for 'delete for me" and "delete for everyone" in chat window three dot menu
 (fixed) avatar is not shown in notification as profile picture if there is no profile picture - now generates default avatar
 (fixed) draft message across the device - messages are now saved and synced across all devices (run drafts-migration.sql)
-
-
-(partially) logged in with google redirects to default browser - OAuth now uses redirect flow in Electron
-(partially) while voice/video incoming or outgoing calling open in popup window for web version
-add flip camera in pip camera and hide icon after 3 second of mouse inactive
-
-for draft message 
+(fixed) logged in with google redirects to default browser - OAuth now uses redirect flow in Electron
+(fixed) for draft message 
     in device A user type some text for user A and at same time in device B user see or update then it's getting sync
     in device A user type some text for user A and later at device B it don't show draft message from device A.
         at this time in device A draft is also cleared 
     it's like user should open two devices at same time for using this feature, but it should be like they came to any chat of user anytime in anydevice and will see the draft message if it's there in any devices.
     if I have written draft message for 2 users then in another device openining that user chat should show draft message 
-    
+
+
+(partially) while voice/video incoming or outgoing calling open in popup window for web version
+add flip camera in pip camera and hide icon after 3 second of mouse inactive
+
+
+when user signin with google authentication how user will delete account it requires password to delete account 
