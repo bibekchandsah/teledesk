@@ -331,17 +331,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // ─── Session Management ──────────────────────────────────────────────────
     const handleSessionRevoked = (data: { sessionId: string; firebaseTokenId: string; message: string }) => {
       console.warn('Session revoked:', data.message);
-      // This is for individual session revocation - show alert but don't force logout
-      alert(`Security Alert: ${data.message}`);
+      // Force logout from this device since the session was explicitly revoked
+      logout(false);
+      window.location.href = `/login?logout=true&revoked=true&message=${encodeURIComponent(data.message)}`;
     };
 
     const handleForceLogout = (data: { message: string; sessionId: string }) => {
       console.warn('Force logout:', data.message);
-      alert(`Security Alert: ${data.message}`);
-      
       // Force logout from this device
       logout(false);
-      window.location.href = '/login?logout=true';
+      window.location.href = `/login?logout=true&revoked=true&message=${encodeURIComponent(data.message)}`;
     };
 
     const handleUserUpdated = (user: User) => {

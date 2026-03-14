@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAuthStore } from '../store/authStore';
 import { useMultiAccountStore } from '../store/multiAccountStore';
 import { QuickAccountPicker } from '../components/QuickAccountPicker';
+import ConfirmationModal from '../components/modals/ConfirmationModal';
 import { MessageCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
@@ -19,12 +20,25 @@ const LoginPage: React.FC = () => {
   const [resetEmailSent, setResetEmailSent] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // Revocation modal state
+  const [showRevokedModal, setShowRevokedModal] = useState(false);
+  const [revokedMessage, setRevokedMessage] = useState('');
+
   // Check URL parameters for account switching
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const switchEmail = params.get('switch');
     const addAccount = params.get('add');
     const logout = params.get('logout');
+    const revoked = params.get('revoked');
+    const msg = params.get('message');
+
+    if (revoked === 'true' && msg) {
+      setRevokedMessage(decodeURIComponent(msg));
+      setShowRevokedModal(true);
+      // Clean up URL so refresh doesn't pop it again
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     if (logout === 'true') {
       // User explicitly logged out, don't show picker
@@ -452,6 +466,17 @@ const LoginPage: React.FC = () => {
       </>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={showRevokedModal}
+        title="Session Revoked"
+        message={revokedMessage}
+        confirmText="OK"
+        onConfirm={() => setShowRevokedModal(false)}
+        onCancel={() => setShowRevokedModal(false)}
+        hideCancel={true}
+        isDestructive={true}
+      />
     </div>
   );
 };
