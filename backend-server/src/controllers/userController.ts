@@ -493,16 +493,18 @@ export const setChatThemeHandler = async (req: Request, res: Response): Promise<
     if (_io) {
       _io.to(`user:${uid}`).emit('CHAT_THEME_UPDATED', { chatId, theme });
       
-      // If showToOthers is enabled, notify the peer
-      if (theme.showToOthers) {
-        // Get chat to find peer
-        const { getChatById } = await import('../services/chatService');
-        const chat = await getChatById(chatId, uid);
-        if (chat) {
-          const peerUid = chat.members.find((m: string) => m !== uid);
-          if (peerUid) {
-            // Emit to peer so they see the theme immediately
+      // Get chat to find peer
+      const { getChatById } = await import('../services/chatService');
+      const chat = await getChatById(chatId, uid);
+      if (chat) {
+        const peerUid = chat.members.find((m: string) => m !== uid);
+        if (peerUid) {
+          // If showToOthers is enabled, notify the peer to show the theme
+          if (theme.showToOthers) {
             _io.to(`user:${peerUid}`).emit('PEER_CHAT_THEME_UPDATED', { chatId, peerId: uid, theme });
+          } else {
+            // If showToOthers is disabled, notify the peer to hide the theme
+            _io.to(`user:${peerUid}`).emit('PEER_CHAT_THEME_REMOVED', { chatId, peerId: uid });
           }
         }
       }
