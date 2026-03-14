@@ -10,7 +10,8 @@ COPY backend-server/package*.json ./backend-server/
 # Install all workspace dependencies
 RUN npm ci
 
-# Copy source and compile
+# Copy shared folder and backend source
+COPY shared/ ./shared/
 COPY backend-server/tsconfig.json ./backend-server/
 COPY backend-server/src/ ./backend-server/src/
 
@@ -26,6 +27,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY backend-server/package*.json ./backend-server/
 RUN npm ci --omit=dev --workspace=backend-server
+
+# Copy shared folder (needed at runtime for imports)
+COPY shared/ ./shared/
 
 # Copy compiled output from builder
 COPY --from=builder /app/backend-server/dist/ ./backend-server/dist/
