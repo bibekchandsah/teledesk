@@ -242,3 +242,23 @@ export const addGroupMember = (groupId: string, memberUid: string) =>
 
 export const removeGroupMember = (groupId: string, memberUid: string) =>
   authFetch(`/api/groups/${groupId}/members/${memberUid}`, { method: 'DELETE' });
+
+
+// ─── Chat Theme API ───────────────────────────────────────────────────────────
+
+export const setChatTheme = (chatId: string, theme: any) =>
+  authFetch<{ success: boolean }>(`/api/users/me/chat-theme/${chatId}`, {
+    method: 'PUT',
+    body: JSON.stringify(theme),
+  });
+
+export const getChatTheme = (chatId: string) =>
+  authFetch<{ success: boolean; data: any }>(`/api/users/me/chat-theme/${chatId}`);
+
+export const removeChatTheme = (chatId: string) =>
+  authFetch<{ success: boolean }>(`/api/users/me/chat-theme/${chatId}`, {
+    method: 'DELETE',
+  });
+
+export const getAllChatThemes = () =>
+  authFetch<{ success: boolean; data: Record<string, any> }>('/api/users/me/chat-themes');

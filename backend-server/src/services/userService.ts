@@ -22,6 +22,7 @@ type UserRow = {
   app_lock_enabled: boolean | null;
   app_lock_pin: string | null;
   nicknames: Record<string, string> | null;
+  chat_themes: Record<string, any> | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -43,6 +44,7 @@ const rowToUser = (r: UserRow): User => ({
   appLockEnabled: r.app_lock_enabled ?? false,
   appLockPin: r.app_lock_pin ?? undefined,
   nicknames: r.nicknames ?? {},
+  chatThemes: r.chat_themes ?? {},
 });
 
 export const upsertUser = async (uid: string, data: Partial<User>): Promise<User> => {
@@ -274,4 +276,31 @@ export const toggleAppLock = async (uid: string, enabled: boolean): Promise<void
 
 export const removeAppLockPin = async (uid: string): Promise<void> => {
   await supabase.from('users').update({ app_lock_pin: null, app_lock_enabled: false }).eq('uid', uid);
+};
+
+
+// ─── Chat Theme Functions ────────────────────────────────────────────────────
+
+export const setChatTheme = async (uid: string, chatId: string, theme: any): Promise<void> => {
+  const { data: user } = await supabase.from('users').select('chat_themes').eq('uid', uid).single();
+  const themes = user?.chat_themes || {};
+  themes[chatId] = theme;
+  await supabase.from('users').update({ chat_themes: themes }).eq('uid', uid);
+};
+
+export const getChatTheme = async (uid: string, chatId: string): Promise<any | null> => {
+  const { data: user } = await supabase.from('users').select('chat_themes').eq('uid', uid).single();
+  return user?.chat_themes?.[chatId] || null;
+};
+
+export const removeChatTheme = async (uid: string, chatId: string): Promise<void> => {
+  const { data: user } = await supabase.from('users').select('chat_themes').eq('uid', uid).single();
+  const themes = user?.chat_themes || {};
+  delete themes[chatId];
+  await supabase.from('users').update({ chat_themes: themes }).eq('uid', uid);
+};
+
+export const getAllChatThemes = async (uid: string): Promise<Record<string, any>> => {
+  const { data: user } = await supabase.from('users').select('chat_themes').eq('uid', uid).single();
+  return user?.chat_themes || {};
 };

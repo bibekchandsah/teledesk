@@ -21,12 +21,13 @@ import { useUIStore } from '../store/uiStore';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import MessageContextMenu from '../components/MessageContextMenu';
+import ChatThemeModal from '../components/modals/ChatThemeModal';
 
 export const downloadMessageFile = (m: Message) => {
   if (!m.fileUrl) return;
@@ -557,9 +558,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const navigateRouter = useNavigate();
   // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
   const navigate = chatIdProp ? () => {} : navigateRouter;
-  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds } =
+  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat } =
     useChatStore();
-  const { currentUser } = useAuthStore();
+  const { currentUser, setCurrentUser } = useAuthStore();
   const { startCall } = useCallContext();
   const { activeCall } = useCallStore();
   const isInCall = !!activeCall;
@@ -678,6 +679,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showProfileMore, setShowProfileMore] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
@@ -1286,6 +1288,73 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   }, [activeChat, currentUser, userProfiles, onlineUsers]);
 
   const peer = peerInfo();
+
+  // ─── Chat Theme Logic ─────────────────────────────────────────────────────
+  const displayTheme = useMemo(() => {
+    if (!activeChat) return null;
+    
+    // Check if peer shared their theme
+    if (peer && peer.profile?.chatThemes?.[activeChat.chatId]?.showToOthers) {
+      return peer.profile.chatThemes[activeChat.chatId];
+    }
+    
+    // Use own theme
+    return currentUser?.chatThemes?.[activeChat.chatId] || null;
+  }, [activeChat, currentUser?.chatThemes, peer]);
+
+  // Socket listener for theme sync
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleThemeUpdate = ({ chatId, theme }: any) => {
+      if (currentUser) {
+        const updatedThemes = { ...currentUser.chatThemes, [chatId]: theme };
+        setCurrentUser({ ...currentUser, chatThemes: updatedThemes });
+      }
+    };
+
+    const handleThemeRemove = ({ chatId }: any) => {
+      if (currentUser) {
+        const updatedThemes = { ...currentUser.chatThemes };
+        delete updatedThemes[chatId];
+        setCurrentUser({ ...currentUser, chatThemes: updatedThemes });
+      }
+    };
+
+    const handlePeerThemeUpdate = ({ chatId, peerId, theme }: any) => {
+      // Update peer's profile in userProfiles cache
+      const { setUserProfile } = useChatStore.getState();
+      const peerProfile = userProfiles[peerId];
+      if (peerProfile) {
+        const updatedThemes = { ...peerProfile.chatThemes, [chatId]: theme };
+        setUserProfile({ ...peerProfile, chatThemes: updatedThemes });
+      }
+    };
+
+    const handlePeerThemeRemove = ({ chatId, peerId }: any) => {
+      // Remove theme from peer's profile
+      const { setUserProfile } = useChatStore.getState();
+      const peerProfile = userProfiles[peerId];
+      if (peerProfile) {
+        const updatedThemes = { ...peerProfile.chatThemes };
+        delete updatedThemes[chatId];
+        setUserProfile({ ...peerProfile, chatThemes: updatedThemes });
+      }
+    };
+
+    socket.on('CHAT_THEME_UPDATED', handleThemeUpdate);
+    socket.on('CHAT_THEME_REMOVED', handleThemeRemove);
+    socket.on('PEER_CHAT_THEME_UPDATED', handlePeerThemeUpdate);
+    socket.on('PEER_CHAT_THEME_REMOVED', handlePeerThemeRemove);
+
+    return () => {
+      socket.off('CHAT_THEME_UPDATED', handleThemeUpdate);
+      socket.off('CHAT_THEME_REMOVED', handleThemeRemove);
+      socket.off('PEER_CHAT_THEME_UPDATED', handlePeerThemeUpdate);
+      socket.off('PEER_CHAT_THEME_REMOVED', handlePeerThemeRemove);
+    };
+  }, [currentUser, setCurrentUser, userProfiles]);
 
   // ─── Typing indicator ─────────────────────────────────────────────────────
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -2559,6 +2628,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 >
                 <CheckSquare size={14} style={{ marginRight: 8 }} />Select messages
               </button>
+              <button
+                onClick={() => { setHeaderMenu(null); setShowThemeModal(true); }}
+                style={headerCtxItemStyle}
+              >
+                <Palette size={14} style={{ marginRight: 8 }} />Customize Theme
+              </button>
               <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
               <button
                 onClick={() => {
@@ -2581,6 +2656,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 {pinnedChatIds.includes(activeChat.chatId)
                   ? <><PinOff size={14} style={{ marginRight: 8 }} />Unpin chat</>
                   : <><Pin size={14} style={{ marginRight: 8 }} />Pin chat</>}
+              </button>
+              <button
+                onClick={() => {
+                  const isLocked = lockedChatIds.includes(activeChat.chatId);
+                  if (isLocked) {
+                    // Unlock chat
+                    toggleLockChat(activeChat.chatId, false);
+                    setHeaderMenu(null);
+                  } else {
+                    // Lock chat - check if PIN is set
+                    if (!currentUser?.chatLockPin) {
+                      // No PIN set, prompt to set up
+                      setPinModal({ mode: 'setup', chatId: activeChat.chatId });
+                    } else {
+                      // PIN already set, just lock it
+                      toggleLockChat(activeChat.chatId, true);
+                    }
+                    setHeaderMenu(null);
+                  }
+                }}
+                style={headerCtxItemStyle}
+              >
+                {lockedChatIds.includes(activeChat.chatId)
+                  ? <><Unlock size={14} style={{ marginRight: 8 }} />Unlock chat</>
+                  : <><Lock size={14} style={{ marginRight: 8 }} />Lock chat</>}
               </button>
               <button
                 onClick={() => { toggleArchiveChat(activeChat.chatId); setHeaderMenu(null); navigate('/chats'); }}
@@ -2731,12 +2831,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '12px 0',
           display: 'flex',
           flexDirection: 'column',
           userSelect: selectionMode ? 'none' : undefined,
+          position: 'relative',
+          ...(displayTheme?.backgroundImage && {
+            backgroundImage: `url(${displayTheme.backgroundImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'fixed',
+          }),
         }}
       >
+        {/* Theme overlay wrapper - contains both overlay and content */}
+        <div style={{ 
+          position: 'relative', 
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '12px 0',
+        }}>
+          {/* Backdrop overlay for opacity and blur */}
+          {displayTheme && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: `rgba(15, 23, 42, ${1 - displayTheme.opacity})`,
+                backdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
+                WebkitBackdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+          )}
+          {/* Messages content */}
+          <div style={{ position: 'relative', zIndex: 1, flex: 1 }}>
         {/* Top loader shown while fetching older messages */}
         {isLoadingMore && (
           <div style={{ textAlign: 'center', padding: '8px 0', color: 'var(--text-secondary)', fontSize: 13 }}>
@@ -2943,6 +3074,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           liveTexts={liveTexts}
         />
         <div ref={messagesEndRef} />
+          </div>
+        </div>
       </div>
 
       {/* ─── Scroll navigation arrows ──────────────────────────────────── */}
@@ -4079,6 +4212,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                           : <><Pin size={14} style={{ marginRight: 8 }} />Pin chat</>}
                       </button>
                       <button
+                        onClick={() => {
+                          const isLocked = lockedChatIds.includes(activeChat.chatId);
+                          if (isLocked) {
+                            // Unlock chat
+                            toggleLockChat(activeChat.chatId, false);
+                            setShowProfileMore(false);
+                          } else {
+                            // Lock chat - check if PIN is set
+                            if (!currentUser?.chatLockPin) {
+                              // No PIN set, prompt to set up
+                              setPinModal({ mode: 'setup', chatId: activeChat.chatId });
+                            } else {
+                              // PIN already set, just lock it
+                              toggleLockChat(activeChat.chatId, true);
+                            }
+                            setShowProfileMore(false);
+                          }
+                        }}
+                        style={headerCtxItemStyle}
+                      >
+                        {lockedChatIds.includes(activeChat.chatId)
+                          ? <><Unlock size={14} style={{ marginRight: 8 }} />Unlock chat</>
+                          : <><Lock size={14} style={{ marginRight: 8 }} />Lock chat</>}
+                      </button>
+                      <button
                         onClick={() => { toggleArchiveChat(activeChat.chatId); setShowProfileMore(false); navigate('/chats'); }}
                         style={headerCtxItemStyle}
                       >
@@ -4507,6 +4665,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
       {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
       {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
+      
+      {/* Chat Theme Modal */}
+      {showThemeModal && activeChat && (
+        <ChatThemeModal
+          chatId={activeChat.chatId}
+          currentTheme={currentUser?.chatThemes?.[activeChat.chatId]}
+          onClose={() => setShowThemeModal(false)}
+          onSave={() => {
+            // Theme is already updated via socket/API
+          }}
+        />
+      )}
         </div>
       )}
     </div>

@@ -472,3 +472,116 @@ export const removeAppLockPinHandler = async (req: Request, res: Response): Prom
     res.status(500).json({ success: false, error: 'Failed to remove app lock' });
   }
 };
+
+
+// ─── Chat Theme Handlers ──────────────────────────────────────────────────────
+
+/**
+ * PUT /api/users/me/chat-theme/:chatId
+ * Set or update chat theme for a specific chat
+ */
+export const setChatThemeHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { chatId } = req.params;
+    const theme = req.body;
+
+    const { setChatTheme } = await import('../services/userService');
+    await setChatTheme(uid, chatId, theme);
+
+    // Emit socket event to sync across user's devices
+    if (_io) {
+      _io.to(uid).emit('CHAT_THEME_UPDATED', { chatId, theme });
+      
+      // If showToOthers is enabled, notify the peer
+      if (theme.showToOthers) {
+        // Get chat to find peer
+        const { getChatById } = await import('../services/chatService');
+        const chat = await getChatById(chatId, uid);
+        if (chat) {
+          const peerUid = chat.members.find((m: string) => m !== uid);
+          if (peerUid) {
+            // Emit to peer so they see the theme immediately
+            _io.to(peerUid).emit('PEER_CHAT_THEME_UPDATED', { chatId, peerId: uid, theme });
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'Chat theme updated' });
+  } catch (error) {
+    logger.error(`setChatTheme error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to update chat theme' });
+  }
+};
+
+/**
+ * GET /api/users/me/chat-theme/:chatId
+ * Get chat theme for a specific chat
+ */
+export const getChatThemeHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { chatId } = req.params;
+
+    const { getChatTheme } = await import('../services/userService');
+    const theme = await getChatTheme(uid, chatId);
+
+    res.json({ success: true, data: theme });
+  } catch (error) {
+    logger.error(`getChatTheme error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to get chat theme' });
+  }
+};
+
+/**
+ * DELETE /api/users/me/chat-theme/:chatId
+ * Remove chat theme for a specific chat
+ */
+export const removeChatThemeHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { chatId } = req.params;
+
+    const { removeChatTheme } = await import('../services/userService');
+    await removeChatTheme(uid, chatId);
+
+    // Emit socket event to sync across user's devices
+    if (_io) {
+      _io.to(uid).emit('CHAT_THEME_REMOVED', { chatId });
+      
+      // Notify peer that theme was removed
+      const { getChatById } = await import('../services/chatService');
+      const chat = await getChatById(chatId, uid);
+      if (chat) {
+        const peerUid = chat.members.find((m: string) => m !== uid);
+        if (peerUid) {
+          _io.to(peerUid).emit('PEER_CHAT_THEME_REMOVED', { chatId, peerId: uid });
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'Chat theme removed' });
+  } catch (error) {
+    logger.error(`removeChatTheme error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to remove chat theme' });
+  }
+};
+
+/**
+ * GET /api/users/me/chat-themes
+ * Get all chat themes for the current user
+ */
+export const getAllChatThemesHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+
+    const { getAllChatThemes } = await import('../services/userService');
+    const themes = await getAllChatThemes(uid);
+
+    res.json({ success: true, data: themes });
+  } catch (error) {
+    logger.error(`getAllChatThemes error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to get chat themes' });
+  }
+};

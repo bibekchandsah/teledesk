@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler, setChatThemeHandler, getChatThemeHandler, removeChatThemeHandler, getAllChatThemesHandler } from '../controllers/userController';
 import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions, cleanupDuplicateDeviceSessions, debugSessionInfo } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
@@ -125,5 +125,22 @@ router.delete('/device-sessions/others/all', revokeAllOtherDeviceSessions);
 
 // GET /api/users/:uid
 router.get('/:uid', getUserProfile);
+
+export default router;
+
+
+// ─── Chat Theme Routes ────────────────────────────────────────────────────────
+
+// PUT /api/users/me/chat-theme/:chatId
+router.put('/me/chat-theme/:chatId', setChatThemeHandler);
+
+// GET /api/users/me/chat-theme/:chatId
+router.get('/me/chat-theme/:chatId', getChatThemeHandler);
+
+// DELETE /api/users/me/chat-theme/:chatId
+router.delete('/me/chat-theme/:chatId', removeChatThemeHandler);
+
+// GET /api/users/me/chat-themes
+router.get('/me/chat-themes', getAllChatThemesHandler);
 
 export default router;

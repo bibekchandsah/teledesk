@@ -21,6 +21,15 @@ export interface User {
   appLockEnabled?: boolean; // if true, app requires PIN on launch
   appLockPin?: string; // hashed 6-digit PIN for app lock
   nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
+  chatThemes?: Record<string, ChatTheme>; // per-chat theme customization, keyed by chatId
+}
+
+export interface ChatTheme {
+  backgroundImage?: string; // URL to custom background image
+  backgroundColor?: string; // Hex color for solid background
+  opacity: number; // 0-1, background opacity
+  blur: number; // 0-50, background blur in pixels
+  showToOthers: boolean; // if true, other user sees this theme
 }
 
 export interface DeviceSession {
