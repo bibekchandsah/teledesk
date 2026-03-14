@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat } from '../services/userService';
+import { upsertUser, getUserById, searchUsers, updatePinnedChats, updateArchivedChats, updateNicknames, setLockPin, verifyLockPin, toggleLockChat, setAppLockPin, verifyAppLockPin, toggleAppLock, removeAppLockPin } from '../services/userService';
 import { getUserChats } from '../services/chatService';
 import { SOCKET_EVENTS } from '../../../shared/constants/events';
 import { Chat, User as SharedUser } from '../../../shared/types';
@@ -403,3 +403,72 @@ export const deleteAccount = async (req: Request, res: Response): Promise<void> 
   }
 };
 
+
+// ─── App Lock PIN Management ───────────────────────────────────────────────
+
+/**
+ * POST /api/users/me/set-app-lock-pin
+ * Set or update app lock PIN
+ */
+export const setAppLockPinHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { pin } = req.body as { pin: string };
+    if (!pin || pin.length !== 6) {
+      res.status(400).json({ success: false, error: 'PIN must be 6 digits' });
+      return;
+    }
+    await setAppLockPin(uid, pin);
+    res.json({ success: true, message: 'App lock PIN set successfully' });
+  } catch (error) {
+    logger.error(`setAppLockPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to set app lock PIN' });
+  }
+};
+
+/**
+ * POST /api/users/me/verify-app-lock-pin
+ * Verify app lock PIN
+ */
+export const verifyAppLockPinHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { pin } = req.body as { pin: string };
+    const isValid = await verifyAppLockPin(uid, pin);
+    res.json({ success: true, data: { isValid } });
+  } catch (error) {
+    logger.error(`verifyAppLockPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify app lock PIN' });
+  }
+};
+
+/**
+ * POST /api/users/me/toggle-app-lock
+ * Enable or disable app lock
+ */
+export const toggleAppLockHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { enabled } = req.body as { enabled: boolean };
+    await toggleAppLock(uid, enabled);
+    res.json({ success: true, data: { appLockEnabled: enabled } });
+  } catch (error) {
+    logger.error(`toggleAppLock error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to toggle app lock' });
+  }
+};
+
+/**
+ * DELETE /api/users/me/app-lock-pin
+ * Remove app lock PIN and disable app lock
+ */
+export const removeAppLockPinHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    await removeAppLockPin(uid);
+    res.json({ success: true, message: 'App lock removed successfully' });
+  } catch (error) {
+    logger.error(`removeAppLockPin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to remove app lock' });
+  }
+};

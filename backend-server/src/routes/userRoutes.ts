@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler } from '../controllers/userController';
 import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions, cleanupDuplicateDeviceSessions, debugSessionInfo } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
@@ -87,6 +87,19 @@ router.post('/me/verify-pin', verifyPin);
 
 // PATCH /api/users/me/toggle-lock
 router.patch('/me/toggle-lock', toggleLock);
+
+// ─── App Lock PIN Management ───────────────────────────────────────────────
+// POST /api/users/me/set-app-lock-pin
+router.post('/me/set-app-lock-pin', setAppLockPinHandler);
+
+// POST /api/users/me/verify-app-lock-pin
+router.post('/me/verify-app-lock-pin', verifyAppLockPinHandler);
+
+// POST /api/users/me/toggle-app-lock
+router.post('/me/toggle-app-lock', toggleAppLockHandler);
+
+// DELETE /api/users/me/app-lock-pin
+router.delete('/me/app-lock-pin', removeAppLockPinHandler);
 
 // DELETE /api/users/me - Delete account
 router.delete('/me', deleteAccount);

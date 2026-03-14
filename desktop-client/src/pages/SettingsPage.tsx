@@ -20,6 +20,8 @@ const SettingsPage: React.FC = () => {
   const [deletePassword, setDeletePassword] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [showDisableAppLockConfirm, setShowDisableAppLockConfirm] = useState(false);
+  const [isDisablingAppLock, setIsDisablingAppLock] = useState(false);
 
   // Enumerate microphone devices
   useEffect(() => {
@@ -372,7 +374,9 @@ const SettingsPage: React.FC = () => {
                 <button
                   onClick={() => { setNameInput(currentUser.name); setEditingName(true); }}
                   title="Edit name"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: 2, display: 'flex', alignItems: 'center' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 2, display: 'flex', alignItems: 'center', transition: 'opacity 0.2s ease' }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >
                   <Pencil size={14} />
                 </button>
@@ -443,7 +447,9 @@ const SettingsPage: React.FC = () => {
                 <button
                   onClick={() => { setUsernameInput(currentUser.username ?? ''); setEditingUsername(true); }}
                   title="Edit username"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6, padding: 2, display: 'flex', alignItems: 'center' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 2, display: 'flex', alignItems: 'center', transition: 'opacity 0.2s ease' }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >
                   <Pencil size={12} />
                 </button>
@@ -615,6 +621,54 @@ const SettingsPage: React.FC = () => {
             {currentUser?.chatLockPin ? 'Change PIN' : 'Set Up PIN'}
           </button>
         </SettingRow>
+
+        <SettingRow
+          label="App Lock"
+          description={currentUser?.appLockEnabled ? "App requires PIN on launch. Disable or change PIN." : "Require PIN to unlock app on launch"}
+        >
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {currentUser?.appLockEnabled && (
+              <button
+                onClick={() => {
+                  useUIStore.getState().setAppLockModal({ mode: 'change' });
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Change PIN
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (currentUser?.appLockEnabled) {
+                  setShowDisableAppLockConfirm(true);
+                } else {
+                  useUIStore.getState().setAppLockModal({ mode: 'setup' });
+                }
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                backgroundColor: currentUser?.appLockEnabled ? 'rgba(239, 68, 68, 0.1)' : 'var(--accent)',
+                color: currentUser?.appLockEnabled ? '#ef4444' : '#fff',
+                fontSize: 13,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              {currentUser?.appLockEnabled ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </SettingRow>
       </Section>
 
       {/* Audio */}
@@ -673,7 +727,7 @@ const SettingsPage: React.FC = () => {
             cursor: 'pointer',
             fontSize: 14,
             opacity: isLoggingOut ? 0.7 : 1,
-            // marginBottom: 12,
+            marginBottom: 12,
           }}
         >
           {isLoggingOut ? 'Signing out...' : 'Sign Out'}
@@ -696,18 +750,162 @@ const SettingsPage: React.FC = () => {
         </button>
       </Section>
 
+      {/* Disable App Lock Confirmation Modal */}
+      {showDisableAppLockConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: 20,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => {
+            if (!isDisablingAppLock) {
+              setShowDisableAppLockConfirm(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 20,
+              padding: 32,
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
+              animation: 'slideUp 0.3s ease-out',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  border: '2px solid rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                  <path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+                </svg>
+              </div>
+              <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 22, fontWeight: 700 }}>
+                Disable App Lock?
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                Your app will no longer require a PIN to unlock. You can enable it again anytime from settings.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
+              <button
+                onClick={() => setShowDisableAppLockConfirm(false)}
+                disabled={isDisablingAppLock}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 600,
+                  cursor: isDisablingAppLock ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  opacity: isDisablingAppLock ? 0.5 : 1,
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDisablingAppLock) {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setIsDisablingAppLock(true);
+                  try {
+                    const { removeAppLockPin } = await import('../services/apiService');
+                    const res = await removeAppLockPin();
+                    if (res.success) {
+                      setCurrentUser({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
+                      setUserProfile({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
+                      setShowDisableAppLockConfirm(false);
+                    }
+                  } catch (error) {
+                    console.error('Failed to disable app lock:', error);
+                  } finally {
+                    setIsDisablingAppLock(false);
+                  }
+                }}
+                disabled={isDisablingAppLock}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  border: 'none',
+                  backgroundColor: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: isDisablingAppLock ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  opacity: isDisablingAppLock ? 0.7 : 1,
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDisablingAppLock) {
+                    e.currentTarget.style.backgroundColor = '#dc2626';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ef4444';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
+                }}
+              >
+                {isDisablingAppLock ? 'Disabling...' : 'Disable App Lock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Account Confirmation Modal */}
       {showDeleteConfirm && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
             padding: 20,
+            animation: 'fadeIn 0.2s ease-out',
           }}
           onClick={() => {
             if (!isDeleting) {
@@ -721,33 +919,62 @@ const SettingsPage: React.FC = () => {
             className="responsive-modal"
             style={{
               backgroundColor: 'var(--bg-secondary)',
-              borderRadius: 16,
-              padding: 28,
+              borderRadius: 20,
+              padding: 32,
               maxWidth: 440,
               width: '100%',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
+              animation: 'slideUp 0.3s ease-out',
+              border: '1px solid rgba(255,255,255,0.08)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ color: 'var(--text-primary)', marginBottom: 12, fontSize: 20, fontWeight: 700 }}>
-              Delete Account
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-              This action cannot be undone. This will permanently delete your account, all your messages, and remove you from all chats.
-            </p>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  border: '2px solid rgba(220, 38, 38, 0.3)',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 22, fontWeight: 700 }}>
+                Delete Account
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                This action cannot be undone. This will permanently delete your account, all your messages, and remove you from all chats.
+              </p>
+            </div>
 
             {deleteError && (
               <div
                 style={{
                   backgroundColor: 'rgba(239,68,68,0.1)',
-                  border: '1px solid #ef4444',
-                  borderRadius: 8,
-                  padding: '10px 14px',
-                  marginBottom: 16,
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  marginBottom: 20,
                   color: '#ef4444',
-                  fontSize: 13,
+                  fontSize: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
                 }}
               >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
                 {deleteError}
               </div>
             )}
@@ -759,7 +986,7 @@ const SettingsPage: React.FC = () => {
               if (!isPasswordUser) return null;
               return (
                 <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                  <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
                     Confirm your password
                   </label>
                   <input
@@ -770,14 +997,17 @@ const SettingsPage: React.FC = () => {
                     disabled={isDeleting}
                     style={{
                       width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 8,
+                      padding: '12px 14px',
+                      borderRadius: 10,
                       border: '1px solid var(--border)',
                       backgroundColor: 'var(--bg-primary)',
                       color: 'var(--text-primary)',
-                      fontSize: 14,
+                      fontSize: 15,
                       outline: 'none',
+                      transition: 'border-color 0.2s ease',
                     }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !isDeleting) handleDeleteAccount();
                     }}
@@ -786,7 +1016,7 @@ const SettingsPage: React.FC = () => {
               );
             })()}
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
               <button
                 onClick={() => {
                   setShowDeleteConfirm(false);
@@ -795,15 +1025,27 @@ const SettingsPage: React.FC = () => {
                 }}
                 disabled={isDeleting}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: 8,
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
                   border: '1px solid var(--border)',
                   backgroundColor: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
                   fontWeight: 600,
                   cursor: isDeleting ? 'not-allowed' : 'pointer',
-                  fontSize: 14,
+                  fontSize: 15,
                   opacity: isDeleting ? 0.5 : 1,
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDeleting) {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
                 Cancel
@@ -812,15 +1054,30 @@ const SettingsPage: React.FC = () => {
                 onClick={handleDeleteAccount}
                 disabled={isDeleting}
                 style={{
-                  padding: '10px 20px',
-                  borderRadius: 8,
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
                   border: 'none',
                   backgroundColor: '#dc2626',
                   color: '#fff',
                   fontWeight: 600,
                   cursor: isDeleting ? 'not-allowed' : 'pointer',
-                  fontSize: 14,
+                  fontSize: 15,
                   opacity: isDeleting ? 0.7 : 1,
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isDeleting) {
+                    e.currentTarget.style.backgroundColor = '#b91c1c';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dc2626';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
                 }}
               >
                 {isDeleting ? 'Deleting...' : 'Delete My Account'}
@@ -854,11 +1111,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
         padding: '8px 16px',
         border: '1px solid var(--border)',
         display: 'flex',
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        alignContent: 'center',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        flexDirection: 'column',
       }}
     >
       {children}

@@ -15,6 +15,7 @@ interface UIState {
   showLocked: boolean;
   isUnlocked: boolean;
   pinModal: { mode: 'setup' | 'verify' | 'reset' | 'change', chatId?: string } | null;
+  appLockModal: { mode: 'setup' | 'verify' | 'reset' | 'change' } | null;
   toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null;
   setToast: (toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null) => void;
 
@@ -32,6 +33,7 @@ interface UIState {
   setShowLocked: (val: boolean) => void;
   setIsUnlocked: (val: boolean) => void;
   setPinModal: (val: { mode: 'setup' | 'verify' | 'reset' | 'change', chatId?: string } | null) => void;
+  setAppLockModal: (val: { mode: 'setup' | 'verify' | 'reset' | 'change' } | null) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -49,6 +51,7 @@ export const useUIStore = create<UIState>((set) => ({
   showLocked: false,
   isUnlocked: false,
   pinModal: null,
+  appLockModal: null,
   toast: null,
 
   setToast: (toast) => set({ toast }),
@@ -85,4 +88,5 @@ export const useUIStore = create<UIState>((set) => ({
   setShowLocked: (val) => set({ showLocked: val }),
   setIsUnlocked: (val) => set({ isUnlocked: val }),
   setPinModal: (val) => set({ pinModal: val }),
+  setAppLockModal: (val) => set({ appLockModal: val }),
 }));

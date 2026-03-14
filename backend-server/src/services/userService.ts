@@ -19,6 +19,8 @@ type UserRow = {
   locked_chat_ids: string[];
   chat_lock_pin: string | null;
   chat_lock_reset_code: string | null;
+  app_lock_enabled: boolean | null;
+  app_lock_pin: string | null;
   nicknames: Record<string, string> | null;
 };
 
@@ -38,6 +40,8 @@ const rowToUser = (r: UserRow): User => ({
   lockedChatIds: r.locked_chat_ids ?? [],
   chatLockPin: r.chat_lock_pin ?? undefined,
   chatLockResetCode: r.chat_lock_reset_code ?? undefined,
+  appLockEnabled: r.app_lock_enabled ?? false,
+  appLockPin: r.app_lock_pin ?? undefined,
   nicknames: r.nicknames ?? {},
 });
 
@@ -250,3 +254,24 @@ export const deleteUserAccount = async (uid: string): Promise<void> => {
   logger.info(`User account marked as deleted: ${uid}`);
 };
 
+
+// ─── App Lock PIN Management ───────────────────────────────────────────────
+
+export const setAppLockPin = async (uid: string, pin: string): Promise<void> => {
+  const hashedPin = await bcrypt.hash(pin, 10);
+  await supabase.from('users').update({ app_lock_pin: hashedPin, app_lock_enabled: true }).eq('uid', uid);
+};
+
+export const verifyAppLockPin = async (uid: string, pin: string): Promise<boolean> => {
+  const { data } = await supabase.from('users').select('app_lock_pin').eq('uid', uid).single();
+  if (!data || !data.app_lock_pin) return false;
+  return await bcrypt.compare(pin, data.app_lock_pin);
+};
+
+export const toggleAppLock = async (uid: string, enabled: boolean): Promise<void> => {
+  await supabase.from('users').update({ app_lock_enabled: enabled }).eq('uid', uid);
+};
+
+export const removeAppLockPin = async (uid: string): Promise<void> => {
+  await supabase.from('users').update({ app_lock_pin: null, app_lock_enabled: false }).eq('uid', uid);
+};

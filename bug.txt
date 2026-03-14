@@ -68,6 +68,7 @@ Last seen Invalid Date
 (fixed) add scrolling for those also who don't have scrolling area and scrolling will pull down as like for touch devices
 (fixed) scrolling up isn't hiding it again
 (fixed) make connection status toast responsive for small devices
+add/remove App lock, forgot pin, and recovery mechanism
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive

@@ -80,6 +80,29 @@ export const toggleLockChat = (chatId: string, lock: boolean) =>
     body: JSON.stringify({ chatId, lock }),
   });
 
+export const setAppLockPin = (pin: string) =>
+  authFetch<{ success: boolean }>('/api/users/me/set-app-lock-pin', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+
+export const verifyAppLockPin = (pin: string) =>
+  authFetch<{ isValid: boolean }>('/api/users/me/verify-app-lock-pin', {
+    method: 'POST',
+    body: JSON.stringify({ pin }),
+  });
+
+export const toggleAppLock = (enabled: boolean) =>
+  authFetch<{ appLockEnabled: boolean }>('/api/users/me/toggle-app-lock', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+
+export const removeAppLockPin = () =>
+  authFetch<{ success: boolean }>('/api/users/me/app-lock-pin', {
+    method: 'DELETE',
+  });
+
 export const deleteMyAccount = () =>
   authFetch<{ message: string }>('/api/users/me', {
     method: 'DELETE',

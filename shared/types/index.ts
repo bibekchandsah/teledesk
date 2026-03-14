@@ -16,8 +16,10 @@ export interface User {
   pinnedChatIds?: string[]; // chats pinned by this user (synced across devices)
   archivedChatIds?: string[]; // chats archived by this user (synced across devices)
   lockedChatIds?: string[]; // chats locked with PIN (synced across devices)
-  chatLockPin?: string; // hashed 6-digit PIN
+  chatLockPin?: string; // hashed 6-digit PIN for chat lock
   chatLockResetCode?: string; // 6-digit code for PIN reset via email
+  appLockEnabled?: boolean; // if true, app requires PIN on launch
+  appLockPin?: string; // hashed 6-digit PIN for app lock
   nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
 }
 

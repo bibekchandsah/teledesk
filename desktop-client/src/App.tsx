@@ -46,13 +46,15 @@ import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
 import { useBookmarkStore } from './store/bookmarkStore';
 import PinModal from './components/modals/PinModal';
+import AppLockScreen from './components/AppLockScreen';
+import AppLockPinModal from './components/modals/AppLockPinModal';
 import ToastProvider from './components/ToastProvider';
 import NetworkListener from './components/NetworkListener';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
-  const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId } = useUIStore();
+  const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId, appLockModal, setAppLockModal } = useUIStore();
   const { activeCall, incomingCall, isCallInPopup } = useCallStore();
   const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
@@ -63,6 +65,10 @@ const AppInner: React.FC = () => {
   const isPopupWindow = location.pathname.startsWith('/popup');
   const isCallWindow = location.pathname.startsWith('/call-window');
   const isIncomingCallWindow = location.pathname.startsWith('/incoming-call');
+  
+  // App lock state - persists until app exit
+  const [isAppLocked, setIsAppLocked] = React.useState(true);
+  const appUnlockedRef = useRef(false);
 
   // Apply theme immediately (before first paint)
   document.documentElement.setAttribute('data-theme', theme);
@@ -104,6 +110,15 @@ const AppInner: React.FC = () => {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Check app lock on mount
+  useEffect(() => {
+    if (isAuthenticated && currentUser?.appLockEnabled && !appUnlockedRef.current) {
+      setIsAppLocked(true);
+    } else {
+      setIsAppLocked(false);
+    }
+  }, [isAuthenticated, currentUser?.appLockEnabled]);
 
   // Hydrate Saved Messages from cloud (sync across devices)
   useEffect(() => {
@@ -205,6 +220,18 @@ const AppInner: React.FC = () => {
       <Routes>
         <Route path="*" element={<LoginPage />} />
       </Routes>
+    );
+  }
+
+  // Show app lock screen if enabled and not unlocked this session
+  if (isAppLocked && currentUser?.appLockEnabled) {
+    return (
+      <AppLockScreen
+        onUnlock={() => {
+          setIsAppLocked(false);
+          appUnlockedRef.current = true;
+        }}
+      />
     );
   }
 
@@ -428,6 +455,22 @@ const AppInner: React.FC = () => {
                 setPinModal(null);
               }}
               onCancel={() => setPinModal(null)}
+            />
+          )}
+
+          {/* App Lock PIN Modal */}
+          {appLockModal && (
+            <AppLockPinModal
+              mode={appLockModal.mode}
+              onSuccess={(pin) => {
+                setAppLockModal(null);
+                if (appLockModal.mode === 'setup' || appLockModal.mode === 'change') {
+                  if (currentUser) {
+                    setCurrentUser({ ...currentUser, appLockEnabled: true, appLockPin: '********' });
+                  }
+                }
+              }}
+              onCancel={() => setAppLockModal(null)}
             />
           )}
 
