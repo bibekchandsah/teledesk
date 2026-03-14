@@ -89,6 +89,8 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       two_factor_enabled: null,
       two_factor_secret: null,
       two_factor_backup_codes: null,
+      two_factor_pending_secret: null,
+      two_factor_pending_backup_codes: null,
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
