@@ -3,30 +3,34 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files and install all deps (including devDeps for tsc)
+# Copy root workspace files
+COPY package*.json ./
 COPY backend-server/package*.json ./backend-server/
-COPY shared/ ./shared/
 
-WORKDIR /app/backend-server
+# Install all workspace dependencies
 RUN npm ci
 
 # Copy source and compile
-COPY backend-server/tsconfig.json ./
-COPY backend-server/src/ ./src/
+COPY backend-server/tsconfig.json ./backend-server/
+COPY backend-server/src/ ./backend-server/src/
 
+WORKDIR /app/backend-server
 RUN npm run build
 
 # ─── Production stage ─────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
+WORKDIR /app
+
+# Copy root workspace files and install production deps
+COPY package*.json ./
+COPY backend-server/package*.json ./backend-server/
+RUN npm ci --omit=dev --workspace=backend-server
+
+# Copy compiled output from builder
+COPY --from=builder /app/backend-server/dist/ ./backend-server/dist/
+
 WORKDIR /app/backend-server
-
-# Install only production deps
-COPY backend-server/package*.json ./
-RUN npm ci --omit=dev
-
-# Copy compiled output from builder (rootDir is ../ so dist mirrors the monorepo structure)
-COPY --from=builder /app/backend-server/dist/ ./dist/
 
 EXPOSE 3001
 
