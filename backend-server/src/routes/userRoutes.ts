@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import multer from 'multer';
-import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler, setChatThemeHandler, getChatThemeHandler, removeChatThemeHandler, getAllChatThemesHandler } from '../controllers/userController';
+import { syncUser, getMe, updateMe, uploadAvatar, getUserProfile, searchUsersHandler, updatePinnedChatsHandler, updateArchivedChatsHandler, updateNicknamesHandler, checkUsername, updateUsername, setPin, verifyPin, toggleLock, deleteAccount, setAppLockPinHandler, verifyAppLockPinHandler, toggleAppLockHandler, removeAppLockPinHandler, setChatThemeHandler, getChatThemeHandler, removeChatThemeHandler, getAllChatThemesHandler, setup2FAHandler, verify2FAHandler, verify2FALoginHandler, verify2FABackupHandler, disable2FAHandler, regenerate2FAHandler, get2FAStatusHandler } from '../controllers/userController';
 import { getDeviceSessions, revokeSession, revokeAllOtherDeviceSessions, cleanupDuplicateDeviceSessions, debugSessionInfo } from '../controllers/deviceSessionController';
 import { authenticateToken } from '../middleware/authMiddleware';
 import { handleValidationErrors } from '../middleware/errorHandler';
@@ -126,9 +126,6 @@ router.delete('/device-sessions/others/all', revokeAllOtherDeviceSessions);
 // GET /api/users/:uid
 router.get('/:uid', getUserProfile);
 
-export default router;
-
-
 // ─── Chat Theme Routes ────────────────────────────────────────────────────────
 
 // PUT /api/users/me/chat-theme/:chatId
@@ -142,5 +139,28 @@ router.delete('/me/chat-theme/:chatId', removeChatThemeHandler);
 
 // GET /api/users/me/chat-themes
 router.get('/me/chat-themes', getAllChatThemesHandler);
+
+// ─── Two-Factor Authentication Routes ─────────────────────────────────────────
+
+// POST /api/users/me/2fa/setup - Generate QR code and backup codes
+router.post('/me/2fa/setup', setup2FAHandler);
+
+// POST /api/users/me/2fa/verify - Verify TOTP and enable 2FA
+router.post('/me/2fa/verify', verify2FAHandler);
+
+// POST /api/users/me/2fa/verify-login - Verify TOTP during login
+router.post('/me/2fa/verify-login', verify2FALoginHandler);
+
+// POST /api/users/me/2fa/verify-backup - Verify backup code during login
+router.post('/me/2fa/verify-backup', verify2FABackupHandler);
+
+// POST /api/users/me/2fa/disable - Disable 2FA (requires TOTP)
+router.post('/me/2fa/disable', disable2FAHandler);
+
+// POST /api/users/me/2fa/regenerate - Regenerate QR code (requires TOTP)
+router.post('/me/2fa/regenerate', regenerate2FAHandler);
+
+// GET /api/users/me/2fa/status - Check if 2FA is enabled
+router.get('/me/2fa/status', get2FAStatusHandler);
 
 export default router;

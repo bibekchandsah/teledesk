@@ -11,13 +11,14 @@ import {
   upsertUserProfile,
   signInWithCustomToken,
 } from '../services/firebaseService';
-import { syncUserProfile } from '../services/apiService';
+import { syncUserProfile, get2FAStatus } from '../services/apiService';
 import { initSocket, disconnectSocket } from '../services/socketService';
 import { clearAllKeys } from '../services/encryptionService';
 import { requestNotificationPermission } from '../services/notificationService';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useMultiAccountStore } from '../store/multiAccountStore';
+import TwoFactorVerifyModal from '../components/modals/TwoFactorVerifyModal';
 
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
@@ -33,6 +34,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [show2FAVerify, setShow2FAVerify] = useState(false);
+  const [pending2FAUser, setPending2FAUser] = useState<FirebaseUser | null>(null);
   const pendingDisplayNameRef = useRef<string | null>(null);
   const { setCurrentUser, setLoading, setError, logout: storeLogout } = useAuthStore();
   const { setUserProfile } = useChatStore();
@@ -43,83 +46,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFirebaseUser(fbUser);
 
       if (fbUser) {
-        // ── Step 1: Unblock the UI immediately with data we already have ──────
-        // Firebase resolves the cached auth state from local storage in ~50-100ms.
-        // Setting currentUser here removes the loading screen right away instead of
-        // waiting for backend HTTP + Firestore calls (which take 3-5 seconds).
-        const displayName = fbUser.displayName || pendingDisplayNameRef.current || 'User';
-        const immediateProfile = {
-          uid: fbUser.uid,
-          name: displayName,
-          email: fbUser.email || '',
-          avatar: fbUser.photoURL || '',
-          createdAt: new Date().toISOString(),
-          lastSeen: new Date().toISOString(),
-          onlineStatus: 'online' as const,
-        };
-        setCurrentUser(immediateProfile);
-        setUserProfile(immediateProfile); // Also update chat store cache
-        setLoading(false);
-
-        // ── Step 2: Background sync — enrich profile without blocking the UI ──
-        (async () => {
-          try {
-            const token = await fbUser.getIdToken();
-            initSocket(token);
-            requestNotificationPermission().catch(() => {});
-
-            // Try to sync with backend
-            let userProfile = null;
-            try {
-              const response = await syncUserProfile(
-                displayName,
-                fbUser.email || '',
-                fbUser.photoURL || '',
-              );
-              if (response.success && response.data) {
-                userProfile = response.data;
-              }
-            } catch (syncErr) {
-              console.warn('[Auth] Backend sync failed, continuing offline:', syncErr);
-            }
-
-            // Always write to Firestore directly (ensures user is searchable by others)
-            try {
-              const fsProfile = await upsertUserProfile(fbUser, displayName);
-              if (!userProfile) userProfile = fsProfile;
-            } catch (fsErr) {
-              console.warn('[Auth] Firestore write failed:', fsErr);
-            }
-
-            // Update with the richer profile once the background sync completes
-            if (userProfile) {
-              setCurrentUser(userProfile);
-              setUserProfile(userProfile); // Also update chat store cache
-              useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
-              useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
-              useChatStore.getState().setLockedChatIds(userProfile.lockedChatIds ?? []);
-              useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
-              
-              // Store account in multi-account store
-              addAccount({
-                uid: userProfile.uid,
-                email: userProfile.email,
-                name: userProfile.name,
-                avatar: userProfile.avatar,
-                refreshToken: fbUser.uid, // Placeholder - Firebase manages tokens internally
-                lastUsed: new Date().toISOString(),
-              });
-              setActiveAccount(userProfile.uid);
-            }
-            
-            // Clear pending name after sync completes
-            if (pendingDisplayNameRef.current) {
-              pendingDisplayNameRef.current = null;
-            }
-          } catch (err) {
-            console.error('[Auth] Background sync failed:', err);
+        // Check if 2FA is enabled for this user
+        try {
+          const token = await fbUser.getIdToken();
+          const result = await get2FAStatus();
+          
+          if (result.success && result.data?.enabled) {
+            // 2FA is enabled - show verification modal
+            setPending2FAUser(fbUser);
+            setShow2FAVerify(true);
+            setLoading(false);
+            return; // Don't proceed with login until 2FA is verified
           }
-        })();
+        } catch (err) {
+          console.error('[Auth] Failed to check 2FA status:', err);
+          // Continue with login if 2FA check fails
+        }
+
+        // No 2FA or 2FA check failed - proceed with normal login
+        await completeLogin(fbUser);
       } else {
         setCurrentUser(null);
         disconnectSocket();
@@ -129,6 +74,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return unsubscribe;
   }, [setCurrentUser, setLoading, setError]);
+
+  // Complete login after 2FA verification (or if 2FA not enabled)
+  const completeLogin = async (fbUser: FirebaseUser) => {
+    // ── Step 1: Unblock the UI immediately with data we already have ──────
+    const displayName = fbUser.displayName || pendingDisplayNameRef.current || 'User';
+    const immediateProfile = {
+      uid: fbUser.uid,
+      name: displayName,
+      email: fbUser.email || '',
+      avatar: fbUser.photoURL || '',
+      createdAt: new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
+      onlineStatus: 'online' as const,
+    };
+    setCurrentUser(immediateProfile);
+    setUserProfile(immediateProfile);
+    setLoading(false);
+
+    // ── Step 2: Background sync ──
+    (async () => {
+      try {
+        const token = await fbUser.getIdToken();
+        initSocket(token);
+        requestNotificationPermission().catch(() => {});
+
+        let userProfile = null;
+        try {
+          const response = await syncUserProfile(displayName, fbUser.email || '', fbUser.photoURL || '');
+          if (response.success && response.data) {
+            userProfile = response.data;
+          }
+        } catch (syncErr) {
+          console.warn('[Auth] Backend sync failed:', syncErr);
+        }
+
+        try {
+          const fsProfile = await upsertUserProfile(fbUser, displayName);
+          if (!userProfile) userProfile = fsProfile;
+        } catch (fsErr) {
+          console.warn('[Auth] Firestore write failed:', fsErr);
+        }
+
+        if (userProfile) {
+          setCurrentUser(userProfile);
+          setUserProfile(userProfile);
+          useChatStore.getState().setPinnedChatIds(userProfile.pinnedChatIds ?? []);
+          useChatStore.getState().setArchivedChatIds(userProfile.archivedChatIds ?? []);
+          useChatStore.getState().setLockedChatIds(userProfile.lockedChatIds ?? []);
+          useChatStore.getState().setNicknames(userProfile.nicknames ?? {});
+          
+          addAccount({
+            uid: userProfile.uid,
+            email: userProfile.email,
+            name: userProfile.name,
+            avatar: userProfile.avatar,
+            refreshToken: fbUser.uid,
+            lastUsed: new Date().toISOString(),
+          });
+          setActiveAccount(userProfile.uid);
+        }
+        
+        if (pendingDisplayNameRef.current) {
+          pendingDisplayNameRef.current = null;
+        }
+      } catch (err) {
+        console.error('[Auth] Background sync failed:', err);
+      }
+    })();
+  };
 
   // Handle external auth tokens (Deep Linking)
   useEffect(() => {
@@ -237,10 +251,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const handle2FASuccess = async () => {
+    setShow2FAVerify(false);
+    if (pending2FAUser) {
+      await completeLogin(pending2FAUser);
+      setPending2FAUser(null);
+    }
+  };
+
+  const handle2FACancel = async () => {
+    setShow2FAVerify(false);
+    setPending2FAUser(null);
+    // Sign out the user since they cancelled 2FA
+    await signOutUser();
+  };
+
   return (
-    <AuthContext.Provider value={{ firebaseUser, loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail, logout, isLoading: useAuthStore.getState().isLoading }}>
-      {children}
-    </AuthContext.Provider>
+    <>
+      <AuthContext.Provider value={{ firebaseUser, loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail, logout, isLoading: useAuthStore.getState().isLoading }}>
+        {children}
+      </AuthContext.Provider>
+
+      {/* 2FA Verification Modal */}
+      {show2FAVerify && (
+        <TwoFactorVerifyModal
+          onSuccess={handle2FASuccess}
+          onCancel={handle2FACancel}
+        />
+      )}
+    </>
   );
 };
 

@@ -4,10 +4,11 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
-import { updateMyProfile, uploadAvatar } from '../services/apiService';
+import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
 import { Pencil, Sun, Moon, Trash2 } from 'lucide-react';
 import { firebaseAuth } from '../services/firebaseService';
+import TwoFactorSetupModal from '../components/modals/TwoFactorSetupModal';
 
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
@@ -22,6 +23,15 @@ const SettingsPage: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDisableAppLockConfirm, setShowDisableAppLockConfirm] = useState(false);
   const [isDisablingAppLock, setIsDisablingAppLock] = useState(false);
+  
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [show2FASetup, setShow2FASetup] = useState(false);
+  const [show2FARegenerate, setShow2FARegenerate] = useState(false);
+  const [showDisable2FAConfirm, setShowDisable2FAConfirm] = useState(false);
+  const [disable2FAToken, setDisable2FAToken] = useState('');
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false);
+  const [disable2FAError, setDisable2FAError] = useState('');
 
   // Enumerate microphone devices
   useEffect(() => {
@@ -62,6 +72,21 @@ const SettingsPage: React.FC = () => {
       }
     };
     loadDevices();
+  }, []);
+
+  // Load 2FA status
+  useEffect(() => {
+    const load2FAStatus = async () => {
+      try {
+        const result = await get2FAStatus();
+        if (result.success && result.data) {
+          setTwoFactorEnabled(result.data.enabled);
+        }
+      } catch (err) {
+        console.error('Failed to load 2FA status:', err);
+      }
+    };
+    load2FAStatus();
   }, []);
 
   const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
@@ -669,6 +694,52 @@ const SettingsPage: React.FC = () => {
             </button>
           </div>
         </SettingRow>
+
+        <SettingRow
+          label="Two-Factor Authentication"
+          description={twoFactorEnabled ? "Extra security with authenticator app. Disable or regenerate QR code." : "Add an extra layer of security with Google/Microsoft Authenticator"}
+        >
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            {twoFactorEnabled && (
+              <button
+                onClick={() => setShow2FARegenerate(true)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Regenerate QR
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (twoFactorEnabled) {
+                  setShowDisable2FAConfirm(true);
+                } else {
+                  setShow2FASetup(true);
+                }
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                backgroundColor: twoFactorEnabled ? 'rgba(239, 68, 68, 0.1)' : 'var(--accent)',
+                color: twoFactorEnabled ? '#ef4444' : '#fff',
+                fontSize: 13,
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
+            >
+              {twoFactorEnabled ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </SettingRow>
       </Section>
 
       {/* Audio */}
@@ -1081,6 +1152,203 @@ const SettingsPage: React.FC = () => {
                 }}
               >
                 {isDeleting ? 'Deleting...' : 'Delete My Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2FA Setup Modal */}
+      {show2FASetup && (
+        <TwoFactorSetupModal
+          onClose={() => setShow2FASetup(false)}
+          onSuccess={() => {
+            setTwoFactorEnabled(true);
+            setCurrentUser({ ...currentUser!, twoFactorEnabled: true });
+          }}
+        />
+      )}
+
+      {/* 2FA Regenerate Modal */}
+      {show2FARegenerate && (
+        <TwoFactorSetupModal
+          isRegenerate
+          onClose={() => setShow2FARegenerate(false)}
+          onSuccess={() => {}}
+        />
+      )}
+
+      {/* Disable 2FA Confirmation Modal */}
+      {showDisable2FAConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: 20,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => {
+            setShowDisable2FAConfirm(false);
+            setDisable2FAToken('');
+            setDisable2FAError('');
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 20,
+              padding: 32,
+              maxWidth: 420,
+              width: '100%',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
+              animation: 'slideUp 0.3s ease-out',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                border: '2px solid rgba(239, 68, 68, 0.3)',
+              }}>
+                <Trash2 size={28} color="#ef4444" />
+              </div>
+              <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 22, fontWeight: 700 }}>
+                Disable Two-Factor Authentication?
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                Your account will be less secure. Enter your current 6-digit code to confirm.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+                Verification Code
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={disable2FAToken}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setDisable2FAToken(val);
+                  setDisable2FAError('');
+                }}
+                placeholder="000000"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 16,
+                  fontFamily: 'monospace',
+                  letterSpacing: '0.5em',
+                  textAlign: 'center',
+                  outline: 'none',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+                onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
+              />
+            </div>
+
+            {disable2FAError && (
+              <div style={{
+                padding: 12,
+                borderRadius: 8,
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#ef4444',
+                fontSize: 13,
+                marginBottom: 16,
+              }}>
+                {disable2FAError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => {
+                  setShowDisable2FAConfirm(false);
+                  setDisable2FAToken('');
+                  setDisable2FAError('');
+                }}
+                disabled={isDisabling2FA}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 600,
+                  cursor: isDisabling2FA ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  opacity: isDisabling2FA ? 0.5 : 1,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (disable2FAToken.length !== 6) {
+                    setDisable2FAError('Please enter a 6-digit code');
+                    return;
+                  }
+
+                  setIsDisabling2FA(true);
+                  setDisable2FAError('');
+                  try {
+                    const res = await disable2FA(disable2FAToken);
+                    if (res.success) {
+                      setTwoFactorEnabled(false);
+                      setCurrentUser({ ...currentUser!, twoFactorEnabled: false });
+                      setShowDisable2FAConfirm(false);
+                      setDisable2FAToken('');
+                    } else {
+                      setDisable2FAError(res.error || 'Invalid verification code');
+                    }
+                  } catch (error) {
+                    console.error('Failed to disable 2FA:', error);
+                    setDisable2FAError('Failed to disable 2FA');
+                  } finally {
+                    setIsDisabling2FA(false);
+                  }
+                }}
+                disabled={isDisabling2FA || disable2FAToken.length !== 6}
+                style={{
+                  flex: 1,
+                  padding: '12px 24px',
+                  borderRadius: 12,
+                  border: 'none',
+                  backgroundColor: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: isDisabling2FA || disable2FAToken.length !== 6 ? 'not-allowed' : 'pointer',
+                  fontSize: 15,
+                  opacity: isDisabling2FA || disable2FAToken.length !== 6 ? 0.5 : 1,
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                {isDisabling2FA ? 'Disabling...' : 'Disable 2FA'}
               </button>
             </div>
           </div>

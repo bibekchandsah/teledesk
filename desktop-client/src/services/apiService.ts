@@ -262,3 +262,44 @@ export const removeChatTheme = (chatId: string) =>
 
 export const getAllChatThemes = () =>
   authFetch<{ success: boolean; data: Record<string, any> }>('/api/users/me/chat-themes');
+
+
+// ─── Two-Factor Authentication API ─────────────────────────────────────────
+
+export const setup2FA = () =>
+  authFetch<{ qrCode: string; backupCodes: string[] }>('/api/users/me/2fa/setup', {
+    method: 'POST',
+  });
+
+export const verify2FA = (token: string) =>
+  authFetch<{ success: boolean; message: string }>('/api/users/me/2fa/verify', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const verify2FALogin = (token: string) =>
+  authFetch<{ verified: boolean }>('/api/users/me/2fa/verify-login', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const verify2FABackup = (code: string) =>
+  authFetch<{ verified: boolean }>('/api/users/me/2fa/verify-backup', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+
+export const disable2FA = (token: string) =>
+  authFetch<{ success: boolean; message: string }>('/api/users/me/2fa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const regenerate2FA = (token: string) =>
+  authFetch<{ qrCode: string; backupCodes: string[] }>('/api/users/me/2fa/regenerate', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+
+export const get2FAStatus = () =>
+  authFetch<{ enabled: boolean }>('/api/users/me/2fa/status');

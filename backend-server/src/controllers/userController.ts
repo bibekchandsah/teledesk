@@ -587,3 +587,199 @@ export const getAllChatThemesHandler = async (req: Request, res: Response): Prom
     res.status(500).json({ success: false, error: 'Failed to get chat themes' });
   }
 };
+
+
+// ─── Two-Factor Authentication Handlers ──────────────────────────────────────
+
+/**
+ * POST /api/users/me/2fa/setup
+ * Generate 2FA secret and QR code for initial setup
+ */
+export const setup2FAHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { generate2FASecret } = await import('../services/userService');
+    
+    const result = await generate2FASecret(uid);
+    
+    res.json({
+      success: true,
+      data: {
+        qrCode: result.qrCode,
+        backupCodes: result.backupCodes,
+      },
+    });
+  } catch (error) {
+    logger.error(`setup2FA error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to setup 2FA' });
+  }
+};
+
+/**
+ * POST /api/users/me/2fa/verify
+ * Verify TOTP code and enable 2FA
+ */
+export const verify2FAHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { token } = req.body as { token: string };
+    
+    if (!token || token.length !== 6) {
+      res.status(400).json({ success: false, error: 'Invalid token format' });
+      return;
+    }
+    
+    const { verify2FACode } = await import('../services/userService');
+    const verified = await verify2FACode(uid, token);
+    
+    if (!verified) {
+      res.status(400).json({ success: false, error: 'Invalid verification code' });
+      return;
+    }
+    
+    res.json({ success: true, message: '2FA enabled successfully' });
+  } catch (error) {
+    logger.error(`verify2FA error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify 2FA' });
+  }
+};
+
+/**
+ * POST /api/users/me/2fa/verify-login
+ * Verify TOTP code during login
+ */
+export const verify2FALoginHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { token } = req.body as { token: string };
+    
+    if (!token || token.length !== 6) {
+      res.status(400).json({ success: false, error: 'Invalid token format' });
+      return;
+    }
+    
+    const { verify2FALogin } = await import('../services/userService');
+    const verified = await verify2FALogin(uid, token);
+    
+    if (!verified) {
+      res.status(400).json({ success: false, error: 'Invalid verification code' });
+      return;
+    }
+    
+    res.json({ success: true, data: { verified: true } });
+  } catch (error) {
+    logger.error(`verify2FALogin error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify login code' });
+  }
+};
+
+/**
+ * POST /api/users/me/2fa/verify-backup
+ * Verify backup code during login
+ */
+export const verify2FABackupHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { code } = req.body as { code: string };
+    
+    if (!code) {
+      res.status(400).json({ success: false, error: 'Backup code is required' });
+      return;
+    }
+    
+    const { verify2FABackupCode } = await import('../services/userService');
+    const verified = await verify2FABackupCode(uid, code.toUpperCase());
+    
+    if (!verified) {
+      res.status(400).json({ success: false, error: 'Invalid backup code' });
+      return;
+    }
+    
+    res.json({ success: true, data: { verified: true } });
+  } catch (error) {
+    logger.error(`verify2FABackup error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to verify backup code' });
+  }
+};
+
+/**
+ * POST /api/users/me/2fa/disable
+ * Disable 2FA (requires valid TOTP code)
+ */
+export const disable2FAHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { token } = req.body as { token: string };
+    
+    if (!token || token.length !== 6) {
+      res.status(400).json({ success: false, error: 'Invalid token format' });
+      return;
+    }
+    
+    const { disable2FA } = await import('../services/userService');
+    const disabled = await disable2FA(uid, token);
+    
+    if (!disabled) {
+      res.status(400).json({ success: false, error: 'Invalid verification code' });
+      return;
+    }
+    
+    res.json({ success: true, message: '2FA disabled successfully' });
+  } catch (error) {
+    logger.error(`disable2FA error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to disable 2FA' });
+  }
+};
+
+/**
+ * POST /api/users/me/2fa/regenerate
+ * Regenerate QR code (requires valid TOTP code)
+ */
+export const regenerate2FAHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { token } = req.body as { token: string };
+    
+    if (!token || token.length !== 6) {
+      res.status(400).json({ success: false, error: 'Invalid token format' });
+      return;
+    }
+    
+    const { regenerate2FASecret } = await import('../services/userService');
+    const result = await regenerate2FASecret(uid, token);
+    
+    if (!result) {
+      res.status(400).json({ success: false, error: 'Invalid verification code' });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        qrCode: result.qrCode,
+        backupCodes: result.backupCodes,
+      },
+    });
+  } catch (error) {
+    logger.error(`regenerate2FA error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to regenerate 2FA' });
+  }
+};
+
+/**
+ * GET /api/users/me/2fa/status
+ * Check if 2FA is enabled for the current user
+ */
+export const get2FAStatusHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user!.uid;
+    const { is2FAEnabled } = await import('../services/userService');
+    
+    const enabled = await is2FAEnabled(uid);
+    
+    res.json({ success: true, data: { enabled } });
+  } catch (error) {
+    logger.error(`get2FAStatus error: ${(error as Error).message}`);
+    res.status(500).json({ success: false, error: 'Failed to get 2FA status' });
+  }
+};

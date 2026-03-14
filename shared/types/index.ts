@@ -22,6 +22,8 @@ export interface User {
   appLockPin?: string; // hashed 6-digit PIN for app lock
   nicknames?: Record<string, string>; // custom display names for other users, keyed by uid
   chatThemes?: Record<string, ChatTheme>; // per-chat theme customization, keyed by chatId
+  twoFactorEnabled?: boolean; // if true, 2FA is enabled for this user
+  twoFactorSecret?: string; // encrypted TOTP secret (only sent during setup, not in regular profile)
 }
 
 export interface ChatTheme {

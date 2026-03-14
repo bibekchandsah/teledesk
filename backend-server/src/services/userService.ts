@@ -2,6 +2,10 @@ import { supabase } from '../config/supabase';
 import { User } from '../../../shared/types';
 import { now } from '../utils/helpers';
 import logger from '../utils/logger';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 type UserRow = {
   uid: string;
@@ -23,6 +27,9 @@ type UserRow = {
   app_lock_pin: string | null;
   nicknames: Record<string, string> | null;
   chat_themes: Record<string, any> | null;
+  two_factor_enabled: boolean | null;
+  two_factor_secret: string | null;
+  two_factor_backup_codes: string[] | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -45,6 +52,8 @@ const rowToUser = (r: UserRow): User => ({
   appLockPin: r.app_lock_pin ?? undefined,
   nicknames: r.nicknames ?? {},
   chatThemes: r.chat_themes ?? {},
+  twoFactorEnabled: r.two_factor_enabled ?? false,
+  // Note: two_factor_secret is intentionally not included in regular user profile for security
 });
 
 export const upsertUser = async (uid: string, data: Partial<User>): Promise<User> => {
@@ -71,7 +80,13 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       locked_chat_ids: [],
       chat_lock_pin: null,
       chat_lock_reset_code: null,
+      app_lock_enabled: null,
+      app_lock_pin: null,
       nicknames: {},
+      chat_themes: null,
+      two_factor_enabled: null,
+      two_factor_secret: null,
+      two_factor_backup_codes: null,
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -185,7 +200,6 @@ export const getUserByUsername = async (username: string): Promise<User | null> 
 };
 
 // ─── PIN Management & Chat Locking ─────────────────────────────────────────
-import bcrypt from 'bcryptjs';
 
 export const setLockPin = async (uid: string, pin: string): Promise<void> => {
   const hashedPin = await bcrypt.hash(pin, 10);
@@ -303,4 +317,199 @@ export const removeChatTheme = async (uid: string, chatId: string): Promise<void
 export const getAllChatThemes = async (uid: string): Promise<Record<string, any>> => {
   const { data: user } = await supabase.from('users').select('chat_themes').eq('uid', uid).single();
   return user?.chat_themes || {};
+};
+
+// ─── Two-Factor Authentication ──────────────────────────────────────────────
+
+/**
+ * Generate a new 2FA secret and QR code for setup
+ */
+export const generate2FASecret = async (uid: string): Promise<{ secret: string; qrCode: string; backupCodes: string[] }> => {
+  const user = await getUserById(uid);
+  if (!user) throw new Error('User not found');
+
+  // Generate secret
+  const secret = speakeasy.generateSecret({
+    name: `TeleDesk (${user.email})`,
+    issuer: 'TeleDesk',
+    length: 32,
+  });
+
+  // Generate QR code
+  const qrCode = await QRCode.toDataURL(secret.otpauth_url!);
+
+  // Generate 10 backup codes
+  const backupCodes: string[] = [];
+  const hashedBackupCodes: string[] = [];
+  
+  for (let i = 0; i < 10; i++) {
+    const code = crypto.randomBytes(4).toString('hex').toUpperCase(); // 8-character code
+    backupCodes.push(code);
+    hashedBackupCodes.push(await bcrypt.hash(code, 10));
+  }
+
+  // Store secret and backup codes (not enabled yet)
+  await supabase
+    .from('users')
+    .update({
+      two_factor_secret: secret.base32,
+      two_factor_backup_codes: hashedBackupCodes,
+      two_factor_enabled: false, // Not enabled until verified
+    })
+    .eq('uid', uid);
+
+  return {
+    secret: secret.base32,
+    qrCode,
+    backupCodes,
+  };
+};
+
+/**
+ * Verify TOTP code and enable 2FA
+ */
+export const verify2FACode = async (uid: string, token: string): Promise<boolean> => {
+  const { data: user } = await supabase
+    .from('users')
+    .select('two_factor_secret')
+    .eq('uid', uid)
+    .single();
+
+  if (!user?.two_factor_secret) {
+    throw new Error('2FA not set up');
+  }
+
+  const verified = speakeasy.totp.verify({
+    secret: user.two_factor_secret,
+    encoding: 'base32',
+    token,
+    window: 2, // Allow 2 time steps before/after for clock skew
+  });
+
+  if (verified) {
+    // Enable 2FA
+    await supabase
+      .from('users')
+      .update({ two_factor_enabled: true })
+      .eq('uid', uid);
+  }
+
+  return verified;
+};
+
+/**
+ * Verify TOTP code during login (doesn't enable/disable, just verifies)
+ */
+export const verify2FALogin = async (uid: string, token: string): Promise<boolean> => {
+  const { data: user } = await supabase
+    .from('users')
+    .select('two_factor_secret, two_factor_enabled')
+    .eq('uid', uid)
+    .single();
+
+  if (!user?.two_factor_enabled || !user?.two_factor_secret) {
+    return false;
+  }
+
+  return speakeasy.totp.verify({
+    secret: user.two_factor_secret,
+    encoding: 'base32',
+    token,
+    window: 2,
+  });
+};
+
+/**
+ * Verify backup code and mark it as used
+ */
+export const verify2FABackupCode = async (uid: string, code: string): Promise<boolean> => {
+  const { data: user } = await supabase
+    .from('users')
+    .select('two_factor_backup_codes')
+    .eq('uid', uid)
+    .single();
+
+  if (!user?.two_factor_backup_codes || user.two_factor_backup_codes.length === 0) {
+    return false;
+  }
+
+  // Check each hashed backup code
+  for (let i = 0; i < user.two_factor_backup_codes.length; i++) {
+    const isMatch = await bcrypt.compare(code, user.two_factor_backup_codes[i]);
+    if (isMatch) {
+      // Remove the used backup code
+      const updatedCodes = [...user.two_factor_backup_codes];
+      updatedCodes.splice(i, 1);
+      
+      await supabase
+        .from('users')
+        .update({ two_factor_backup_codes: updatedCodes })
+        .eq('uid', uid);
+      
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Disable 2FA (requires valid TOTP code)
+ */
+export const disable2FA = async (uid: string, token: string): Promise<boolean> => {
+  const verified = await verify2FALogin(uid, token);
+  
+  if (!verified) {
+    return false;
+  }
+
+  await supabase
+    .from('users')
+    .update({
+      two_factor_enabled: false,
+      two_factor_secret: null,
+      two_factor_backup_codes: null,
+    })
+    .eq('uid', uid);
+
+  return true;
+};
+
+/**
+ * Regenerate QR code (requires valid TOTP code from current secret)
+ */
+export const regenerate2FASecret = async (uid: string, currentToken: string): Promise<{ qrCode: string; backupCodes: string[] } | null> => {
+  // Verify current token first
+  const verified = await verify2FALogin(uid, currentToken);
+  
+  if (!verified) {
+    return null;
+  }
+
+  // Generate new secret and QR code
+  const result = await generate2FASecret(uid);
+  
+  // Keep 2FA enabled status
+  await supabase
+    .from('users')
+    .update({ two_factor_enabled: true })
+    .eq('uid', uid);
+
+  return {
+    qrCode: result.qrCode,
+    backupCodes: result.backupCodes,
+  };
+};
+
+/**
+ * Check if user has 2FA enabled
+ */
+export const is2FAEnabled = async (uid: string): Promise<boolean> => {
+  const { data: user } = await supabase
+    .from('users')
+    .select('two_factor_enabled')
+    .eq('uid', uid)
+    .single();
+
+  return user?.two_factor_enabled ?? false;
 };
