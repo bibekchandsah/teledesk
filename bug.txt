@@ -1,93 +1,35 @@
-(fixed) instantly it don't show updated profile picture of opposite person in chat window until refreshed or reload 
-(fixed) it don't show avatar in notification only shows user name if profile picture is not present
-(fixed) it don't show reaction row on grid image layout
-(fixed) when grid photo is deleted then it show reactions there but it should not show on deleted photo should remain same as before on that place
-(fixed) allow user to remove their profile picture 
-(fixed) show border-radius on grid image layout individually
-(fixed) while downloading it redirect to new tab instead of it should download directly 
-(fixed) in grid layout right click replace "copy link" with "copy image" which will copy image and show toast notification about copied image
-(fixed) caption isn't attached with files, it shows on another message bubble
-(fixed) it don't show caption for more than 1 image file and other files
-(fixed) show sidebar context menu inside view port
-(fixed) move profile icon to bottom that is below setting icon in nav bar and show user porfie picture insted of profile icon
-(fixed) hovering on grid layout isn't showing any reaction row
-(fixed) show reactions on grid layout not on individual image 
-(fixed) for files like audio/video/pdf etc. instead of 'copy link' show 'download'
-(fixed) copy message should copy the message text/images/stickers/GIFs and show toast notification about copied message/text/image/sticker/GIF  
-(fixed) when user is unlocking chat then it's not reflecting immediately in chat window 
-(fixed) in locked user chat it don't show unread message count
-(fixed) don't show lock navigation bar for small devices
-(fixed) when user close chat of locked user and navigate to other user chat or any other navigation then unlock icon should be locked and user need to enter pin to see locked chat
-(fixed)when user lock the chat then it still shows in sidebar chat and reloading page it's gone 
-(fixed) when lock folder is empty then remove it from nav bar and when user lock the chat then it should show in nav bar
-(fixed) improve the design of "next", "confirm" and "continue" button in enter pin popup
-(fixed) allow user to change pin from settings
-(fixed) when user seaarch for new chat and click on user then it shows "
-Unknown
-Start a conversation
-" in side bar and in chat window it shwos "
-User
-Last seen Invalid Date
-" instead of user profile picture and username should show user profile picture instead of default profile picture
-(fixed) add checkbox in systemm tray menu for auto statrt on startup
-(fixed) add show/hide window in system tray menu
-(fixed) show play icon in video files
-(fixed) replyed messaged isn't highlighted when clicked
-(fixed) in message bubble it shows yesterday not the exact time, show exact time
-(fixed) in smaller devices right click context menu bottom portion is hides below navigation bar 
-(fixed) during login allow user to login with authenticated gmail not temp email and add forgot password recovery mechanism
-(fixed) add delete account option in setting page & delete user from database too 
-(fixed) when user don't have friends and navigate to other pages and click on chat nav icon then it shows spinning instead of showing empty state
-(fixed) spinning loader by showing message "Select a chat to start messaging"
-(fixed) when new user send message it don't reflect immediately in receiver chat
-(fixed) in notification it showed correct username but in sidebar it shows "unknown"
-(fixed) in touch device pressing enter will use as shift + enter so that user can write in new line in message input box
-(fixed) in laptop it still pressing enter don't send the message it works like shift+enter
-(fixed) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
-(fixed) in new chat if user signup with google then it don't show profile picture there
-(fixed) in new chat if user signup with google then it don't show profile picture there
-(fixed) sidebar "delete for everyone" is not working - now shows confirmation modal for both delete options
-(fixed) show warning modal for 'delete for me" and "delete for everyone" in sidebar
-(fixed) show warning modal for 'delete for me" and "delete for everyone" in chat window three dot menu
-(fixed) avatar is not shown in notification as profile picture if there is no profile picture - now generates default avatar
-(fixed) draft message across the device - messages are now saved and synced across all devices (run drafts-migration.sql)
-(fixed) logged in with google redirects to default browser - OAuth now uses redirect flow in Electron
-(fixed) for draft message 
-    in device A user type some text for user A and at same time in device B user see or update then it's getting sync
-    in device A user type some text for user A and later at device B it don't show draft message from device A.
-        at this time in device A draft is also cleared 
-    it's like user should open two devices at same time for using this feature, but it should be like they came to any chat of user anytime in anydevice and will see the draft message if it's there in any devices.
-    if I have written draft message for 2 users then in another device openining that user chat should show draft message 
-(fixed) active status database now updates every 5 minutes
-(fixed) delete call logs (individually, selected, all logs)
-(fixed) user have to manually open chat then navigate to call log to see call logs which is taking time to load call logs, load it without opening individually chats
-(fixed) for touch device disable selecting text globally except input box
-(fixed) in setting change pin don't has option to forgot pin
-(fixed) scrolling down in sidebar should show (search, archieve, locked folders) as like pulling down for touch devices
-(fixed) respect showing when user is on top not just scrolling up, so that user must be on top for pulling it or scrolling it
-(fixed) add scrolling for those also who don't have scrolling area and scrolling will pull down as like for touch devices
-(fixed) scrolling up isn't hiding it again
-(fixed) make connection status toast responsive for small devices
-(fixed) add/remove App lock, forgot pin, and recovery mechanism
-(fixed) update all three dot menu 
-(fixed) Chat theme for individual user
-    allow user to adjust opacity, blur,
-    allow user to show to opposite user
-    sync across the devices 
-    user can add/remove the custom image too
-    load it it animated way like premium way
-(fixed) chat theme sync to opposite user 
+FIXED: 2FA Verification Modal Showing on Page Reload
 
-(partially) while voice/video incoming or outgoing calling open in popup window for web version
-add flip camera in pip camera and hide icon after 3 second of mouse inactive
-(partially)when user signin with google authentication how user will delete account it requires password to delete account, we should verify the user with google authentication to delete account
-send otp & link to user email to verify user/ reset pin/ delete account/ change password (through link too)/ app lock/ two step verification
-show logged in devices and allow user to logout from specific device
-redesign calling functions and sound for calling 
-allow user to import and export chat History
-store chats in device and update accordingly when new events occurs and while user is offline load it from device and when connection restored then update the chats and device storage as like telegram and whatsapp logic is implemented
-add delete icon on account switcher which will remove the account and signout that respective account
+Issue: After successfully logging in with 2FA, the verification modal appears again on every page reload.
 
-two step verification via TOTP with Google Authenticator and Microsoft Authenticator
-    enable / disable 2FA
-    regenerate / reset 
+Root Cause:
+- The 2FA check was running on every auth state change (including page reloads)
+- useRef doesn't persist across page reloads (it's in-memory only)
+- Firebase auth persists across page reloads, triggering onAuthChange again
+- Each page reload would check if 2FA is enabled and show the modal again
+
+Solution Applied:
+- Use `sessionStorage` instead of `useRef` to persist 2FA verification status
+- sessionStorage persists across page reloads but clears when browser tab/window closes
+- Check sessionStorage before showing 2FA modal
+- Clear sessionStorage on logout
+
+Implementation:
+1. Created helper functions:
+   - `is2FAVerifiedInSession(uid)` - Check if UID is verified in sessionStorage
+   - `mark2FAVerified(uid)` - Store verified UID in sessionStorage
+   - `clear2FAVerification()` - Remove verification from sessionStorage
+
+2. Check `is2FAVerifiedInSession(fbUser.uid)` before showing 2FA modal
+3. Call `mark2FAVerified(pending2FAUser.uid)` on successful verification
+4. Call `clear2FAVerification()` on logout and auth state null
+
+Files Modified:
+- desktop-client/src/context/AuthContext.tsx
+
+Result:
+- 2FA verification is now only required once per browser session
+- Page reloads no longer trigger 2FA modal
+- User stays logged in until they explicitly log out or close the browser tab
+- Logging out or closing tab clears the session and requires 2FA verification again on next login
+- sessionStorage is more secure than localStorage as it clears when tab closes

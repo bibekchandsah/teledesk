@@ -41,11 +41,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { setUserProfile } = useChatStore();
   const { addAccount, setActiveAccount } = useMultiAccountStore();
 
+  // Check if user has verified 2FA in this session
+  const is2FAVerifiedInSession = (uid: string): boolean => {
+    try {
+      const verified = sessionStorage.getItem('2fa_verified_uid');
+      return verified === uid;
+    } catch {
+      return false;
+    }
+  };
+
+  // Mark user as 2FA verified in this session
+  const mark2FAVerified = (uid: string): void => {
+    try {
+      sessionStorage.setItem('2fa_verified_uid', uid);
+    } catch (err) {
+      console.error('Failed to save 2FA session:', err);
+    }
+  };
+
+  // Clear 2FA verification status
+  const clear2FAVerification = (): void => {
+    try {
+      sessionStorage.removeItem('2fa_verified_uid');
+    } catch (err) {
+      console.error('Failed to clear 2FA session:', err);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
       setFirebaseUser(fbUser);
 
       if (fbUser) {
+        // Check if user already verified 2FA in this session
+        if (is2FAVerifiedInSession(fbUser.uid)) {
+          // Already verified in this session, proceed with login
+          await completeLogin(fbUser);
+          return;
+        }
+
         // Check if 2FA is enabled for this user
         try {
           const token = await fbUser.getIdToken();
@@ -69,6 +104,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(null);
         disconnectSocket();
         clearAllKeys();
+        // Clear 2FA session tracking on logout
+        clear2FAVerification();
       }
     });
 
@@ -241,6 +278,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearAllKeys();
       storeLogout();
       
+      // Clear 2FA session tracking
+      clear2FAVerification();
+      
       // Don't clear multi-account store when switching accounts
       if (!switchingAccount) {
         // User is fully logging out, not switching
@@ -254,6 +294,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handle2FASuccess = async () => {
     setShow2FAVerify(false);
     if (pending2FAUser) {
+      // Mark this session as verified
+      mark2FAVerified(pending2FAUser.uid);
       await completeLogin(pending2FAUser);
       setPending2FAUser(null);
     }
