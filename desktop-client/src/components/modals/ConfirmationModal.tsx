@@ -11,6 +11,7 @@ interface ConfirmationModalProps {
   onCancel: () => void;
   icon?: React.ReactNode;
   isDestructive?: boolean;
+  hideCancel?: boolean;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -23,6 +24,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   onCancel,
   icon,
   isDestructive = false,
+  hideCancel = false,
 }) => {
   if (!isOpen) return null;
 
@@ -66,19 +68,21 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         </div>
 
         <div style={footerStyle}>
-          <button 
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onCancel();
-            }} 
-            style={cancelBtnStyle}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            {cancelText}
-          </button>
+          {!hideCancel && (
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
+              }} 
+              style={cancelBtnStyle}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              {cancelText}
+            </button>
+          )}
           <button 
             type="button"
             onClick={(e) => {

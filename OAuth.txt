@@ -1,0 +1,14 @@
+1. Firebase Console — Add Authorized Domain
+    Go to Firebase Console → your project.
+    Navigate to Authentication → Settings → Authorized domains.
+    Click Add domain and add: teledesk.vercel.app
+2. Google Cloud Console — Add Redirect URI
+    Go to Google Cloud → Credentials.
+    Edit your OAuth 2.0 Client ID.
+    Under Authorized redirect URIs, add: https://teledesk-backend-production.up.railway.app/api/auth/desktop/google/callback
+3. GitHub — Add Redirect URI
+    Go to GitHub Settings → Developer settings → OAuth Apps.
+    Edit your app.
+    Under Authorization callback URL, add: https://teledesk-backend-production.up.railway.app/api/auth/desktop/github/callback
+4. Railway — Add Environment Variable
+    In your Railway project settings, add: BACKEND_URL=https://teledesk-backend-production.up.railway.app

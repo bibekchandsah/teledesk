@@ -49,8 +49,8 @@ export const authenticateToken = async (
       
       // Create a stable session identifier based on user, device, and location
       // This will be the same for the same user on the same device/browser
-      // Include more device-specific info to differentiate between devices on same network
-      const deviceFingerprint = Buffer.from(userAgent).toString('base64').slice(0, 30); // Increased from 20 to 30
+      const crypto = require('crypto');
+      const deviceFingerprint = crypto.createHash('md5').update(userAgent).digest('hex');
       const sessionFingerprint = `${decodedToken.uid}_${deviceFingerprint}_${ipAddress}`;
       
       // Log session fingerprint for debugging
@@ -100,7 +100,8 @@ export const authenticateSocket = async (
     // Create session fingerprint if we have the required info
     let sessionFingerprint: string | undefined;
     if (userAgent && ipAddress) {
-      const deviceFingerprint = Buffer.from(userAgent).toString('base64').slice(0, 30); // Increased from 20 to 30
+      const crypto = require('crypto');
+      const deviceFingerprint = crypto.createHash('md5').update(userAgent).digest('hex');
       sessionFingerprint = `${decoded.uid}_${deviceFingerprint}_${ipAddress}`;
       logger.debug(`Socket auth creating session fingerprint: ${sessionFingerprint}`);
     }

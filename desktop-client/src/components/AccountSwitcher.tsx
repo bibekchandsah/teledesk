@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAuth } from '../context/AuthContext';
 import { ChevronUp, Plus, Trash2 } from 'lucide-react';
 import ConfirmationModal from './modals/ConfirmationModal';
+import ErrorModal from './modals/ErrorModal';
 
 export const AccountSwitcher: React.FC = () => {
   const { accounts, activeAccountUid, removeAccount, setActiveAccount } = useMultiAccountStore();
@@ -14,6 +15,10 @@ export const AccountSwitcher: React.FC = () => {
   const [addingAccount, setAddingAccount] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+    isOpen: false,
+    message: '',
+  });
 
   const hasMultipleAccounts = accounts.length > 1;
 
@@ -99,14 +104,20 @@ export const AccountSwitcher: React.FC = () => {
 
       setSwitching(false);
 
-      // Fallback: If seamless switching fails, use traditional method
-      alert('Seamless switching failed. Redirecting to login...');
+      // Show premium error modal
+      setErrorModal({
+        isOpen: true,
+        message: 'Unable to switch accounts seamlessly. You will be redirected to the login page to complete the switch.',
+      });
 
+      // Wait for user to acknowledge before redirecting
       const account = accounts.find((a) => a.uid === uid);
       if (account) {
-        await logout(true);
-        setActiveAccount(uid);
-        window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
+        // Store the redirect info for after modal closes
+        (window as any).__pendingAccountSwitch = {
+          account,
+          uid,
+        };
       }
     }
   };
@@ -134,7 +145,25 @@ export const AccountSwitcher: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to remove account:', err);
-      alert('Failed to remove account. Please try again.');
+      setErrorModal({
+        isOpen: true,
+        message: 'Failed to remove account. Please try again.',
+      });
+    }
+  };
+
+  const handleErrorModalClose = async () => {
+    setErrorModal({ isOpen: false, message: '' });
+
+    // Handle pending account switch if exists
+    const pendingSwitch = (window as any).__pendingAccountSwitch;
+    if (pendingSwitch) {
+      const { account, uid } = pendingSwitch;
+      delete (window as any).__pendingAccountSwitch;
+      
+      await logout(true);
+      setActiveAccount(uid);
+      window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
     }
   };
 
@@ -511,6 +540,15 @@ export const AccountSwitcher: React.FC = () => {
         cancelText="Cancel"
         isDestructive={true}
         icon={<Trash2 size={18} color="#fff" />}
+      />
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={errorModal.isOpen}
+        onClose={handleErrorModalClose}
+        title="Account Switching Failed"
+        message={errorModal.message}
+        buttonText="Continue to Login"
       />
     </>
   );

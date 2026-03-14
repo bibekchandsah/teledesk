@@ -5,7 +5,22 @@ import logger from '../utils/logger';
 export const getDeviceSessions = async (req: Request, res: Response): Promise<void> => {
   try {
     const sessions = await getUserSessions(req.user!.uid);
-    res.json({ success: true, data: sessions });
+    
+    // Dynamically set isCurrent based on the session making the request
+    const currentSessionId = req.sessionId;
+    const mappedSessions = sessions.map(session => ({
+      ...session,
+      isCurrent: session.sessionId === currentSessionId
+    }));
+    
+    // Sort so current session is always first
+    mappedSessions.sort((a, b) => {
+      if (a.isCurrent) return -1;
+      if (b.isCurrent) return 1;
+      return 0; // Maintain original last_active sorting from service
+    });
+    
+    res.json({ success: true, data: mappedSessions });
   } catch (error) {
     logger.error(`getDeviceSessions error: ${(error as Error).message}`);
     res.status(500).json({ success: false, error: 'Failed to get device sessions' });
