@@ -26,6 +26,7 @@ interface AuthContextValue {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
   logout: (switchingAccount?: boolean) => Promise<void>;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -133,11 +134,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (window.electronAPI) {
       const cleanup = window.electronAPI.onAuthExternalToken(async (token: string) => {
+        console.log('[Auth] Received external auth token');
         try {
           setLoading(true);
           setError(null);
+          
+          const startSignIn = Date.now();
           await signInWithCustomToken(token);
+          console.log(`[Auth] Firebase sign-in finished in ${Date.now() - startSignIn}ms`);
+          
+          // The onAuthChange effect will handle the rest of the sync.
+          // For deletion re-auth, simply signing in with the fresh token is enough
+          // to update the "recent login" requirement.
         } catch (err) {
+          console.error('[Auth] External token login failed:', err);
           setLoading(false);
           setError((err as Error).message);
         }
@@ -228,7 +238,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail, logout }}>
+    <AuthContext.Provider value={{ firebaseUser, loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail, logout, isLoading: useAuthStore.getState().isLoading }}>
       {children}
     </AuthContext.Provider>
   );

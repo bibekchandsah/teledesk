@@ -111,31 +111,34 @@ export const getIdToken = async (): Promise<string | null> => {
   return user.getIdToken();
 };
 
-export const reauthenticate = async (): Promise<boolean> => {
+export const reauthenticate = async (): Promise<{ success: boolean; error?: string }> => {
   const user = firebaseAuth.currentUser;
-  if (!user) return false;
+  if (!user) return { success: false, error: 'No user logged in' };
 
-  const providerId = user.providerData[0]?.providerId;
+  // For custom token users (Desktop OAuth), providerData may be empty.
+  // We default to google.com as the provider in that case.
+  const providerId = user.providerData[0]?.providerId || 'google.com';
   let provider;
 
   if (providerId === 'google.com') {
-    googleProvider.setCustomParameters({ prompt: 'select_account' });
-    provider = googleProvider;
+    provider = new GoogleAuthProvider();
+    (provider as GoogleAuthProvider).setCustomParameters({ prompt: 'select_account' });
   } else if (providerId === 'github.com') {
-    provider = githubProvider;
+    provider = new GithubAuthProvider();
   } else {
-    // If it's email/password, we'd need a different flow (reauthenticateWithCredential)
-    // For now, let's support Google and GitHub which use popups.
-    return false;
+    return { success: false, error: 'Provider not supported for popup re-authentication' };
   }
 
   try {
     const { reauthenticateWithPopup } = await import('firebase/auth');
     await reauthenticateWithPopup(user, provider);
-    return true;
-  } catch (error) {
+    return { success: true };
+  } catch (error: any) {
     console.error('Re-authentication failed:', error);
-    return false;
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      return { success: false, error: 'Verification cancelled. Please try again.' };
+    }
+    return { success: false, error: error.message || 'Re-authentication failed' };
   }
 };
 

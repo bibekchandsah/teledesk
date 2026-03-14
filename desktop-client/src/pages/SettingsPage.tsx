@@ -7,6 +7,7 @@ import UserAvatar from '../components/UserAvatar';
 import { updateMyProfile, uploadAvatar } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
 import { Pencil, Sun, Moon, Trash2 } from 'lucide-react';
+import { firebaseAuth } from '../services/firebaseService';
 
 const SettingsPage: React.FC = () => {
   const { logout } = useAuth();
@@ -203,21 +204,20 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleDeleteAccount = async () => {
-    if (!deletePassword && currentUser?.email) {
-      // Check if user has email/password auth
-      const providerId = (window as any).firebase?.auth()?.currentUser?.providerData[0]?.providerId;
-      if (providerId === 'password') {
-        setDeleteError('Please enter your password to confirm');
-        return;
-      }
+    const providerData = firebaseAuth.currentUser?.providerData || [];
+    const isPasswordProvider = providerData.length > 0 && providerData[0]?.providerId === 'password';
+
+    if (isPasswordProvider && !deletePassword) {
+      setDeleteError('Please enter your password to confirm');
+      return;
     }
 
     setIsDeleting(true);
     setDeleteError(null);
 
     try {
-      // Re-authenticate if needed
-      if (deletePassword && currentUser?.email) {
+      // For email/password users: re-authenticate client-side first 
+      if (isPasswordProvider) {
         const { reauthenticateWithPassword } = await import('../services/firebaseService');
         const reauthed = await reauthenticateWithPassword(deletePassword);
         if (!reauthed) {
@@ -227,36 +227,25 @@ const SettingsPage: React.FC = () => {
         }
       }
 
-      // Delete from backend database first
+      // Call backend — which deletes from DB AND Firebase Auth (via Admin SDK).
+      // Admin SDK bypasses requires-recent-login, so no re-auth needed for OAuth users.
       const { deleteMyAccount } = await import('../services/apiService');
       const result = await deleteMyAccount();
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to delete account from database');
+        throw new Error(result.error || 'Failed to delete account');
       }
 
-      // Delete from Firebase Auth
-      const { deleteCurrentUser } = await import('../services/firebaseService');
-      const deleteResult = await deleteCurrentUser();
-
-      if (!deleteResult.success) {
-        if (deleteResult.error?.includes('re-authenticate')) {
-          setDeleteError('Please sign out and sign in again, then try deleting your account');
-        } else {
-          setDeleteError(deleteResult.error || 'Failed to delete account');
-        }
-        setIsDeleting(false);
-        return;
-      }
-
-      // Success - redirect to login
+      // Sign out locally and redirect
+      await logout();
       window.location.href = '/login?logout=true';
     } catch (error: any) {
-      console.error('Delete account error:', error);
+      console.error('[Delete] Error:', error);
       setDeleteError(error.message || 'Failed to delete account');
       setIsDeleting(false);
     }
   };
+
 
   const handleToggleActiveStatus = async () => {
     const newVal = !showActiveStatus;
@@ -763,35 +752,39 @@ const SettingsPage: React.FC = () => {
               </div>
             )}
 
-            {currentUser?.email && (
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                  Confirm your password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Enter your password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  disabled={isDeleting}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: 14,
-                    outline: 'none',
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isDeleting) {
-                      handleDeleteAccount();
-                    }
-                  }}
-                />
-              </div>
-            )}
+            {/* Only show password field for email/password users */}
+            {(() => {
+              const providerData = firebaseAuth.currentUser?.providerData || [];
+              const isPasswordUser = providerData.length > 0 && providerData[0]?.providerId === 'password';
+              if (!isPasswordUser) return null;
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                    Confirm your password
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter your password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    disabled={isDeleting}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      backgroundColor: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                      fontSize: 14,
+                      outline: 'none',
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !isDeleting) handleDeleteAccount();
+                    }}
+                  />
+                </div>
+              );
+            })()}
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button

@@ -380,7 +380,21 @@ export const deleteAccount = async (req: Request, res: Response): Promise<void> 
     const uid = req.user!.uid;
     const { deleteUserAccount } = await import('../services/userService');
     
+    // 1. Delete from database (marks as deleted, removes from chats, etc.)
     await deleteUserAccount(uid);
+    
+    // 2. Delete from Firebase Auth using Admin SDK
+    // Admin SDK bypasses the client-side "requires-recent-login" restriction entirely.
+    // Identity is already verified by the bearer token on this request.
+    try {
+      const { auth } = await import('../config/firebase');
+      await auth.deleteUser(uid);
+      logger.info(`Firebase Auth user deleted: ${uid}`);
+    } catch (firebaseError: any) {
+      // Log but don't fail — the DB record is already marked deleted
+      // (e.g., user may have already been deleted from Firebase Auth)
+      logger.warn(`Firebase Auth deletion warning for ${uid}: ${firebaseError.message}`);
+    }
     
     res.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
