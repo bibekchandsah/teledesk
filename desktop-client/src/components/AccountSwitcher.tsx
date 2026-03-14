@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useMultiAccountStore } from '../store/multiAccountStore';
 import { useAuthStore } from '../store/authStore';
 import { useAuth } from '../context/AuthContext';
-import { Plus, ChevronUp } from 'lucide-react';
+import { Plus, ChevronUp, Trash2 } from 'lucide-react';
+import ConfirmationModal from './modals/ConfirmationModal';
 
 export const AccountSwitcher: React.FC = () => {
   const { accounts, activeAccountUid, removeAccount, setActiveAccount } = useMultiAccountStore();
@@ -12,6 +13,7 @@ export const AccountSwitcher: React.FC = () => {
   const [switching, setSwitching] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
 
   const hasMultipleAccounts = accounts.length > 1;
 
@@ -109,11 +111,17 @@ export const AccountSwitcher: React.FC = () => {
     }
   };
 
-  const handleRemoveAccount = async (uid: string, e: React.MouseEvent) => {
+  const handleRemoveAccount = (uid: string, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
+    setConfirmingRemove(uid);
+  };
 
-    if (!confirm('Remove this account? You can add it back anytime.')) return;
-
+  const confirmRemoveAccount = async () => {
+    if (!confirmingRemove) return;
+    
+    const uid = confirmingRemove;
+    setConfirmingRemove(null);
     removeAccount(uid);
 
     // If removing active account, sign out
@@ -280,93 +288,156 @@ export const AccountSwitcher: React.FC = () => {
             {/* Account List */}
             <div style={{ padding: 8 }}>
               {accounts.map((account) => (
-                <button
+                <div
                   key={account.uid}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSwitchAccount(account.uid);
-                  }}
-                  disabled={switching}
                   style={{
+                    position: 'relative',
                     width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: 12,
-                    borderRadius: 8,
-                    backgroundColor: account.uid === activeAccountUid ? 'var(--bg-hover)' : 'transparent',
-                    border: 'none',
-                    cursor: switching ? 'not-allowed' : 'pointer',
-                    transition: 'background-color 0.2s',
-                    opacity: switching ? 0.6 : 1,
+                    marginBottom: 4,
                   }}
                   onMouseEnter={(e) => {
-                    if (account.uid !== activeAccountUid && !switching) {
-                      e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                    }
+                    if (isMobile) return;
+                    const trash = e.currentTarget.querySelector('.trash-btn') as HTMLElement;
+                    const check = e.currentTarget.querySelector('.check-icon') as HTMLElement;
+                    if (trash) trash.style.opacity = '1';
+                    if (check) check.style.opacity = '0';
                   }}
                   onMouseLeave={(e) => {
-                    if (account.uid !== activeAccountUid) {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                    }
+                    if (isMobile) return;
+                    const trash = e.currentTarget.querySelector('.trash-btn') as HTMLElement;
+                    const check = e.currentTarget.querySelector('.check-icon') as HTMLElement;
+                    if (trash) trash.style.opacity = '0';
+                    if (check) check.style.opacity = '1';
                   }}
                 >
-                  <img
-                    src={account.avatar || '/default-avatar.png'}
-                    alt={account.name}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      minWidth: 40,
-                      minHeight: 40,
-                      borderRadius: '50%',
-                      objectFit: 'cover',
-                      flexShrink: 0,
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSwitchAccount(account.uid);
                     }}
-                  />
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {account.name}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                      {account.email}
-                    </div>
-                  </div>
-                  {account.uid === activeAccountUid && (
-                    <div
+                    disabled={switching}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 8,
+                      backgroundColor: account.uid === activeAccountUid ? 'var(--bg-hover)' : 'transparent',
+                      border: 'none',
+                      cursor: switching ? 'not-allowed' : 'pointer',
+                      transition: 'background-color 0.2s',
+                      opacity: switching ? 0.6 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (account.uid !== activeAccountUid && !switching) {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (account.uid !== activeAccountUid) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <img
+                      src={account.avatar || '/default-avatar.png'}
+                      alt={account.name}
                       style={{
-                        width: 20,
-                        height: 20,
-                        minWidth: 20,
-                        minHeight: 20,
+                        width: 40,
+                        height: 40,
+                        minWidth: 40,
+                        minHeight: 40,
                         borderRadius: '50%',
-                        backgroundColor: 'var(--accent)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        objectFit: 'cover',
                         flexShrink: 0,
                       }}
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        stroke="#fff"
-                        strokeWidth="2"
-                      >
-                        <path d="M2 6l3 3 5-6" />
-                      </svg>
+                    />
+                    <div style={{ flex: 1, textAlign: 'left', overflow: 'hidden' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {account.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {account.email}
+                      </div>
                     </div>
-                  )}
-                </button>
+                    {account.uid === activeAccountUid ? (
+                      <div
+                        className="check-icon"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          minWidth: 20,
+                          minHeight: 20,
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--accent)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          transition: 'opacity 0.2s',
+                          marginRight: isMobile ? 32 : 0,
+                        }}
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          stroke="#fff"
+                          strokeWidth="2"
+                        >
+                          <path d="M2 6l3 3 5-6" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div style={{ width: 20 }} /> // Placeholder for alignment
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="trash-btn"
+                    onClick={(e) => handleRemoveAccount(account.uid, e)}
+                    style={{
+                      position: 'absolute',
+                      right: 4,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      opacity: isMobile ? 1 : 0,
+                      zIndex: 10,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                    }}
+                    title="Remove Account"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
             </div>
 
             {/* Add Account Button */}
             <div style={{ borderTop: '1px solid var(--border)', padding: 8 }}>
               <button
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -421,6 +492,18 @@ export const AccountSwitcher: React.FC = () => {
           </div>
         </>
       )}
+
+      <ConfirmationModal
+        isOpen={!!confirmingRemove}
+        title="Remove Account?"
+        message="Are you sure you want to remove this account? You can always add it back later if you need to."
+        confirmText="Remove Account"
+        cancelText="Cancel"
+        onConfirm={confirmRemoveAccount}
+        onCancel={() => setConfirmingRemove(null)}
+        isDestructive={true}
+        icon={<Trash2 size={18} color="#fff" />}
+      />
     </>
   );
 }

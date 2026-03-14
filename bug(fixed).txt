@@ -80,6 +80,7 @@ Last seen Invalid Date
 (fixed) two step verification via TOTP with Google Authenticator and Microsoft Authenticator
     enable / disable 2FA
     regenerate / reset 
+(fixed) add delete icon on account switcher which will remove the account and signout that respective account
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
@@ -89,5 +90,4 @@ show logged in devices and allow user to logout from specific device
 redesign calling functions and sound for calling 
 allow user to import and export chat History
 store chats in device and update accordingly when new events occurs and while user is offline load it from device and when connection restored then update the chats and device storage as like telegram and whatsapp logic is implemented
-add delete icon on account switcher which will remove the account and signout that respective account
 
