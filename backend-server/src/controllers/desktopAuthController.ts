@@ -6,10 +6,12 @@ import { upsertUser } from '../services/userService';
 import logger from '../utils/logger';
 
 // ─── Google OAuth Setup ────────────────────────────────────────────────────
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+
 const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  'http://localhost:3001/api/auth/desktop/google/callback'
+  `${BACKEND_URL}/api/auth/desktop/google/callback`
 );
 
 export const initiateDesktopGoogleLogin = (req: Request, res: Response) => {
@@ -61,7 +63,7 @@ export const handleDesktopGoogleCallback = async (req: Request, res: Response) =
 // ─── GitHub OAuth Setup ───────────────────────────────────────────────────
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
-const GITHUB_CALLBACK = 'http://localhost:3001/api/auth/desktop/github/callback';
+const GITHUB_CALLBACK = `${BACKEND_URL}/api/auth/desktop/github/callback`;
 
 export const initiateDesktopGithubLogin = (req: Request, res: Response) => {
   const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${GITHUB_CALLBACK}&scope=user:email,read:user`;
