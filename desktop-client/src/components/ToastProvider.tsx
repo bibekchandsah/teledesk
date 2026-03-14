@@ -63,12 +63,14 @@ const ToastProvider: React.FC = () => {
         cursor: 'default',
         pointerEvents: isVisible ? 'auto' : 'none',
         textAlign: 'center',
+        maxWidth: 'calc(100vw - 32px)',
       }}
+      className="connection-toast"
     >
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
         {getIcon()}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.01em' }}>
+      <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {toast.message}
       </div>
       <button
@@ -87,6 +89,7 @@ const ToastProvider: React.FC = () => {
           justifyContent: 'center',
           borderRadius: '50%',
           transition: 'all 0.2s ease',
+          flexShrink: 0,
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
@@ -99,6 +102,29 @@ const ToastProvider: React.FC = () => {
       >
         <X size={16} />
       </button>
+      <style>{`
+        @media (max-width: 768px) {
+          .connection-toast {
+            top: 12px !important;
+            padding: 8px 14px !important;
+            gap: 8px !important;
+            font-size: 13px !important;
+            border-radius: 10px !important;
+            max-width: calc(100vw - 24px) !important;
+          }
+        }
+        
+        @media (max-width: 480px) {
+          .connection-toast {
+            top: 8px !important;
+            padding: 7px 12px !important;
+            gap: 6px !important;
+            font-size: 12px !important;
+            border-radius: 8px !important;
+            max-width: calc(100vw - 16px) !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
