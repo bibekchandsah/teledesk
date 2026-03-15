@@ -130,6 +130,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Fetch audio data natively (bypasses CORS)
   fetchAudioData: (url: string): Promise<Uint8Array> =>
     ipcRenderer.invoke('fetch-audio-data', url),
+
+  // App lock tray integration
+  setAppLockState: (state: { enabled: boolean; locked: boolean }) =>
+    ipcRenderer.send('app-lock:state-changed', state),
+  onTrayLockApp: (cb: () => void): (() => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('app-lock:lock', handler);
+    return () => ipcRenderer.off('app-lock:lock', handler);
+  },
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -201,6 +210,8 @@ export interface ElectronAPI {
   openExternalUrl: (url: string) => Promise<boolean>;
   downloadFile: (url: string, fileName?: string) => Promise<boolean>;
   fetchAudioData: (url: string) => Promise<Uint8Array>;
+  setAppLockState: (state: { enabled: boolean; locked: boolean }) => void;
+  onTrayLockApp: (cb: () => void) => () => void;
 }
 
 declare global {

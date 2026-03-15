@@ -82,6 +82,25 @@ const AppInner: React.FC = () => {
     }
   }, [isAuthenticated, currentUser, isLoading]);
 
+  // Sync app lock state with main process (for tray menu)
+  useEffect(() => {
+    if (!window.electronAPI?.setAppLockState) return;
+    window.electronAPI.setAppLockState({
+      enabled: !!(currentUser?.appLockEnabled),
+      locked: !isAppUnlocked && !!(currentUser?.appLockEnabled),
+    });
+  }, [currentUser?.appLockEnabled, isAppUnlocked]);
+
+  // Listen for lock command from tray
+  useEffect(() => {
+    if (!window.electronAPI?.onTrayLockApp) return;
+    const cleanup = window.electronAPI.onTrayLockApp(() => {
+      appUnlockedRef.current = false;
+      setIsAppUnlocked(false);
+    });
+    return cleanup;
+  }, []);
+
   // Apply theme immediately (before first paint)
   document.documentElement.setAttribute('data-theme', theme);
 
@@ -254,6 +273,7 @@ const AppInner: React.FC = () => {
         onUnlock={() => {
           appUnlockedRef.current = true;
           setIsAppUnlocked(true);
+          window.electronAPI?.setAppLockState?.({ enabled: true, locked: false });
         }}
       />
     );

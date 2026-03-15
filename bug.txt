@@ -1,12 +1,10 @@
 to be implemented:
 1. playbar for audio message
-2. user a = user b and user b = user a chat theme should be same if enabled for both
-    if both enabled then show theme for both
-    if both disabled then show no theme for both
-    if one enabled and one disabled then show 
-    if one disabled and one enabled then show no theme for both
+2. chat theme logic improved 
 
 3. (fixed) exit application from system tray menu error 
 4. (fixed) restart application from system tray menu
-5. add "lock/unlock app" feature in system tray menu (only show when user has enabled app lock)
-6. while recording voice/video note camera and microphone remains on even after stopping recording
+5. (fixed) add "lock/unlock app" feature in system tray menu (only show when user has enabled app lock)
+6. show dropdown menu for switching account in system tray menu
+7. while recording voice/video note camera and microphone remains on even after stopping recording
+8. while disabeling app lock confirm it with app lock pin 

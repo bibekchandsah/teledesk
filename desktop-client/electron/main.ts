@@ -22,6 +22,13 @@ let mainWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 
+// App lock state (synced from renderer)
+let appLockEnabled = false;
+let appLocked = false;
+
+// Reference to tray menu updater (set inside createTray)
+let updateTrayMenuRef: (() => void) | null = null;
+
 // ─── Window state persistence ─────────────────────────────────────────────
 const userDataPath = app.getPath('userData');
 const windowStateFile = path.join(userDataPath, 'window-state.json');
@@ -306,11 +313,11 @@ const createTray = () => {
   const updateTrayMenu = () => {
     // Check if tray still exists before updating
     if (!tray || tray.isDestroyed()) return;
-    
+
     const isAutoStartEnabled = app.getLoginItemSettings().openAtLogin;
     const isWindowVisible = mainWindow?.isVisible() ?? false;
 
-    const contextMenu = Menu.buildFromTemplate([
+    const menuItems: Electron.MenuItemConstructorOptions[] = [
       {
         label: isWindowVisible ? 'Hide Window' : 'Show Window',
         click: () => {
@@ -326,6 +333,27 @@ const createTray = () => {
         },
       },
       { type: 'separator' },
+    ];
+
+    // App lock item — only shown when app lock is enabled
+    if (appLockEnabled) {
+      menuItems.push({
+        label: appLocked ? '🔓 Unlock App' : '🔒 Lock App',
+        click: () => {
+          if (appLocked) {
+            mainWindow?.show();
+            mainWindow?.focus();
+          } else {
+            appLocked = true;
+            mainWindow?.webContents.send('app-lock:lock');
+            updateTrayMenu();
+          }
+        },
+      });
+      menuItems.push({ type: 'separator' });
+    }
+
+    menuItems.push(
       {
         label: 'Start on System Startup',
         type: 'checkbox',
@@ -351,24 +379,28 @@ const createTray = () => {
           app.quit();
         },
       },
-      { 
-        label: 'Quit', 
+      {
+        label: 'Quit',
         click: () => {
-          // Destroy tray first to prevent update attempts
           if (tray && !tray.isDestroyed()) {
             tray.destroy();
             tray = null;
           }
           app.quit();
-        } 
+        },
       },
-    ]);
+    );
+
+    const contextMenu = Menu.buildFromTemplate(menuItems);
 
     tray?.setContextMenu(contextMenu);
   };
 
   updateTrayMenu();
   tray.setToolTip('TeleDesk');
+  
+  // Expose updater so IPC handler can call it
+  updateTrayMenuRef = updateTrayMenu;
   
   tray.on('double-click', () => {
     mainWindow?.show();
@@ -451,6 +483,17 @@ ipcMain.on('window-maximize', () => {
   }
 });
 ipcMain.on('window-close', () => mainWindow?.hide());
+
+// App lock state sync from renderer
+ipcMain.on('app-lock:state-changed', (_e, state: { enabled: boolean; locked: boolean }) => {
+  appLockEnabled = state.enabled;
+  appLocked = state.locked;
+  // Rebuild tray menu to show/hide lock option
+  if (tray && !tray.isDestroyed()) {
+    // updateTrayMenu is defined inside createTray, so we call it via a module-level ref
+    updateTrayMenuRef?.();
+  }
+});
 
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
