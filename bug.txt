@@ -10,3 +10,5 @@ to be implemented:
 8. while disabeling app lock confirm it with app lock pin 
 9. chat isn't scrolling down when reload 
 10. disable browser right click only teledesk right click menu 
+11. when user mute then still show app using microphone
+12. when user turn off camera then still it shows app using camera

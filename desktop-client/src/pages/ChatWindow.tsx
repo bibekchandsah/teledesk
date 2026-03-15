@@ -791,6 +791,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [recordingDurationRef, setRecordingDurationRef] = useState(0); // For UI display
   const recordingDurationSecondsRef = useRef(0); // For internal tracking
   const isCameraFlippingRef = useRef(false);
+  const pauseDrawRef = useRef(false); // freeze canvas during camera flip
   const recordedChunksRef = useRef<Blob[]>([]);
   
   // Canvas recording refs
@@ -1651,7 +1652,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         const drawFrame = () => {
           if (!recordingVideoRef.current || !ctx || !recordingCanvasRef.current) return;
           const video = recordingVideoRef.current;
-          if (video.readyState >= 2) {
+          // When flipping, skip drawing to freeze the last frame on canvas
+          if (!pauseDrawRef.current && video.readyState >= 2) {
             const videoAspect = video.videoWidth / video.videoHeight;
             const canvasAspect = 1; // square
             let sx = 0, sy = 0, sWidth = video.videoWidth, sHeight = video.videoHeight;
@@ -1788,6 +1790,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       cancelAnimationFrame(drawFrameRef.current);
       drawFrameRef.current = 0;
     }
+    pauseDrawRef.current = false;
     if (recordingVideoRef.current) {
       recordingVideoRef.current.srcObject = null;
       recordingVideoRef.current = null;
@@ -1872,7 +1875,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     try {
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
 
-      // Stop old video track FIRST and wait for OS to release it
+      // Freeze canvas on last frame so no black flicker during transition
+      pauseDrawRef.current = true;
+
+      // Stop old video track and wait for OS to release it
       stream.getVideoTracks().forEach(t => t.stop());
       await new Promise(resolve => setTimeout(resolve, 300));
 
@@ -1893,17 +1899,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
       if (recordingVideoRef.current) {
         recordingVideoRef.current.srcObject = replacementStream;
-        if (newFacingMode === 'user') {
-          recordingVideoRef.current.style.transform = 'scaleX(-1)';
-        } else {
-          recordingVideoRef.current.style.transform = 'none';
-        }
+        recordingVideoRef.current.style.transform = newFacingMode === 'user' ? 'scaleX(-1)' : 'none';
         await recordingVideoRef.current.play().catch(console.error);
+        // Wait for first frame to be ready before resuming draw
+        await new Promise<void>(resolve => {
+          const v = recordingVideoRef.current!;
+          if (v.readyState >= 2) { resolve(); return; }
+          v.addEventListener('canplay', () => resolve(), { once: true });
+        });
       }
 
+      // Resume drawing now that new camera is live
+      pauseDrawRef.current = false;
       setStreamBoth(replacementStream);
       setFacingMode(newFacingMode);
     } catch (err) {
+      pauseDrawRef.current = false;
       console.error('Failed to flip camera:', err);
       setRecordingError('Could not switch camera. Your device may only have one camera.');
     }
