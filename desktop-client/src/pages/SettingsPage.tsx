@@ -26,6 +26,8 @@ const SettingsPage: React.FC = () => {
   const [deletionVerifyError, setDeletionVerifyError] = useState<string | null>(null);
   const [showDisableAppLockConfirm, setShowDisableAppLockConfirm] = useState(false);
   const [isDisablingAppLock, setIsDisablingAppLock] = useState(false);
+  const [disableAppLockPin, setDisableAppLockPin] = useState('');
+  const [disableAppLockPinError, setDisableAppLockPinError] = useState<string | null>(null);
   
   // 2FA state
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -883,6 +885,8 @@ const SettingsPage: React.FC = () => {
           onClick={() => {
             if (!isDisablingAppLock) {
               setShowDisableAppLockConfirm(false);
+              setDisableAppLockPin('');
+              setDisableAppLockPinError(null);
             }
           }}
         >
@@ -891,7 +895,7 @@ const SettingsPage: React.FC = () => {
               backgroundColor: 'var(--bg-secondary)',
               borderRadius: 20,
               padding: 32,
-              maxWidth: 440,
+              maxWidth: 400,
               width: '100%',
               boxShadow: '0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
               animation: 'slideUp 0.3s ease-out',
@@ -899,110 +903,165 @@ const SettingsPage: React.FC = () => {
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Icon */}
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px',
-                  border: '2px solid rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
-                  <path d="M12 9v4m0 4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+              <div style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--accent) 0%, #818cf8 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.4)',
+              }}>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
               </div>
-              <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 22, fontWeight: 700 }}>
-                Disable App Lock?
+              <h3 style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 20, fontWeight: 700 }}>
+                Confirm Your PIN
               </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
-                Your app will no longer require a PIN to unlock. You can enable it again anytime from settings.
+              <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                Enter your 6-digit app lock PIN to disable it.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 28 }}>
-              <button
-                onClick={() => setShowDisableAppLockConfirm(false)}
-                disabled={isDisablingAppLock}
+            {/* PIN Input */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (disableAppLockPin.length !== 6) return;
+                setIsDisablingAppLock(true);
+                setDisableAppLockPinError(null);
+                try {
+                  const { verifyAppLockPin, removeAppLockPin } = await import('../services/apiService');
+                  const verify = await verifyAppLockPin(disableAppLockPin);
+                  if (!verify.success || !verify.data?.isValid) {
+                    setDisableAppLockPinError('Incorrect PIN. Please try again.');
+                    setDisableAppLockPin('');
+                    return;
+                  }
+                  const res = await removeAppLockPin();
+                  if (res.success) {
+                    setCurrentUser({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
+                    setUserProfile({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
+                    setShowDisableAppLockConfirm(false);
+                    setDisableAppLockPin('');
+                  }
+                } catch (error) {
+                  console.error('Failed to disable app lock:', error);
+                  setDisableAppLockPinError('Something went wrong. Please try again.');
+                } finally {
+                  setIsDisablingAppLock(false);
+                }
+              }}
+            >
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={disableAppLockPin}
+                onChange={(e) => {
+                  setDisableAppLockPin(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setDisableAppLockPinError(null);
+                }}
+                placeholder="••••••"
+                autoFocus
                 style={{
-                  flex: 1,
-                  padding: '12px 24px',
+                  width: '100%',
+                  padding: '14px 20px',
                   borderRadius: 12,
-                  border: '1px solid var(--border)',
-                  backgroundColor: 'var(--bg-tertiary)',
+                  border: `2px solid ${disableAppLockPinError ? '#ef4444' : 'var(--border)'}`,
+                  backgroundColor: 'var(--bg-primary)',
                   color: 'var(--text-primary)',
+                  fontSize: 24,
                   fontWeight: 600,
-                  cursor: isDisablingAppLock ? 'not-allowed' : 'pointer',
-                  fontSize: 15,
-                  opacity: isDisablingAppLock ? 0.5 : 1,
-                  transition: 'all 0.2s ease',
+                  textAlign: 'center',
+                  letterSpacing: '0.5em',
+                  outline: 'none',
+                  marginBottom: 8,
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.2s',
                 }}
-                onMouseEnter={(e) => {
-                  if (!isDisablingAppLock) {
-                    e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }
+                onFocus={(e) => {
+                  if (!disableAppLockPinError) e.currentTarget.style.borderColor = 'var(--accent)';
                 }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                onBlur={(e) => {
+                  if (!disableAppLockPinError) e.currentTarget.style.borderColor = 'var(--border)';
                 }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  setIsDisablingAppLock(true);
-                  try {
-                    const { removeAppLockPin } = await import('../services/apiService');
-                    const res = await removeAppLockPin();
-                    if (res.success) {
-                      setCurrentUser({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
-                      setUserProfile({ ...currentUser, appLockEnabled: false, appLockPin: undefined });
-                      setShowDisableAppLockConfirm(false);
-                    }
-                  } catch (error) {
-                    console.error('Failed to disable app lock:', error);
-                  } finally {
-                    setIsDisablingAppLock(false);
-                  }
-                }}
-                disabled={isDisablingAppLock}
-                style={{
-                  flex: 1,
-                  padding: '12px 24px',
-                  borderRadius: 12,
-                  border: 'none',
-                  backgroundColor: '#ef4444',
-                  color: '#fff',
-                  fontWeight: 600,
-                  cursor: isDisablingAppLock ? 'not-allowed' : 'pointer',
-                  fontSize: 15,
-                  opacity: isDisablingAppLock ? 0.7 : 1,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isDisablingAppLock) {
-                    e.currentTarget.style.backgroundColor = '#dc2626';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.4)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ef4444';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.3)';
-                }}
-              >
-                {isDisablingAppLock ? 'Disabling...' : 'Disable App Lock'}
-              </button>
-            </div>
+              />
+
+              {disableAppLockPinError && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: '#f87171',
+                  fontSize: 13,
+                  marginBottom: 16,
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  {disableAppLockPinError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: disableAppLockPinError ? 0 : 16 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDisableAppLockConfirm(false);
+                    setDisableAppLockPin('');
+                    setDisableAppLockPinError(null);
+                  }}
+                  disabled={isDisablingAppLock}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    fontWeight: 600,
+                    cursor: isDisablingAppLock ? 'not-allowed' : 'pointer',
+                    fontSize: 14,
+                    opacity: isDisablingAppLock ? 0.5 : 1,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDisablingAppLock || disableAppLockPin.length !== 6}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    cursor: (isDisablingAppLock || disableAppLockPin.length !== 6) ? 'not-allowed' : 'pointer',
+                    fontSize: 14,
+                    opacity: (isDisablingAppLock || disableAppLockPin.length !== 6) ? 0.6 : 1,
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                  }}
+                >
+                  {isDisablingAppLock ? 'Verifying...' : 'Disable'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
