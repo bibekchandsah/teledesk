@@ -16,7 +16,7 @@ Verification
         Set a new 6-digit PIN.
         Verify access with the new PIN.
         
-<------------------- Audio/Video call ------------------->
+<------------------- Audio/Video call ringing sound ------------------->
 Sound Effects: I've added a sound manager that plays "calling" and "ringing" beeps. I used a built-in oscillator fallback since there were no .mp3 files, so you'll hear immediate feedback. You can later add your own .mp3 files to public/assets/sounds/ to customize them.
     For Incoming Calls - Play incoming_ring.mp3
     For Outgoing Calls - Play outgoing_ring.mp3
@@ -61,6 +61,25 @@ Outgoing Call Ringtones:
     Mute Support: Respects mute settings
     Performance: Minimal resource usage with preloaded audio
 
+<------------------- Audio/Video call window logic ---------------------------->
+Workbox Navigation Route Error - Added proper navigation fallback configuration to handle /call-window routes in PWA mode
+WebRTC InvalidStateError - Fixed race conditions in renegotiation by adding state validation and temporarily suppressing simple-peer's handlers during manual operations
+Call Window Not Closing - Improved popup close detection and cleanup logic to handle all termination scenarios properly
+Media Stream Issues - Enhanced media capture timing with pre-capture for incoming calls and proper fallback handling
+🔧 Key Technical Improvements:
+    State Validation: WebRTC operations now check signaling state before proceeding
+    Race Condition Prevention: Temporary handler suppression during renegotiation
+    Enhanced Cleanup: All call termination paths now properly clean up resources
+    Media Pre-capture: Incoming calls pre-capture media to reduce accept delay
+    Better Error Handling: Graceful fallbacks for media capture failures
+📈 Expected Results:
+    No more Workbox console errors for call windows
+    No more WebRTC InvalidStateError messages
+    Proper audio/video flow between web and desktop clients
+    Call windows close correctly from both sides
+    Ringtones work reliably in all scenarios
+    No memory leaks or orphaned call states
+The fixes maintain full compatibility with both Electron and web environments while significantly improving the reliability and user experience of the call system.
 
 <------------------- Dev tools ---------------------------->
 When VITE_ALLOW_DEVTOOLS=true → blur overlay disabled, right-click allowed, shortcuts allowed

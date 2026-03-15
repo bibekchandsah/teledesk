@@ -12,13 +12,12 @@ to be implemented:
 8. (fixed) while disabeling app lock confirm it with app lock pin 
 10. (fixed) disable browser right click only teledesk right click menu 
 13. (fixed) more reaction inside view port for grid layout too
+17. (fixed) incoming call ringtone, outgoing call ringtone 
 9. chat isn't scrolling down when reload 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 14. single emoji to full row animated 
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
-incoming call ringtone 
-outgoing call ringtone 
 16. in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
 
 

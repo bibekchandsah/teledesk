@@ -525,9 +525,9 @@ const CallWindowPage: React.FC = () => {
               createInitiatorPeer(stream, pp.callId, pp.targetUserId);
             } else if (pp.offer) {
               createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
+              startTimer();
+              setCallStatus('active');
             }
-            startTimer();
-            setCallStatus('active');
           }
         })
         .catch((err) => {
@@ -536,6 +536,17 @@ const CallWindowPage: React.FC = () => {
             'Cannot access camera/microphone. Please check app permissions.';
           console.error('[CallWindow] Media error:', err);
           setMediaError(msg);
+        });
+    } else if (cd && !cd.isOutgoing) {
+      // For incoming calls, pre-capture media to reduce delay when accepting
+      captureLocalStream(cd.callType)
+        .then((stream) => {
+          setLocalStream(stream);
+          localStreamRef.current = stream;
+          console.log('[CallWindow] Pre-captured media for incoming call');
+        })
+        .catch((err) => {
+          console.warn('[CallWindow] Pre-capture failed, will retry on accept:', err);
         });
     }
 
@@ -811,8 +822,8 @@ const CallWindowPage: React.FC = () => {
       // If we already have a pending offer, create receiver peer now
       const pp = pendingPeerRef.current;
       if (pp && pp.offer && stream) {
-        createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
         pendingPeerRef.current = null;
+        createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
         startTimer();
         setCallStatus('active');
       }

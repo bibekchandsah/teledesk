@@ -176,12 +176,27 @@ export const processRenegotiationOffer = async (
   if (!currentPeer || (currentPeer as any).destroyed) return;
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
+  
+  // Check if we're in a valid state to handle the offer
+  if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
+    console.warn('[WebRTC] Cannot process renegotiation offer in state:', pc.signalingState);
+    return;
+  }
+  
   try {
+    // Temporarily suppress simple-peer's negotiationneeded handler to prevent race conditions
+    const savedHandler = pc.onnegotiationneeded;
+    pc.onnegotiationneeded = null;
+    
     // If we receive an offer while simple-peer is in a transition state,
     // we bypass its signal() method and handle the SDP directly on the PC.
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+    
+    // Restore the handler after our operation completes
+    pc.onnegotiationneeded = savedHandler;
+    
     sendAnswer(sendToUserId, callId, { type: 'answer', sdp: answer.sdp! });
 
     console.log('[WebRTC] Handled renegotiation offer successfully');
@@ -212,6 +227,11 @@ export const processRenegotiationOffer = async (
     }
   } catch (err) {
     console.error('[WebRTC] processRenegotiationOffer failed:', err);
+    // Restore handler even if we failed
+    const savedHandler = pc.onnegotiationneeded;
+    if (!savedHandler) {
+      pc.onnegotiationneeded = (currentPeer as any)._onNegotiationNeeded?.bind(currentPeer) || null;
+    }
   }
 };
 
@@ -398,8 +418,16 @@ export const processRenegotiationAnswer = async (answer: RTCSessionDescriptionIn
   if (!currentPeer || (currentPeer as any).destroyed) return;
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
+  
+  // Check if we're in a valid state to handle the answer
+  if (pc.signalingState !== 'have-local-offer') {
+    console.warn('[WebRTC] Cannot process renegotiation answer in state:', pc.signalingState);
+    return;
+  }
+  
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log('[WebRTC] Handled renegotiation answer successfully');
   } catch (err) {
     console.error('[WebRTC] processRenegotiationAnswer failed:', err);
   }

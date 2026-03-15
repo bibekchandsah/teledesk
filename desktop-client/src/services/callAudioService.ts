@@ -44,11 +44,28 @@ class CallAudioService {
         this.incomingRingtone.volume = 0.7;
       }
 
-      this.incomingRingtone.currentTime = 0;
-      this.incomingRingtone.play().catch((err) => {
-        console.warn('[CallAudio] Failed to play incoming ringtone:', err);
-      });
-      this.isIncomingPlaying = true;
+      // Ensure the audio is ready before playing
+      if (this.incomingRingtone.readyState >= 2) {
+        // Audio is loaded enough to play
+        this.incomingRingtone.currentTime = 0;
+        this.incomingRingtone.play().then(() => {
+          this.isIncomingPlaying = true;
+        }).catch((err) => {
+          console.warn('[CallAudio] Failed to play incoming ringtone:', err);
+        });
+      } else {
+        // Wait for audio to load
+        const playWhenReady = () => {
+          this.incomingRingtone!.currentTime = 0;
+          this.incomingRingtone!.play().then(() => {
+            this.isIncomingPlaying = true;
+          }).catch((err) => {
+            console.warn('[CallAudio] Failed to play incoming ringtone after load:', err);
+          });
+          this.incomingRingtone!.removeEventListener('canplay', playWhenReady);
+        };
+        this.incomingRingtone.addEventListener('canplay', playWhenReady);
+      }
     } catch (error) {
       console.error('[CallAudio] Error playing incoming ringtone:', error);
     }

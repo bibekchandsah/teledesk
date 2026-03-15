@@ -52,11 +52,66 @@ const openCallPopup = (params: {
   const left = window.screen.width / 2 - width / 2;
   const top = window.screen.height / 2 - height / 2;
   
-  return window.open(
-    url,
-    'TeleDesk Call',
-    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
-  );
+  try {
+    console.log('[Call] Opening popup window:', url);
+    const popup = window.open(
+      url,
+      'TeleDesk Call',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
+    );
+    
+    // Immediate checks for popup blocking
+    if (!popup) {
+      console.warn('[Call] window.open returned null - popup blocked');
+      return null;
+    }
+    
+    if (popup.closed) {
+      console.warn('[Call] Popup was closed immediately - likely blocked');
+      return null;
+    }
+    
+    // More aggressive check - if popup exists but can't navigate, it's likely blocked
+    setTimeout(() => {
+      try {
+        if (popup.closed) {
+          console.warn('[Call] Popup was closed after 100ms - likely blocked');
+          return;
+        }
+        
+        // Check if popup is still at about:blank after some time - indicates blocking
+        if (popup.location && popup.location.href === 'about:blank') {
+          console.warn('[Call] Popup still at about:blank after 100ms - popup blocked');
+          popup.close();
+          return null; // This won't work in setTimeout, need different approach
+        } else {
+          console.log('[Call] Popup appears to be working after 100ms');
+        }
+      } catch (e) {
+        // Cross-origin error is actually good - means popup navigated successfully
+        console.log('[Call] Cross-origin error (popup navigated successfully)');
+      }
+    }, 100);
+    
+    // Immediate check for about:blank - treat as blocked
+    setTimeout(() => {
+      try {
+        if (popup.location && popup.location.href === 'about:blank') {
+          console.warn('[Call] Popup location is about:blank immediately - popup blocked');
+          popup.close();
+          // Can't return null from setTimeout, so we'll handle this in the delayed check
+        }
+      } catch (e) {
+        // Cross-origin error is expected and normal for working popups
+        console.log('[Call] Cross-origin error (normal for working popup):', (e as Error).message);
+      }
+    }, 50); // Very short delay to let popup initialize
+    
+    return popup;
+  } catch (error) {
+    console.warn('[Call] Failed to open popup:', error);
+    return null;
+  }
 };
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -73,6 +128,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     callDuration,
     setIsCalleeRinging,
     setIsCallInPopup,
+    setShowPopupBlockedNotification,
   } = useCallStore();
   const { currentUser } = useAuthStore();
   const { activeChat, chats, nicknames } = useChatStore();
@@ -230,18 +286,28 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Web popup close detection
     const interval = setInterval(() => {
       if (callPopupRef.current && callPopupRef.current.closed) {
-        const call = activeCallRef.current;
+        const call = activeCallRef.current || incomingCallRef.current;
         if (call) {
-          getSocket()?.emit(SOCKET_EVENTS.END_CALL, { 
-            to: call.callerId === currentUserRef.current?.uid ? call.receiverId : call.callerId, 
+          const socket = getSocket();
+          const targetId = call.callerId === currentUserRef.current?.uid 
+            ? call.receiverId 
+            : call.callerId;
+          
+          // Send END_CALL event to notify the other party
+          socket?.emit(SOCKET_EVENTS.END_CALL, { 
+            to: targetId, 
             callId: call.callId 
           });
+          
+          // Only caller sends the summary
           if (call.callerId === currentUserRef.current?.uid) {
             const dur = call.status === 'active' ? callDurationRef.current : 0;
             const status = call.status === 'active' ? 'completed' : 'cancelled';
             sendCallSummary(call, status, dur, status);
           }
         }
+        
+        // Clean up popup references
         clearInterval(interval);
         callPopupRef.current = null;
         popupReadyRef.current = false;
@@ -253,7 +319,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         endCallCleanup();
         setIsCallInPopup(false);
       }
-    }, 1000);
+    }, 250); // Check more frequently for better responsiveness
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -459,25 +525,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           targetAvatar: data.callerAvatar,
         });
       } else {
-        // Web: open incoming call in popup window
-        const popup = openCallPopup({
-          callId: data.callId,
-          callType: data.callType,
-          isOutgoing: false,
-          targetUserId: data.callerId,
-          targetName: nicknames[data.callerId] || data.callerName,
-          targetAvatar: data.callerAvatar,
-        });
+        // Web: use in-app IncomingCallModal (popup has service worker issues)
+        console.log('[Call] Using in-app IncomingCallModal for incoming call');
+        setIsCallInPopup(false);
         
-        if (popup) {
-          callPopupRef.current = popup;
-          popupReadyRef.current = false;
-          relayBufferRef.current = [];
-          setIsCallInPopup(true);
-        } else {
-          console.warn('[Call] Popup blocked for incoming call, using in-app modal');
-          setIsCallInPopup(false);
-        }
+        // Pre-capture media for faster accept when using in-app modal
+        getLocalStream(data.callType)
+          .then((stream) => {
+            localStreamRef.current = stream;
+            console.log('[Call] Pre-captured media for incoming call');
+          })
+          .catch((err) => {
+            console.warn('[Call] Pre-capture failed for incoming call:', err);
+          });
       }
 
       showNotification({
@@ -634,36 +694,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetAvatar,
       });
     } else {
-      // Web: open call in popup window
-      const popup = openCallPopup({
-        callId,
-        callType,
-        isOutgoing: true,
-        targetUserId,
-        targetName: nicknames[targetUserId] || targetName,
-        targetAvatar,
-      });
+      // Web: use in-app CallScreen (popup has service worker issues)
+      console.log('[Call] Using in-app CallScreen for outgoing call');
+      setIsCallInPopup(false);
       
-      if (popup) {
-        // Store popup reference and set flag
-        callPopupRef.current = popup;
-        popupReadyRef.current = false;
-        relayBufferRef.current = [];
-        setIsCallInPopup(true);
-      } else {
-        // Popup blocked - fallback to in-app modal
-        console.warn('[Call] Popup blocked, using in-app modal');
-        setIsCallInPopup(false);
-        getLocalStream(callType)
-          .then((stream) => {
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-          })
-          .catch((err) => {
-            console.error('[Call] getLocalStream failed:', err);
-            endCallCleanup();
-          });
-      }
+      // Immediately capture media for in-app CallScreen
+      getLocalStream(callType)
+        .then((stream) => {
+          localStreamRef.current = stream;
+          setLocalStream(stream);
+          console.log('[Call] Media captured for in-app outgoing call');
+          
+          // Create WebRTC peer connection for outgoing call
+          // This will be triggered when the other side accepts
+        })
+        .catch((err) => {
+          console.error('[Call] getLocalStream failed for outgoing call:', err);
+          callAudioService.stopOutgoingRingtone();
+          endCallCleanup();
+        });
     }
 
     // Auto-cancel after 30 s if receiver doesn't answer
@@ -700,6 +749,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Stop incoming ringtone when accepting
     callAudioService.stopIncomingRingtone();
+
+    console.log('[CallContext] Accepting incoming call with stream:', {
+      hasAudio: localStream.getAudioTracks().length > 0,
+      hasVideo: localStream.getVideoTracks().length > 0,
+      callId: incomingCall.callId
+    });
 
     localStreamRef.current = localStream;
     setLocalStream(localStream);

@@ -13,6 +13,7 @@ interface CallState {
   callDuration: number; // seconds
   callTimer: ReturnType<typeof setInterval> | null;
   isCallInPopup: boolean; // true when call is handled in a popup window
+  showPopupBlockedNotification: boolean; // true when popup might be blocked
 
   setActiveCall: (call: CallSession | null) => void;
   setIncomingCall: (call: CallSession | null) => void;
@@ -22,6 +23,7 @@ interface CallState {
   setVideoOff: (off: boolean) => void;
   setIsCalleeRinging: (ringing: boolean) => void;
   setIsCallInPopup: (inPopup: boolean) => void;
+  setShowPopupBlockedNotification: (show: boolean) => void;
   startCallTimer: () => void;
   stopCallTimer: () => void;
   endCallCleanup: () => void;
@@ -38,6 +40,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   callDuration: 0,
   callTimer: null,
   isCallInPopup: false,
+  showPopupBlockedNotification: false,
 
   setActiveCall: (call) => set({ activeCall: call }),
   setIncomingCall: (call) => set({ incomingCall: call }),
@@ -47,6 +50,7 @@ export const useCallStore = create<CallState>((set, get) => ({
   setVideoOff: (off) => set({ isVideoOff: off }),
   setIsCalleeRinging: (ringing) => set({ isCalleeRinging: ringing }),
   setIsCallInPopup: (inPopup) => set({ isCallInPopup: inPopup }),
+  setShowPopupBlockedNotification: (show) => set({ showPopupBlockedNotification: show }),
 
   startCallTimer: () => {
     const timer = setInterval(() => {
@@ -80,6 +84,7 @@ export const useCallStore = create<CallState>((set, get) => ({
       callTimer: null,
       callDuration: 0,
       isCallInPopup: false,
+      showPopupBlockedNotification: false,
     });
   },
 }));
