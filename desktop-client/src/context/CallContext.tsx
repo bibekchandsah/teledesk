@@ -17,6 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import { showNotification } from '../services/notificationService';
 import { sendMessage } from '../services/socketService';
 import { useChatStore } from '../store/chatStore';
+import callAudioService from '../services/callAudioService';
 
 interface CallContextValue {
   startCall: (
@@ -195,11 +196,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (socketEvent === SOCKET_EVENTS.ACCEPT_CALL) {
           const ic = incomingCallRef.current;
           if (ic) {
+            // Stop incoming ringtone when accepting from popup
+            callAudioService.stopIncomingRingtone();
             setActiveCall({ ...ic, status: 'active' });
             setIncomingCall(null);
             startCallTimer();
           }
         } else if (socketEvent === SOCKET_EVENTS.REJECT_CALL) {
+          // Stop incoming ringtone when rejecting from popup
+          callAudioService.stopIncomingRingtone();
           setIncomingCall(null);
         } else if (socketEvent === SOCKET_EVENTS.END_CALL) {
           const call = activeCallRef.current || incomingCallRef.current;
@@ -210,6 +215,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
               sendCallSummary(call as any, status, dur, status);
             }
             clearRingingTimer();
+            // Stop all ringtones when ending call from popup
+            callAudioService.stopAllRingtones();
             stopCallTimer();
             endCallCleanup();
             setIsCallInPopup(false);
@@ -240,6 +247,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         popupReadyRef.current = false;
         relayBufferRef.current = [];
         clearRingingTimer();
+        // Stop all ringtones when popup is closed
+        callAudioService.stopAllRingtones();
         stopCallTimer();
         endCallCleanup();
         setIsCallInPopup(false);
@@ -265,6 +274,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
       
       clearRingingTimer();
+      // Stop all ringtones when call is accepted
+      callAudioService.stopAllRingtones();
+      
       if (ic?.callId === data.callId) {
         setActiveCall({ ...ic, status: 'active' });
         setIncomingCall(null);
@@ -323,6 +335,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
       const wasActive = ac?.status === 'active';
       clearRingingTimer();
+      // Stop all ringtones when call ends
+      callAudioService.stopAllRingtones();
+      
       // The other side hung up. Only the caller sends the call summary so it
       // always appears on the right side (outgoing) in both views.
       // Exception: if the caller disconnected (byDisconnect), the receiver sends it.
@@ -355,6 +370,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const ac = activeCallRef.current;
       if (ac?.callId !== data.callId) return;
       clearRingingTimer();
+      // Stop all ringtones when call is rejected
+      callAudioService.stopAllRingtones();
+      
       sendCallSummary(ac, 'declined', 0, 'declined');
       
       relayToCallWindow(SOCKET_EVENTS.CALL_REJECTED, data);
@@ -425,6 +443,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         type: data.callType,
         status: 'ringing',
       });
+
+      // Play incoming ringtone (will be handled by IncomingCallModal component)
+      // But also play here as a fallback in case modal doesn't render immediately
+      callAudioService.playIncomingRingtone();
 
       // In Electron: open a single merged call window for the incoming call
       if (isElectron()) {
@@ -514,6 +536,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sendCallSummary(call, status, dur, status);
         }
         clearRingingTimer();
+        // Stop all ringtones when hanging up from call window
+        callAudioService.stopAllRingtones();
         stopCallTimer();
         endCallCleanup();
       } else if (event === 'closed') {
@@ -533,12 +557,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
         clearRingingTimer();
+        // Stop all ringtones when call window is closed
+        callAudioService.stopAllRingtones();
         stopCallTimer();
         endCallCleanup();
       } else if (event === 'incoming-accepted') {
         // The merged call window user accepted — sync state here, window handles socket
         const ic = incomingCallRef.current;
         if (!ic) return;
+        // Stop incoming ringtone when accepting from call window
+        callAudioService.stopIncomingRingtone();
         const acceptedSession = { ...ic, status: 'active' as const };
         setActiveCall(acceptedSession);
         activeCallRef.current = acceptedSession;
@@ -546,6 +574,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         startCallTimer();
       } else if (event === 'incoming-rejected') {
         // The merged call window user rejected — window already sent REJECT_CALL socket
+        // Stop incoming ringtone when rejecting from call window
+        callAudioService.stopIncomingRingtone();
         setIncomingCall(null);
       }
     });
@@ -581,6 +611,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setActiveCall(callSession);
     activeCallRef.current = callSession;
+
+    // Start playing outgoing ringtone for the caller
+    callAudioService.playOutgoingRingtone();
 
     socket?.emit(SOCKET_EVENTS.CALL_USER, {
       targetUserId,
@@ -639,6 +672,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const call = activeCallRef.current;
       if (!call || call.callId !== callId || call.status !== 'ringing') return;
       const socket2 = getSocket();
+      
+      // Stop outgoing ringtone when call times out
+      callAudioService.stopOutgoingRingtone();
+      
       socket2?.emit(SOCKET_EVENTS.END_CALL, { to: targetUserId, callId });
       if (!isElectron()) hangUp(targetUserId, callId);
       sendCallSummary(call, 'no_answer', 0, 'missed');
@@ -660,6 +697,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const acceptIncomingCall = (localStream: MediaStream): void => {
     if (!incomingCall || !currentUser) return;
     const socket = getSocket();
+
+    // Stop incoming ringtone when accepting
+    callAudioService.stopIncomingRingtone();
 
     localStreamRef.current = localStream;
     setLocalStream(localStream);
@@ -701,6 +741,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const rejectIncomingCall = (): void => {
     if (!incomingCall) return;
     const socket = getSocket();
+    
+    // Stop incoming ringtone when rejecting
+    callAudioService.stopIncomingRingtone();
+    
     socket?.emit(SOCKET_EVENTS.REJECT_CALL, {
       callId: incomingCall.callId,
       callerId: incomingCall.callerId,
@@ -717,6 +761,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : activeCall.callerId;
 
     clearRingingTimer();
+    // Stop all ringtones when ending call
+    callAudioService.stopAllRingtones();
+    
     const dur = activeCall.status === 'active' ? callDuration : 0;
     const status = activeCall.status === 'active' ? 'completed' : 'cancelled';
     // Only caller sends the summary; if receiver ends the call here the caller

@@ -12,6 +12,7 @@ import { formatDuration } from '../utils/formatters';
 import { toggleAudio, toggleVideo, switchMicrophone, switchCamera, startScreenShare, stopScreenShare, enableCallVideo, disableCallVideo } from '../services/webrtcService';
 import { getSocket, sendCallMuteChanged, sendCallVideoChanged } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
+import callAudioService from '../services/callAudioService';
 
 const BORDER_ZONE = 12;
 
@@ -94,6 +95,27 @@ const CallScreen: React.FC = () => {
   const animFrameRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [volumeBars, setVolumeBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+
+  // Manage outgoing ringtone for calls initiated by current user
+  useEffect(() => {
+    if (!activeCall || !currentUser) return;
+
+    const isOutgoingCall = activeCall.callerId === currentUser.uid;
+    const isRinging = activeCall.status === 'ringing';
+
+    if (isOutgoingCall && isRinging) {
+      // Play outgoing ringtone
+      callAudioService.playOutgoingRingtone();
+    } else {
+      // Stop outgoing ringtone when call is accepted, rejected, or ended
+      callAudioService.stopOutgoingRingtone();
+    }
+
+    // Cleanup when component unmounts or call changes
+    return () => {
+      callAudioService.stopOutgoingRingtone();
+    };
+  }, [activeCall, currentUser]);
 
   const handleResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();

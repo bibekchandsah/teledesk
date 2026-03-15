@@ -47,8 +47,8 @@ export const getLocalStream = async (callType: 'video' | 'voice'): Promise<Media
   
   // Use 'ideal' constraints for better compatibility
   const audioConstraint: MediaTrackConstraints = savedMicId
-    ? { deviceId: { ideal: savedMicId }, echoCancellation: true, noiseSuppression: true }
-    : { echoCancellation: true, noiseSuppression: true };
+    ? { deviceId: { ideal: savedMicId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    : { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
     
   const videoConstraint: MediaTrackConstraints | boolean =
     callType === 'video'

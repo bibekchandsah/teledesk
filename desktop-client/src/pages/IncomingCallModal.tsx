@@ -1,23 +1,44 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useCallStore } from '../store/callStore';
 import { useCallContext } from '../context/CallContext';
 import { useChatStore } from '../store/chatStore';
 import UserAvatar from '../components/UserAvatar';
 import { getLocalStream } from '../services/webrtcService';
 import { Phone } from 'lucide-react';
+import callAudioService from '../services/callAudioService';
 
 const IncomingCallModal: React.FC = () => {
   const { incomingCall } = useCallStore();
   const { acceptIncomingCall, rejectIncomingCall } = useCallContext();
   const { nicknames } = useChatStore();
 
+  // Play incoming ringtone when modal appears
+  useEffect(() => {
+    if (incomingCall) {
+      callAudioService.playIncomingRingtone();
+    }
+
+    // Cleanup: stop ringtone when component unmounts or call changes
+    return () => {
+      callAudioService.stopIncomingRingtone();
+    };
+  }, [incomingCall]);
+
   if (!incomingCall) return null;
 
   const displayName = nicknames[incomingCall.callerId] || incomingCall.callerName;
 
   const handleAccept = async () => {
+    // Stop ringtone immediately when accepting
+    callAudioService.stopIncomingRingtone();
     const stream = await getLocalStream(incomingCall.type).catch(() => new MediaStream());
     acceptIncomingCall(stream);
+  };
+
+  const handleReject = () => {
+    // Stop ringtone immediately when rejecting
+    callAudioService.stopIncomingRingtone();
+    rejectIncomingCall();
   };
 
   return (
@@ -86,7 +107,7 @@ const IncomingCallModal: React.FC = () => {
 
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
           <button
-            onClick={rejectIncomingCall}
+            onClick={handleReject}
             style={{
               width: 56,
               height: 56,

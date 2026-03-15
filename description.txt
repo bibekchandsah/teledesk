@@ -1,0 +1,71 @@
+Fixing pin reset flow:
+--------------------------------------------
+<------------------- Lock Chat ------------------->
+"Lock Chat" feature that allows users to secure specific chats with a 6-digit PIN. Locked chats are hidden from the main list and require a PIN to access. A "Forgot PIN" flow via email is also included.
+    Re-authentication: The "Forgot PIN" feature now uses Firebase re-authentication (Google, GitHub, etc.) to verify the user's identity before allowing a PIN reset. No SMTP configuration is required.
+    Database Migration: You will need to run the updated SQL in the Supabase SQL editor.
+Verification
+    Set PIN: Right-click a chat and select "Lock Chat". If no PIN is set, verify the "Set 6-digit PIN" dialog appears.
+    Lock/Unlock: Verify the chat moves from the main list to the "Locked Chats" folder.
+    Access Locked Chats: Click the Lock icon or "Locked Chats" folder. Verify it asks for the PIN.
+    Incorrect PIN: Verify "Wrong PIN" message appears.
+    Forgot PIN:
+        Click "Forgot PIN".
+        Verify identity via Firebase popup (Google/GitHub/etc.).
+        Once verified, verify that the "Set New PIN" step appears.
+        Set a new 6-digit PIN.
+        Verify access with the new PIN.
+        
+<------------------- Audio/Video call ------------------->
+Sound Effects: I've added a sound manager that plays "calling" and "ringing" beeps. I used a built-in oscillator fallback since there were no .mp3 files, so you'll hear immediate feedback. You can later add your own .mp3 files to public/assets/sounds/ to customize them.
+    For Incoming Calls - Play incoming_ring.mp3
+    For Outgoing Calls - Play outgoing_ring.mp3
+    Play the sound when the call starts ringing
+    Stop the sound when:
+        Call is accepted (status becomes 'active')
+        Call is rejected
+        Call is cancelled
+        Call times out (no answer)
+    The sounds should loop during the ringing phase and stop immediately when any of those events occur.
+
+CallAudioService - A robust singleton service managing all call audio:
+    Preloads both ringtone files for instant playback
+    Handles incoming and outgoing ringtones separately
+    Prevents conflicts (only one ringtone plays at a time)
+    Includes volume control, muting, and cleanup methods
+Incoming Call Ringtones:
+    Plays incoming_ring.mp3 when IncomingCallModal appears
+    Stops immediately when call is accepted or rejected
+    Automatic cleanup on component unmount
+Outgoing Call Ringtones:
+    Plays outgoing_ring.mp3 when caller initiates a call
+    Continues until call is answered, rejected, or times out
+    Smart detection of caller vs receiver status
+✅ Comprehensive Integration
+    CallContext: Added ringtone management to all call event handlers
+    CallScreen: Monitors call status for outgoing ringtone control
+    IncomingCallModal: Handles incoming ringtone lifecycle
+    CallStore: Integrated cleanup in call termination
+    IPC Bridge: Handles Electron call window events
+    Web Popup: Manages browser popup call events
+✅ Smart Features
+    Auto-timeout: Ringtones stop after 30 seconds (matches call timeout)
+    Conflict Prevention: Only one ringtone plays at a time
+    Error Handling: Graceful fallback for missing files or playback issues
+    Resource Management: Proper cleanup prevents memory leaks
+    Cross-Platform: Works in both Electron and web environments
+✅ User Experience
+    Immediate Feedback: Ringtones start instantly when calls begin
+    Reliable Stopping: Ringtones stop in ALL scenarios (accept, reject, timeout, window close)
+    Volume Control: Configurable volume with sensible defaults
+    Mute Support: Respects mute settings
+    Performance: Minimal resource usage with preloaded audio
+
+
+<------------------- Dev tools ---------------------------->
+When VITE_ALLOW_DEVTOOLS=true → blur overlay disabled, right-click allowed, shortcuts allowed
+When VITE_ALLOW_DEVTOOLS=false → blur overlay enabled, right-click blocked, shortcuts blocked
+    ✅ Right-click blocked in the app 
+    ✅ F12, Ctrl+Shift+I/J/C blocked in the app
+    ✅ Blur overlay shows when window loses focus 
+    ✅ DevTools won't open in Electron

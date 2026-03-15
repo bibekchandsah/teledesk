@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { CallSession } from '@shared/types';
+import callAudioService from '../services/callAudioService';
 
 interface CallState {
   activeCall: CallSession | null;
@@ -64,6 +65,10 @@ export const useCallStore = create<CallState>((set, get) => ({
     const { callTimer, localStream } = get();
     if (callTimer) clearInterval(callTimer);
     localStream?.getTracks().forEach((t) => t.stop());
+    
+    // Stop all ringtones when cleaning up call
+    callAudioService.stopAllRingtones();
+    
     set({
       activeCall: null,
       incomingCall: null,
