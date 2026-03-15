@@ -215,23 +215,21 @@ export const createDeviceSession = async (
       .eq('uid', uid)
       .neq('firebase_token_id', firebaseTokenId);
     
-    // Mark this fingerprint group as current and update activity
-    // Note: We update BY fingerprint to ensure all rows in this group are consistent,
-    // though ideally we'd target by session_id. For simplicity and robustness during lookup:
+    // Mark this fingerprint group as current, update activity, and UN-REVOKE
+    // We un-revoke because this is a legitimate reactivation of this device footprint
     await supabase
       .from('device_sessions')
       .update({ 
         is_current: true,
         last_active: now(),
-        // If it was revoked, we keep it revoked! The middleware handles un-revocation.
-        // We only "reactivate" activity here.
+        is_revoked: false
       })
       .eq('firebase_token_id', firebaseTokenId);
     
     // Return updated session
     const updatedSession = await getSessionByTokenId(firebaseTokenId);
     if (updatedSession) {
-      logger.info(`Device session activity updated for user ${uid}: ${deviceName}`);
+      logger.info(`Device session activity updated and un-revoked for user ${uid}: ${deviceName}`);
       return updatedSession;
     }
   }
@@ -505,6 +503,7 @@ export const getSessionByTokenId = async (
     .select('*')
     .eq('firebase_token_id', firebaseTokenId)
     .order('last_active', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1);
 
   if (error || !data || data.length === 0) {
@@ -559,14 +558,18 @@ export const cleanupDuplicateSessions = async (uid: string): Promise<void> => {
       }
     }
 
-    // Mark duplicate sessions as revoked
+    // Hard delete duplicate sessions (they are redundant, not revoked)
     if (sessionsToDelete.length > 0) {
-      await supabase
+      const { error: deleteError } = await supabase
         .from('device_sessions')
-        .update({ is_revoked: true })
+        .delete()
         .in('session_id', sessionsToDelete);
       
-      logger.info(`Cleaned up ${sessionsToDelete.length} duplicate sessions for user ${uid} by marking them as revoked`);
+      if (deleteError) {
+        logger.error(`Failed to delete duplicate sessions: ${deleteError.message}`);
+      } else {
+        logger.info(`Cleaned up ${sessionsToDelete.length} duplicate sessions for user ${uid} by deleting them`);
+      }
     }
   } catch (error) {
     logger.warn(`Failed to cleanup duplicate sessions: ${(error as Error).message}`);

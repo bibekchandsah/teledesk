@@ -304,6 +304,9 @@ const createTray = () => {
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
 
   const updateTrayMenu = () => {
+    // Check if tray still exists before updating
+    if (!tray || tray.isDestroyed()) return;
+    
     const isAutoStartEnabled = app.getLoginItemSettings().openAtLogin;
     const isWindowVisible = mainWindow?.isVisible() ?? false;
 
@@ -337,7 +340,17 @@ const createTray = () => {
         },
       },
       { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() },
+      { 
+        label: 'Quit', 
+        click: () => {
+          // Destroy tray first to prevent update attempts
+          if (tray && !tray.isDestroyed()) {
+            tray.destroy();
+            tray = null;
+          }
+          app.quit();
+        } 
+      },
     ]);
 
     tray?.setContextMenu(contextMenu);
@@ -783,6 +796,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  tray?.destroy();
+  // Only destroy tray if it hasn't been destroyed already
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy();
+    tray = null;
+  }
 });
 }
