@@ -73,6 +73,51 @@ const AppInner: React.FC = () => {
   const [isAppUnlocked, setIsAppUnlocked] = React.useState(false);
   const appUnlockedRef = useRef(false);
 
+  // Window focus/blur overlay
+  const [isWindowFocused, setIsWindowFocused] = React.useState(true);
+  useEffect(() => {
+    const onFocus = () => setIsWindowFocused(true);
+    const onBlur = () => setIsWindowFocused(false);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+
+  // Disable right-click context menu in production (web browsers)
+  useEffect(() => {
+    const isDev = import.meta.env.DEV;
+    if (isDev) return; // Allow in development
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    // Also block common DevTools shortcuts in web browsers
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isF12 = e.key === 'F12';
+      const isDevToolsShortcut =
+        (e.ctrlKey || e.metaKey) && e.shiftKey &&
+        ['I', 'i', 'J', 'j', 'C', 'c'].includes(e.key);
+      
+      if (isF12 || isDevToolsShortcut) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // Check app lock status IMMEDIATELY when user data becomes available
   useEffect(() => {
     if (isAuthenticated && currentUser) {
@@ -553,6 +598,36 @@ const AppInner: React.FC = () => {
           {/* Global Notifications & Listeners */}
           <ToastProvider />
           <NetworkListener />
+
+          {/* Window blur overlay */}
+          {!isWindowFocused && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 99998,
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                backgroundColor: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'all',
+                userSelect: 'none',
+                cursor: 'default',
+              }}
+            >
+              <div style={{
+                color: 'rgba(255,255,255,0.75)',
+                fontSize: 15,
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+                userSelect: 'none',
+              }}>
+                You are no longer present here
+              </div>
+            </div>
+          )}
         </div>
       </CallProvider>
     </SocketProvider>

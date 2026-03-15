@@ -178,71 +178,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setUserShowMessageStatus(data.userId, data.showMessageStatus);
     };
 
-    // ─── Incoming Call Event ─────────────────────────────────────────────
-    const handleIncomingCall = (data: {
-      callId: string;
-      callerId: string;
-      callerName: string;
-      callerAvatar?: string;
-      callType: 'video' | 'voice';
-    }) => {
-      setIncomingCall({
-        callId: data.callId,
-        callerId: data.callerId,
-        callerName: data.callerName,
-        callerAvatar: data.callerAvatar,
-        receiverId: currentUser.uid,
-        type: data.callType,
-        status: 'ringing',
-      });
-
-      // In Electron: open a single merged call window for the incoming call
-      if (window.electronAPI?.openCallWindow) {
-        window.electronAPI.openCallWindow({
-          callId: data.callId,
-          callType: data.callType,
-          isOutgoing: false,
-          targetUserId: data.callerId,
-          targetName: nicknames[data.callerId] || data.callerName,
-          targetAvatar: data.callerAvatar,
-        });
-      } else {
-        // Web: open incoming call in popup window
-        const encoded = encodeURIComponent(JSON.stringify({
-          callId: data.callId,
-          callType: data.callType,
-          isOutgoing: false,
-          targetUserId: data.callerId,
-          targetName: nicknames[data.callerId] || data.callerName,
-          targetAvatar: data.callerAvatar,
-        }));
-        const url = `/call-window?d=${encoded}`;
-        const width = 960;
-        const height = 680;
-        const left = window.screen.width / 2 - width / 2;
-        const top = window.screen.height / 2 - height / 2;
-        
-        const popup = window.open(
-          url,
-          'TeleDesk Call',
-          `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,menubar=no,toolbar=no,location=no`
-        );
-        
-        if (popup) {
-          setIsCallInPopup(true);
-        } else {
-          console.warn('[Call] Popup blocked for incoming call, using in-app modal');
-          setIsCallInPopup(false);
-        }
-      }
-
-      showNotification({
-        title: `Incoming ${data.callType} call`,
-        body: `${nicknames[data.callerId] || data.callerName} is calling...`,
-        icon: (data.callerAvatar && data.callerAvatar.trim()) || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[data.callerId] || data.callerName || 'C')}&background=6366f1&color=fff`,
-      });
-    };
-
     // ─── Chat Deleted Event ──────────────────────────────────────────────
     const handleChatDeleted = ({ chatId }: { chatId: string }) => {
       if (activeChat?.chatId === chatId) {
@@ -367,7 +302,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
     socket.on(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
     socket.on(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
-    socket.on(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
     socket.on(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
@@ -392,7 +326,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
       socket.off(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
       socket.off(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
-      socket.off(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
       socket.off(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);

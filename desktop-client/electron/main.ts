@@ -111,6 +111,43 @@ let pendingRelayEvents: Array<{ event: string; data: unknown }> = [];
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_DEV_SERVER_URL = 'http://localhost:5173';
 
+// Load .env file manually — Vite-prefixed vars are renderer-only and never reach the main process
+const loadEnvFile = () => {
+  // In dev: .env is in the project root (where package.json is)
+  // In prod: .env would be in the app.asar or app folder
+  const envPath = isDev 
+    ? path.join(__dirname, '../../.env')  // from dist-electron/main.js → project root
+    : path.join(app.getAppPath(), '.env');
+  
+  try {
+    if (fs.existsSync(envPath)) {
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) continue;
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim();
+        if (key && !(key in process.env)) {
+          process.env[key] = val;
+        }
+      }
+      console.log('[Env] Loaded from:', envPath);
+      console.log('[Env] ALLOW_DEVTOOLS =', process.env.ALLOW_DEVTOOLS);
+    } else {
+      console.warn('[Env] File not found:', envPath);
+    }
+  } catch (err) {
+    console.error('[Env] Failed to load:', err);
+  }
+};
+loadEnvFile();
+
+// ALLOW_DEVTOOLS=true in .env enables DevTools and right-click (for development)
+const allowDevTools = process.env.ALLOW_DEVTOOLS === 'true';
+console.log('[Main] allowDevTools =', allowDevTools);
+
 // Required on Windows for Toast notifications
 if (process.platform === 'win32') {
   app.setName('TeleDesk');
@@ -233,42 +270,62 @@ const createWindow = () => {
   // Load the app
   if (isDev) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools();
+    if (allowDevTools) {
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Show window when ready
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
-  });
+  // Disable right-click context menu unless devtools are allowed
+  if (!allowDevTools) {
+    mainWindow.webContents.on('context-menu', (e) => {
+      e.preventDefault();
+    });
+    // Force-close devtools if opened any other way (e.g. programmatically)
+    mainWindow.webContents.on('devtools-opened', () => {
+      mainWindow?.webContents.closeDevTools();
+    });
+  }
 
-  // Register zoom keyboard shortcuts
+  // Single before-input-event handler: blocks devtools shortcuts + handles zoom
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (!mainWindow) return;
-
     const isCtrlOrCmd = input.control || input.meta;
 
-    // Zoom In: Ctrl/Cmd + Plus or Ctrl/Cmd + =
-    if (isCtrlOrCmd && (input.key === '+' || input.key === '=')) {
-      event.preventDefault();
-      const currentZoom = mainWindow.webContents.getZoomLevel();
-      mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+    // Block devtools shortcuts when not allowed
+    if (!allowDevTools) {
+      const isF12 = input.key === 'F12';
+      const isDevToolsShortcut =
+        isCtrlOrCmd && input.shift &&
+        ['i', 'I', 'j', 'J', 'c', 'C'].includes(input.key);
+      if (isF12 || isDevToolsShortcut) {
+        event.preventDefault();
+        return;
+      }
     }
 
+    // Zoom In: Ctrl/Cmd + Plus or =
+    if (isCtrlOrCmd && (input.key === '+' || input.key === '=')) {
+      event.preventDefault();
+      mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() + 0.5);
+    }
     // Zoom Out: Ctrl/Cmd + Minus
     if (isCtrlOrCmd && input.key === '-') {
       event.preventDefault();
-      const currentZoom = mainWindow.webContents.getZoomLevel();
-      mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+      mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() - 0.5);
     }
-
     // Reset Zoom: Ctrl/Cmd + 0
     if (isCtrlOrCmd && input.key === '0') {
       event.preventDefault();
       mainWindow.webContents.setZoomLevel(0);
     }
+  });
+
+  // Show window when ready
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
   });
 
   // Prevent navigation to external URLs

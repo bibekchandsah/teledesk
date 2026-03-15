@@ -453,8 +453,14 @@ const CallWindowPage: React.FC = () => {
 
       if (event === SOCKET_EVENTS.CALL_ENDED || event === SOCKET_EVENTS.CALL_REJECTED) {
         cleanup();
-        // Delay slightly to let cleanup() settle before IPC
-        setTimeout(() => window.electronAPI?.hangupCallWindow?.(), 200);
+        // Delay slightly to let cleanup() settle before IPC/Closure
+        setTimeout(() => {
+          if (window.electronAPI) {
+            window.electronAPI.hangupCallWindow?.();
+          } else {
+            window.close();
+          }
+        }, 200);
         return;
       }
 
@@ -504,9 +510,9 @@ const CallWindowPage: React.FC = () => {
       window.opener.postMessage({ type: 'call-window-ready' }, window.location.origin);
     }
 
-    // callData is already set from URL params — start capturing media now
+    // callData is already set from URL params — start capturing media ONLY if outgoing
     const cd = callDataRef.current;
-    if (cd) {
+    if (cd && cd.isOutgoing) {
       captureLocalStream(cd.callType)
         .then((stream) => {
           setLocalStream(stream);
@@ -782,12 +788,38 @@ const CallWindowPage: React.FC = () => {
   };
 
   // ─── Incoming call: user taps Accept ──────────────────────────────────────
-  const handleAcceptCall = () => {
+  const handleAcceptCall = async () => {
     const cd = callDataRef.current;
-    if (!cd) return;
-    sendSocketEvent(SOCKET_EVENTS.ACCEPT_CALL, { callId: cd.callId, callerId: cd.targetUserId });
-    window.electronAPI?.sendWindowEvent?.('incoming-accepted');
+    if (!cd || isAccepted) return;
     setIsAccepted(true);
+
+    try {
+      let stream = localStreamRef.current;
+      if (!stream) {
+        stream = await captureLocalStream(cd.callType);
+        setLocalStream(stream);
+        localStreamRef.current = stream;
+      }
+
+      sendSocketEvent(SOCKET_EVENTS.ACCEPT_CALL, { 
+        callId: cd.callId, 
+        callerId: cd.targetUserId,
+        acceptorId: currentUser?.uid 
+      });
+      window.electronAPI?.sendWindowEvent?.('incoming-accepted');
+
+      // If we already have a pending offer, create receiver peer now
+      const pp = pendingPeerRef.current;
+      if (pp && pp.offer && stream) {
+        createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
+        pendingPeerRef.current = null;
+        startTimer();
+        setCallStatus('active');
+      }
+    } catch (err: any) {
+      console.error('[CallWindow] handleAcceptCall media error:', err);
+      setMediaError(err?.message || 'Could not access camera/microphone.');
+    }
   };
 
   // ─── Incoming call: user taps Decline ────────────────────────────────────
@@ -796,7 +828,11 @@ const CallWindowPage: React.FC = () => {
     if (!cd) return;
     sendSocketEvent(SOCKET_EVENTS.REJECT_CALL, { callId: cd.callId, callerId: cd.targetUserId });
     window.electronAPI?.sendWindowEvent?.('incoming-rejected');
-    window.electronAPI?.closeCallWindow?.();
+    if (window.electronAPI) {
+      window.electronAPI.closeCallWindow?.();
+    } else {
+      window.close();
+    }
   };
 
   // ─── Device switch handlers ───────────────────────────────────────────────
