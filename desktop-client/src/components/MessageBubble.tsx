@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
@@ -492,9 +493,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   // ─── Reaction bar state ───────────────────────────────────────────────────
   const [showEmojiBar, setShowEmojiBar] = useState(false);
   const [showExtended, setShowExtended] = useState(false);
+  const [pickerDirection, setPickerDirection] = useState<'up' | 'down'>('up');
+  const [pickerPos, setPickerPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
   const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const emojiBarRef = useRef<HTMLDivElement>(null);
+  const smilePlusBtnRef = useRef<HTMLButtonElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -588,6 +592,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleEmojiClick = (emoji: string) => {
     setShowEmojiBar(false);
     setShowExtended(false);
+    setPickerPos(null);
     setCtxMenu(null);
     onMessageReaction?.(message.messageId, emoji);
   };
@@ -610,6 +615,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       if (!emojiBarRef.current?.matches(':hover')) {
         setShowEmojiBar(false);
         setShowExtended(false);
+        setPickerPos(null);
       }
     }, 120);
   };
@@ -854,7 +860,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         {showEmojiBar && !message.deleted && onMessageReaction && (
           <div
             ref={emojiBarRef}
-            onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); }}
+            onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); setPickerPos(null); }}
             style={{
               position: 'absolute',
               [isOwn ? 'right' : 'left']: 0,
@@ -868,26 +874,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               animation: 'reactionBarSlideUp 0.15s ease-out',
             }}
           >
-            {/* Emoji Mart Picker */}
-            {showExtended && (
-              <div style={{
-                backgroundColor: 'var(--bg-secondary)',
-                borderRadius: 12,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-                backdropFilter: 'blur(12px)',
-                overflow: 'hidden',
-              }}>
-                <Picker 
-                  data={data} 
-                  onEmojiSelect={handleEmojiMartSelect} 
-                  theme="auto" 
-                  previewPosition="none"
-                  skinTonePosition="none"
-                  navPosition="bottom"
-                />
-              </div>
-            )}
-
             {/* Quick preset bar */}
             <div style={{
               display: 'flex',
@@ -926,7 +912,30 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               })}
               {/* More emojis button */}
               <button
-                onClick={() => setShowExtended(v => !v)}
+                ref={smilePlusBtnRef}
+                onClick={() => {
+                  if (!showExtended) {
+                    const btn = smilePlusBtnRef.current;
+                    if (btn) {
+                      const rect = btn.getBoundingClientRect();
+                      const pickerHeight = 435;
+                      const pickerWidth = 352;
+                      const spaceBelow = window.innerHeight - rect.bottom - 8;
+                      const dir = spaceBelow >= pickerHeight ? 'down' : 'up';
+                      setPickerDirection(dir);
+                      const left = Math.min(rect.right - pickerWidth, window.innerWidth - pickerWidth - 8);
+                      const safeLeft = Math.max(8, left);
+                      if (dir === 'down') {
+                        setPickerPos({ top: rect.bottom + 6, left: safeLeft });
+                      } else {
+                        setPickerPos({ bottom: window.innerHeight - rect.top + 6, left: safeLeft });
+                      }
+                    }
+                  } else {
+                    setPickerPos(null);
+                  }
+                  setShowExtended(v => !v);
+                }}
                 title="More reactions"
                 style={{
                   background: 'none',
@@ -946,6 +955,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               </button>
             </div>
           </div>
+        )}
+
+        {/* ─── Emoji Picker Portal (renders at document.body, never clipped) ── */}
+        {showExtended && pickerPos && createPortal(
+          <div
+            onMouseDown={e => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: pickerPos.top,
+              bottom: pickerPos.bottom,
+              left: pickerPos.left,
+              zIndex: 99999,
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 12,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(12px)',
+              overflow: 'hidden',
+            }}
+          >
+            <Picker data={data} onEmojiSelect={handleEmojiMartSelect} theme="auto" previewPosition="none" skinTonePosition="none" navPosition="bottom" />
+          </div>,
+          document.body
         )}
 
         <div
