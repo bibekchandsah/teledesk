@@ -44,22 +44,34 @@ export const getLocalStream = async (callType: 'video' | 'voice'): Promise<Media
   }
   const savedMicId = localStorage.getItem('selectedMicId');
   const savedCamId = localStorage.getItem('selectedCameraId');
-  // Use 'ideal' (not 'exact') so getUserMedia gracefully falls back to the
-  // default device if the saved one is unplugged or unavailable.
+  
+  // Use 'ideal' constraints for better compatibility
   const audioConstraint: MediaTrackConstraints = savedMicId
-    ? { deviceId: { ideal: savedMicId } }
-    : {};
+    ? { deviceId: { ideal: savedMicId }, echoCancellation: true, noiseSuppression: true }
+    : { echoCancellation: true, noiseSuppression: true };
+    
   const videoConstraint: MediaTrackConstraints | boolean =
     callType === 'video'
       ? savedCamId
-        ? { deviceId: { ideal: savedCamId }, width: 1280, height: 720 }
-        : { width: 1280, height: 720 }
+        ? { deviceId: { ideal: savedCamId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
       : false;
-  localStream = await navigator.mediaDevices.getUserMedia({
-    audio: audioConstraint,
-    video: videoConstraint,
-  });
-  return localStream;
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: audioConstraint,
+      video: videoConstraint,
+    });
+    return localStream;
+  } catch (err) {
+    console.error('[WebRTC] getUserMedia failed, falling back to basic constraints:', err);
+    // Fallback: try with just basic audio/video
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: callType === 'video'
+    });
+    return localStream;
+  }
 };
 
 export const stopLocalStream = (): void => {
@@ -127,7 +139,7 @@ async function forceRenegotiation(pc: RTCPeerConnection, trackOp?: () => void): 
   // Run the track mutation now that the handler is suppressed.
   trackOp?.();
   try {
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer({ iceRestart: true });
     await pc.setLocalDescription(offer);
     sendOffer(currentTargetUserId, currentCallId, { type: 'offer', sdp: offer.sdp! });
   } catch (err) {
@@ -138,6 +150,18 @@ async function forceRenegotiation(pc: RTCPeerConnection, trackOp?: () => void): 
     setTimeout(() => { pc.onnegotiationneeded = savedHandler; }, 0);
   }
 }
+
+/**
+ * Initiates an ICE restart to repair a broken connection.
+ */
+export const restartIce = async (): Promise<void> => {
+  if (!currentPeer || (currentPeer as any).destroyed) return;
+  const pc: RTCPeerConnection = (currentPeer as any)._pc;
+  if (!pc) return;
+
+  console.log('[WebRTC] Initiating ICE restart...');
+  await forceRenegotiation(pc);
+};
 
 /**
  * Processes a renegotiation offer on the receiver side (user B) by using the raw
@@ -153,10 +177,14 @@ export const processRenegotiationOffer = async (
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
   try {
+    // If we receive an offer while simple-peer is in a transition state,
+    // we bypass its signal() method and handle the SDP directly on the PC.
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     sendAnswer(sendToUserId, callId, { type: 'answer', sdp: answer.sdp! });
+
+    console.log('[WebRTC] Handled renegotiation offer successfully');
 
     // Detect whether the remote peer is currently sending video.
     // When they paused (replaceTrack(null) + renegotiate), the video m-line direction

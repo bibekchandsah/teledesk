@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { getSocket } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import {
@@ -154,12 +154,82 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  /** Relay a socket event to the call window via Electron IPC */
+  // Relay a socket event to the call window (Electron IPC or Web postMessage)
   const relayToCallWindow = (event: string, data: unknown) => {
-    window.electronAPI?.relayToCallWindow?.(event, data);
+    if (isElectron()) {
+      window.electronAPI?.relayToCallWindow?.(event, data);
+    } else if (callPopupRef.current && !callPopupRef.current.closed) {
+      callPopupRef.current.postMessage({ type: 'relayed-socket-event', event, data }, window.location.origin);
+    }
   };
 
-  // â”€â”€â”€ Socket event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Web Popup Bridge: listen for messages from the popup ────────────────
+  useEffect(() => {
+    if (isElectron()) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      
+      const { type, event: socketEvent, data } = event.data;
+      if (type === 'call-window-ready') {
+        // Future: flush buffered events if needed
+        return;
+      }
+      
+      if (type === 'call-window-socket-emit' && socketEvent) {
+        getSocket()?.emit(socketEvent, data);
+        
+        // Handle specific UI-synced events (like hangup)
+        if (socketEvent === SOCKET_EVENTS.END_CALL || socketEvent === SOCKET_EVENTS.REJECT_CALL) {
+          const call = activeCallRef.current || incomingCallRef.current;
+          if (call) {
+            if (call.callerId === currentUserRef.current?.uid) {
+              const dur = call.status === 'active' ? callDurationRef.current : 0;
+              const status = call.status === 'active' ? 'completed' : 'cancelled';
+              sendCallSummary(call as any, status, dur, status);
+            }
+            clearRingingTimer();
+            stopCallTimer();
+            endCallCleanup();
+            setIsCallInPopup(false);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    
+    // Web popup close detection
+    const interval = setInterval(() => {
+      if (callPopupRef.current && callPopupRef.current.closed) {
+        const call = activeCallRef.current;
+        if (call) {
+          getSocket()?.emit(SOCKET_EVENTS.END_CALL, { 
+            to: call.callerId === currentUserRef.current?.uid ? call.receiverId : call.callerId, 
+            callId: call.callId 
+          });
+          if (call.callerId === currentUserRef.current?.uid) {
+            const dur = call.status === 'active' ? callDurationRef.current : 0;
+            const status = call.status === 'active' ? 'completed' : 'cancelled';
+            sendCallSummary(call, status, dur, status);
+          }
+        }
+        clearInterval(interval);
+        callPopupRef.current = null;
+        clearRingingTimer();
+        stopCallTimer();
+        endCallCleanup();
+        setIsCallInPopup(false);
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // ─── Socket event handlers ──────────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) return;
     const socket = getSocket();
@@ -171,13 +241,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearRingingTimer();
       setActiveCall({ ...activeCallRef.current!, status: 'active' });
 
-      if (isElectron()) {
-        // Electron: relay to call window which owns the WebRTC peer
-        relayToCallWindow(SOCKET_EVENTS.ACCEPT_CALL, data);
-        startCallTimer();
-      } else {
-        // Non-Electron fallback: create peer in this renderer
-        startCallTimer();
+      // Always relay to call window (Electron or Web Popup)
+      relayToCallWindow(SOCKET_EVENTS.ACCEPT_CALL, data);
+      startCallTimer();
+
+      if (!isElectron() && !callPopupRef.current) {
+        // Non-Electron fallback (in-app modal): create peer in this renderer
         const stream = localStreamRef.current;
         if (!stream) return;
         setCallTarget(activeCallRef.current!.receiverId, data.callId);
@@ -197,9 +266,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // â”€â”€â”€ WebRTC Answer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const handleAnswer = (data: { from: string; callId: string; answer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      if (isElectron()) {
-        relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
-      } else {
+      relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
+      if (!isElectron() && !callPopupRef.current) {
         processRenegotiationAnswer(data.answer);
       }
     };
@@ -210,9 +278,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       callId: string;
       candidate: { candidate: string; sdpMLineIndex: number | null; sdpMid: string | null };
     }) => {
-      if (isElectron()) {
-        relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
-      } else {
+      relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
+      if (!isElectron() && !callPopupRef.current) {
         processSignal(data.candidate);
       }
     };
@@ -234,12 +301,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const status = wasActive ? 'completed' : 'cancelled';
         sendCallSummary(ac!, status, dur, status);
       }
+      
+      relayToCallWindow(SOCKET_EVENTS.CALL_ENDED, data);
+      
       if (isElectron()) {
-        // Relay to call window so it can clean up WebRTC, then force-close
-        relayToCallWindow(SOCKET_EVENTS.CALL_ENDED, data);
         window.electronAPI?.closeCallWindow?.();
         window.electronAPI?.closeIncomingCallWindow?.();
+      } else if (callPopupRef.current) {
+        callPopupRef.current.close();
+        callPopupRef.current = null;
+        setIsCallInPopup(false);
       }
+      
       stopCallTimer();
       endCallCleanup();
       showNotification({ title: 'TeleDesk', body: wasActive ? 'Call ended' : 'Call cancelled' });
@@ -251,11 +324,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (ac?.callId !== data.callId) return;
       clearRingingTimer();
       sendCallSummary(ac, 'declined', 0, 'declined');
+      
+      relayToCallWindow(SOCKET_EVENTS.CALL_REJECTED, data);
+      
       if (isElectron()) {
-        relayToCallWindow(SOCKET_EVENTS.CALL_REJECTED, data);
         window.electronAPI?.closeCallWindow?.();
         window.electronAPI?.closeIncomingCallWindow?.();
+      } else if (callPopupRef.current) {
+        callPopupRef.current.close();
+        callPopupRef.current = null;
+        setIsCallInPopup(false);
       }
+      
       stopCallTimer();
       endCallCleanup();
       showNotification({ title: 'TeleDesk', body: 'Call was declined' });
@@ -264,9 +344,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // â”€â”€â”€ Renegotiation offer (e.g. screen share on voice call) â”€â”€â”€â”€â”€â”€â”€
     const handleRenegotiationOffer = (data: { from: string; callId: string; offer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      if (isElectron()) {
-        relayToCallWindow(SOCKET_EVENTS.OFFER, data);
-      } else {
+      relayToCallWindow(SOCKET_EVENTS.OFFER, data);
+      if (!isElectron() && !callPopupRef.current) {
         if (!hasPeer()) return;
         processRenegotiationOffer(data.offer, data.from, data.callId);
       }
@@ -277,9 +356,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (activeCallRef.current?.callId !== data.callId) return;
       setActiveCall({ ...activeCallRef.current!, status: 'ringing' });
       setIsCalleeRinging(true);
-      if (isElectron()) {
-        relayToCallWindow(SOCKET_EVENTS.CALL_RINGING, data);
-      }
+      relayToCallWindow(SOCKET_EVENTS.CALL_RINGING, data);
     };
 
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
@@ -292,11 +369,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const handleCallMuteChanged = (data: { callId: string; from: string; isMuted: boolean }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      if (isElectron()) relayToCallWindow(SOCKET_EVENTS.CALL_MUTE_CHANGED, data);
+      relayToCallWindow(SOCKET_EVENTS.CALL_MUTE_CHANGED, data);
     };
     const handleCallVideoChanged = (data: { callId: string; from: string; isVideoOff: boolean }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
-      if (isElectron()) relayToCallWindow(SOCKET_EVENTS.CALL_VIDEO_CHANGED, data);
+      relayToCallWindow(SOCKET_EVENTS.CALL_VIDEO_CHANGED, data);
     };
     socket.on(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleCallMuteChanged);
     socket.on(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleCallVideoChanged);

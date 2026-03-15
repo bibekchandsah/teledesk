@@ -340,6 +340,17 @@ const createTray = () => {
         },
       },
       { type: 'separator' },
+      {
+        label: 'Restart',
+        click: () => {
+          if (tray && !tray.isDestroyed()) {
+            tray.destroy();
+            tray = null;
+          }
+          app.relaunch();
+          app.quit();
+        },
+      },
       { 
         label: 'Quit', 
         click: () => {
