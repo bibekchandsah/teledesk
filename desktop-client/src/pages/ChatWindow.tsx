@@ -18,6 +18,7 @@ import { Message } from '@shared/types';
 import { useCallContext } from '../context/CallContext';
 import { APP_CONFIG } from '@shared/constants/config';
 import { useUIStore } from '../store/uiStore';
+import ErrorModal from '../components/modals/ErrorModal';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
@@ -767,11 +768,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [recordingMode, setRecordingMode] = useState<'voice' | 'video'>('voice');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ messages: Message[]; initialIndex: number } | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null); // always current, safe for closures
+
+  const setStreamBoth = (s: MediaStream | null) => {
+    streamRef.current = s;
+    setStream(s);
+  };
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -1620,7 +1628,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         } : false
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(stream);
+      setStreamBoth(stream);
 
       let streamToRecord = stream;
 
@@ -1693,6 +1701,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
         const finalDuration = recordingDurationSecondsRef.current;
         
+        // Always stop all tracks to release camera/mic
+        streamRef.current?.getTracks().forEach(track => track.stop());
+
         if (finalDuration >= 1) { // Min 1s recording
           setRecordedMediaBlob(blob);
           setRecordedMediaUrl(URL.createObjectURL(blob));
@@ -1701,11 +1712,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           if (recordingMode === 'voice') {
             setRecordedWaveform([...waveformHistory]);
           }
-        } else {
-          // Toast or ignore? For now just cleanup
-          stream?.getTracks().forEach(track => track.stop());
-          setStream(null);
         }
+        setStreamBoth(null);
         setIsRecording(false);
         clearInterval(recordingTimerRef.current!);
       };
@@ -1764,7 +1772,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     } catch (err) {
       console.error('[Recording] Failed:', err);
-      alert('Could not access microphone/camera');
+      const isDOMException = err instanceof DOMException;
+      setRecordingError(
+        isDOMException && err.name === 'NotReadableError'
+          ? 'Camera is in use by another application. Please close it and try again.'
+          : isDOMException && err.name === 'NotAllowedError'
+          ? 'Permission denied. Please allow camera and microphone access.'
+          : 'Could not access microphone/camera. Please check your device settings.'
+      );
     }
   };
 
@@ -1784,9 +1799,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const stopRecording = () => {
     isCameraFlippingRef.current = false;
     if (recorder && recorder.state !== 'inactive') {
-      recorder.stop();
+      recorder.stop(); // onstop handler will stop tracks via streamRef
     } else if (recordedChunksRef.current.length > 0) {
-       finalizeMultiChunkRecording();
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      setStreamBoth(null);
+      finalizeMultiChunkRecording();
     }
     clearInterval(recordingTimerRef.current!);
     setIsRecording(false);
@@ -1805,10 +1822,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       recorder.onstop = null; // Don't trigger send
       recorder.stop();
     }
-    stream?.getTracks().forEach(track => track.stop());
+    streamRef.current?.getTracks().forEach(track => track.stop());
     clearInterval(recordingTimerRef.current!);
     setIsRecording(false);
-    setStream(null);
+    setStreamBoth(null);
     setRecorder(null);
     cleanupCanvasRecording();
     if (audioCtxRef.current) {
@@ -1833,7 +1850,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       const blob = new Blob(recordedChunksRef.current, { type: recordingMode === 'video' ? 'video/webm;codecs=vp8' : 'audio/webm' });
       const finalDuration = recordingDurationSecondsRef.current;
       
-      if (finalDuration >= 1) { // Min 1s recording
+      // Always stop all tracks to release camera/mic
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      setStreamBoth(null);
+
+      if (finalDuration >= 1) {
         setRecordedMediaBlob(blob);
         setRecordedMediaUrl(URL.createObjectURL(blob));
         setIsPreviewingRecording(true);
@@ -1841,9 +1862,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         if (recordingMode === 'voice') {
           setRecordedWaveform([...waveformHistory]);
         }
-      } else {
-        stream?.getTracks().forEach(track => track.stop());
-        setStream(null);
       }
       setIsRecording(false);
       recordedChunksRef.current = [];
@@ -1853,20 +1871,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (!isRecording || recordingMode !== 'video' || !stream || !recorder) return;
     try {
       const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
-      
+
+      // Stop old video track FIRST and wait for OS to release it
+      stream.getVideoTracks().forEach(t => t.stop());
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       const newCameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 400 },
           height: { ideal: 400 },
-          facingMode: newFacingMode
+          facingMode: newFacingMode,
         }
       });
-      
-      // Stop old video track
-      stream.getVideoTracks().forEach(t => t.stop());
-      
-      // Construct a replacement stream for UI and our hidden video element
-      // Keep the original core audio track
+
+      // Construct a replacement stream keeping the original audio track
       const tracks = [...newCameraStream.getVideoTracks()];
       if (coreAudioTrackRef.current) {
         tracks.push(coreAudioTrackRef.current);
@@ -1874,30 +1892,32 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       const replacementStream = new MediaStream(tracks);
 
       if (recordingVideoRef.current) {
-         recordingVideoRef.current.srcObject = replacementStream;
-         if (newFacingMode === 'user') {
-            recordingVideoRef.current.style.transform = 'scaleX(-1)';
-         } else {
-            recordingVideoRef.current.style.transform = 'none';
-         }
-         await recordingVideoRef.current.play().catch(console.error);
+        recordingVideoRef.current.srcObject = replacementStream;
+        if (newFacingMode === 'user') {
+          recordingVideoRef.current.style.transform = 'scaleX(-1)';
+        } else {
+          recordingVideoRef.current.style.transform = 'none';
+        }
+        await recordingVideoRef.current.play().catch(console.error);
       }
-      
-      setStream(replacementStream);
-      setFacingMode(newFacingMode);
 
+      setStreamBoth(replacementStream);
+      setFacingMode(newFacingMode);
     } catch (err) {
       console.error('Failed to flip camera:', err);
+      setRecordingError('Could not switch camera. Your device may only have one camera.');
     }
   };
 
   const handleDiscardRecording = () => {
     if (recordedMediaUrl) URL.revokeObjectURL(recordedMediaUrl);
+    // Ensure tracks are released (belt-and-suspenders)
+    streamRef.current?.getTracks().forEach(track => track.stop());
     setRecordedMediaBlob(null);
     setRecordedMediaUrl(null);
     setIsPreviewingRecording(false);
     setIsPreviewPlaying(false);
-    setStream(null);
+    setStreamBoth(null);
     setRecorder(null);
   };
 
@@ -4662,6 +4682,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         </div>
       )}
       {fileError && <FileErrorModal error={fileError} onClose={() => setFileError(null)} />}
+      {recordingError && (
+        <ErrorModal
+          isOpen={!!recordingError}
+          onClose={() => setRecordingError(null)}
+          title="Camera / Microphone Error"
+          message={recordingError}
+          buttonText="OK"
+        />
+      )}
       {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
       
       {/* Chat Theme Modal */}

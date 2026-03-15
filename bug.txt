@@ -8,3 +8,5 @@ to be implemented:
 6. (fixed) show dropdown menu for switching account in system tray menu
 7. while recording voice/video note camera and microphone remains on even after stopping recording
 8. while disabeling app lock confirm it with app lock pin 
+9. chat isn't scrolling down when reload 
+10. disable browser right click only teledesk right click menu 
