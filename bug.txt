@@ -5,6 +5,6 @@ to be implemented:
 3. (fixed) exit application from system tray menu error 
 4. (fixed) restart application from system tray menu
 5. (fixed) add "lock/unlock app" feature in system tray menu (only show when user has enabled app lock)
-6. show dropdown menu for switching account in system tray menu
+6. (fixed) show dropdown menu for switching account in system tray menu
 7. while recording voice/video note camera and microphone remains on even after stopping recording
 8. while disabeling app lock confirm it with app lock pin 

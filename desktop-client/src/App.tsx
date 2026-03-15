@@ -45,6 +45,7 @@ import IncomingCallWindowPage from './pages/IncomingCallWindowPage';
 import { useCallStore } from './store/callStore';
 import { useChatStore } from './store/chatStore';
 import { useBookmarkStore } from './store/bookmarkStore';
+import { useMultiAccountStore } from './store/multiAccountStore';
 import PinModal from './components/modals/PinModal';
 import AppLockScreen from './components/AppLockScreen';
 import AppLockPinModal from './components/modals/AppLockPinModal';
@@ -58,6 +59,7 @@ const AppInner: React.FC = () => {
   const { activeCall, incomingCall, isCallInPopup } = useCallStore();
   const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
+  const { accounts, activeAccountUid } = useMultiAccountStore();
   const hasArchived = archivedChatIds.length > 0;
   const hasLocked = lockedChatIds.length > 0;
   const navigate = useNavigate();
@@ -97,6 +99,36 @@ const AppInner: React.FC = () => {
     const cleanup = window.electronAPI.onTrayLockApp(() => {
       appUnlockedRef.current = false;
       setIsAppUnlocked(false);
+    });
+    return cleanup;
+  }, []);
+
+  // Sync accounts to tray menu
+  useEffect(() => {
+    if (!window.electronAPI?.setTrayAccounts) return;
+    window.electronAPI.setTrayAccounts({
+      accounts: accounts.map(({ uid, name, email }) => ({ uid, name, email })),
+      activeAccountUid,
+    });
+  }, [accounts, activeAccountUid]);
+
+  // Handle account switch triggered from tray
+  useEffect(() => {
+    if (!window.electronAPI?.onTraySwitchAccount) return;
+    const cleanup = window.electronAPI.onTraySwitchAccount(async (uid) => {
+      const { switchToAccount } = await import('./services/multiAccountService');
+      const { setActiveAccount } = useMultiAccountStore.getState();
+      const account = useMultiAccountStore.getState().accounts.find(a => a.uid === uid);
+      if (!account) return;
+      try {
+        await switchToAccount(account);
+        setActiveAccount(uid);
+        window.location.href = '/';
+      } catch {
+        // fallback to login page
+        const { useAuth: _useAuth } = await import('./context/AuthContext');
+        window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
+      }
     });
     return cleanup;
   }, []);

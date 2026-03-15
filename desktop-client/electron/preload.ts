@@ -139,6 +139,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app-lock:lock', handler);
     return () => ipcRenderer.off('app-lock:lock', handler);
   },
+
+  // Account switcher tray integration
+  setTrayAccounts: (data: { accounts: { uid: string; name: string; email: string }[]; activeAccountUid: string | null }) =>
+    ipcRenderer.send('tray:accounts-changed', data),
+  onTraySwitchAccount: (cb: (uid: string) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, uid: string) => cb(uid);
+    ipcRenderer.on('tray:switch-account', handler);
+    return () => ipcRenderer.off('tray:switch-account', handler);
+  },
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -212,6 +221,8 @@ export interface ElectronAPI {
   fetchAudioData: (url: string) => Promise<Uint8Array>;
   setAppLockState: (state: { enabled: boolean; locked: boolean }) => void;
   onTrayLockApp: (cb: () => void) => () => void;
+  setTrayAccounts: (data: { accounts: { uid: string; name: string; email: string }[]; activeAccountUid: string | null }) => void;
+  onTraySwitchAccount: (cb: (uid: string) => void) => () => void;
 }
 
 declare global {

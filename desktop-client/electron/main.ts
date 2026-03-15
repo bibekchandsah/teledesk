@@ -29,6 +29,16 @@ let appLocked = false;
 // Reference to tray menu updater (set inside createTray)
 let updateTrayMenuRef: (() => void) | null = null;
 
+// Accounts state (synced from renderer)
+interface TrayAccount {
+  uid: string;
+  name: string;
+  email: string;
+  activeAccountUid: string | null;
+}
+let trayAccounts: TrayAccount[] = [];
+let trayActiveAccountUid: string | null = null;
+
 // ─── Window state persistence ─────────────────────────────────────────────
 const userDataPath = app.getPath('userData');
 const windowStateFile = path.join(userDataPath, 'window-state.json');
@@ -335,6 +345,25 @@ const createTray = () => {
       { type: 'separator' },
     ];
 
+    // Account switcher submenu — only shown when multiple accounts exist
+    if (trayAccounts.length > 1) {
+      const accountSubmenu: Electron.MenuItemConstructorOptions[] = trayAccounts.map((account) => ({
+        label: `${account.uid === trayActiveAccountUid ? '✓ ' : '    '}${account.name} (${account.email})`,
+        enabled: account.uid !== trayActiveAccountUid,
+        click: () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+          mainWindow?.webContents.send('tray:switch-account', account.uid);
+        },
+      }));
+
+      menuItems.push({
+        label: 'Switch Account',
+        submenu: accountSubmenu,
+      });
+      menuItems.push({ type: 'separator' });
+    }
+
     // App lock item — only shown when app lock is enabled
     if (appLockEnabled) {
       menuItems.push({
@@ -493,6 +522,13 @@ ipcMain.on('app-lock:state-changed', (_e, state: { enabled: boolean; locked: boo
     // updateTrayMenu is defined inside createTray, so we call it via a module-level ref
     updateTrayMenuRef?.();
   }
+});
+
+// Accounts state sync from renderer
+ipcMain.on('tray:accounts-changed', (_e, data: { accounts: TrayAccount[]; activeAccountUid: string | null }) => {
+  trayAccounts = data.accounts;
+  trayActiveAccountUid = data.activeAccountUid;
+  updateTrayMenuRef?.();
 });
 
 // Get app version
