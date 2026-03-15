@@ -117,11 +117,11 @@ router.get('/device-sessions/debug', debugSessionInfo);
 // POST /api/users/device-sessions/cleanup - Clean up duplicate sessions
 router.post('/device-sessions/cleanup', cleanupDuplicateDeviceSessions);
 
-// DELETE /api/users/device-sessions/:sessionId - Revoke specific device session
-router.delete('/device-sessions/:sessionId', revokeSession);
-
 // DELETE /api/users/device-sessions/others/all - Revoke all other device sessions
 router.delete('/device-sessions/others/all', revokeAllOtherDeviceSessions);
+
+// DELETE /api/users/device-sessions/:sessionId - Revoke specific device session
+router.delete('/device-sessions/:sessionId', revokeSession);
 
 // GET /api/users/:uid
 router.get('/:uid', getUserProfile);

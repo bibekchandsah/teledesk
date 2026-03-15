@@ -48,6 +48,7 @@ export interface DeviceSession {
   createdAt: string;
   lastActive: string;
   isCurrent: boolean;
+  isRevoked?: boolean;
 }
 
 export interface Message {

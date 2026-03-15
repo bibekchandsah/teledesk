@@ -112,6 +112,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const response = await syncUserProfile(displayName, fbUser.email || '', fbUser.photoURL || '');
           if (response.success && response.data) {
             userProfile = response.data;
+          } else if (response.error === 'SESSION_REVOKED') {
+            console.error('[Auth] Session revoked during sync. Logging out...');
+            await logout();
+            return;
           }
         } catch (syncErr) {
           console.warn('[Auth] Backend sync failed:', syncErr);

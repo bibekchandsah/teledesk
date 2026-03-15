@@ -59,6 +59,27 @@ export const authenticateToken = async (
       // Check if session exists for this fingerprint
       let session = await getSessionByTokenId(sessionFingerprint);
       
+      if (session && session.isRevoked) {
+        const authTimeMs = decodedToken.auth_time * 1000;
+        const sessionLastActiveMs = new Date(session.lastActive).getTime();
+        
+        logger.debug(`Checking revoked session ${sessionFingerprint}. authTime: ${new Date(authTimeMs).toISOString()}, lastActive: ${session.lastActive}`);
+        
+        // If the token was issued AFTER the session was last active/revoked,
+        // it signifies a legitimate re-login from the exact same device.
+        if (authTimeMs > sessionLastActiveMs) {
+          logger.info(`Un-revoking session ${sessionFingerprint} due to fresh login. (${authTimeMs} > ${sessionLastActiveMs})`);
+          const { supabase } = await import('../config/supabase');
+          await supabase.from('device_sessions').update({ is_revoked: false }).eq('firebase_token_id', sessionFingerprint);
+          session.isRevoked = false;
+        } else {
+          // Reject the old hijacked/revoked session
+          logger.warn(`Rejected HTTP request for session ${sessionFingerprint} because it is revoked. (authTime: ${authTimeMs} <= lastActive: ${sessionLastActiveMs})`);
+          res.status(401).json({ success: false, error: 'SESSION_REVOKED', message: 'Your session has been revoked from another device.' });
+          return;
+        }
+      }
+
       if (!session) {
         // Create new session
         session = await createDeviceSession(
@@ -67,7 +88,7 @@ export const authenticateToken = async (
           ipAddress,
           userAgent,
         );
-      } else {
+      } else if (!session.isRevoked) {
         // Update existing session activity
         await updateSessionActivity(sessionFingerprint);
       }
@@ -104,6 +125,23 @@ export const authenticateSocket = async (
       const deviceFingerprint = crypto.createHash('md5').update(userAgent).digest('hex');
       sessionFingerprint = `${decoded.uid}_${deviceFingerprint}_${ipAddress}`;
       logger.debug(`Socket auth creating session fingerprint: ${sessionFingerprint}`);
+      
+      const { getSessionByTokenId } = await import('../services/deviceSessionService');
+      const session = await getSessionByTokenId(sessionFingerprint);
+      
+      if (session && session.isRevoked) {
+        const authTimeMs = decoded.auth_time * 1000;
+        const sessionLastActiveMs = new Date(session.lastActive).getTime();
+        
+        if (authTimeMs > sessionLastActiveMs) {
+          logger.info(`Un-revoking Socket session ${sessionFingerprint} due to fresh login.`);
+          const { supabase } = await import('../config/supabase');
+          await supabase.from('device_sessions').update({ is_revoked: false }).eq('firebase_token_id', sessionFingerprint);
+        } else {
+          logger.warn(`Rejected Socket connection for session ${sessionFingerprint} because it is revoked.`);
+          return null; // Deny socket connection
+        }
+      }
     }
     
     return { 

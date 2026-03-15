@@ -22,6 +22,7 @@ export interface DeviceSession {
   createdAt: string;
   lastActive: string;
   isCurrent: boolean;
+  isRevoked?: boolean;
 }
 
 type DeviceSessionRow = {
@@ -38,6 +39,7 @@ type DeviceSessionRow = {
   created_at: string;
   last_active: string;
   is_current: boolean;
+  is_revoked?: boolean;
 };
 
 const rowToSession = (row: DeviceSessionRow): DeviceSession => ({
@@ -54,6 +56,7 @@ const rowToSession = (row: DeviceSessionRow): DeviceSession => ({
   createdAt: row.created_at,
   lastActive: row.last_active,
   isCurrent: row.is_current,
+  isRevoked: row.is_revoked || false,
 });
 
 // Get location info from IP using ipinfo.io API
@@ -203,28 +206,32 @@ export const createDeviceSession = async (
   // Check if a session with this fingerprint already exists (race condition protection)
   const existingSession = await getSessionByTokenId(firebaseTokenId);
   if (existingSession) {
-    logger.info(`Found existing session for fingerprint ${firebaseTokenId}: ${existingSession.deviceName}`);
+    logger.info(`Found existing session for fingerprint ${firebaseTokenId}: ${existingSession.deviceName} (Revoked: ${existingSession.isRevoked})`);
     
-    // Mark all other sessions as not current
+    // Mark all other fingerprint groups as not current
     await supabase
       .from('device_sessions')
       .update({ is_current: false })
       .eq('uid', uid)
       .neq('firebase_token_id', firebaseTokenId);
     
-    // Mark this session as current and update activity
+    // Mark this fingerprint group as current and update activity
+    // Note: We update BY fingerprint to ensure all rows in this group are consistent,
+    // though ideally we'd target by session_id. For simplicity and robustness during lookup:
     await supabase
       .from('device_sessions')
       .update({ 
         is_current: true,
-        last_active: now()
+        last_active: now(),
+        // If it was revoked, we keep it revoked! The middleware handles un-revocation.
+        // We only "reactivate" activity here.
       })
       .eq('firebase_token_id', firebaseTokenId);
     
     // Return updated session
     const updatedSession = await getSessionByTokenId(firebaseTokenId);
     if (updatedSession) {
-      logger.info(`Device session reactivated for user ${uid}: ${deviceName} (was: ${existingSession.deviceName})`);
+      logger.info(`Device session activity updated for user ${uid}: ${deviceName}`);
       return updatedSession;
     }
   }
@@ -321,11 +328,13 @@ export const getUserSessions = async (uid: string): Promise<DeviceSession[]> => 
     .order('last_active', { ascending: false });
 
   if (error) {
-    logger.error(`Failed to get user sessions: ${error.message}`);
-    throw new Error('Failed to get user sessions');
+    logger.error(`Error fetching user sessions: ${error.message}`);
+    return [];
   }
 
-  const sessions = (data as DeviceSessionRow[]).map(rowToSession);
+  const sessions = (data as DeviceSessionRow[])
+    .map(rowToSession)
+    .filter(session => !session.isRevoked); // Filter out revoked sessions here to prevent them displaying in the UI
   
   // Debug logging
   logger.debug(`Found ${sessions.length} sessions for user ${uid}:`);
@@ -357,16 +366,16 @@ export const revokeDeviceSession = async (
 
   const { error } = await supabase
     .from('device_sessions')
-    .delete()
+    .update({ is_revoked: true })
     .eq('uid', uid)
     .eq('session_id', sessionId);
 
   if (error) {
-    logger.error(`Failed to revoke device session: ${error.message}`);
+    logger.error(`Failed to revoke device session in DB: ${error.message} (Code: ${error.code})`);
     return false;
   }
 
-  logger.info(`Successfully deleted session ${sessionId} from database`);
+  logger.info(`Successfully marked session ${sessionId} as revoked in database`);
 
   // Notify the specific session to logout via socket
   if (io && sessionData) {
@@ -417,28 +426,28 @@ export const revokeAllOtherSessions = async (
     logger.warn(`Current session ${currentSessionId} not found for user ${uid}`);
   }
 
-  // Get session info before deleting for notifications
+  // Get session info before revoking for notifications
   const { data: sessionsToRevoke } = await supabase
     .from('device_sessions')
     .select('session_id, firebase_token_id')
     .eq('uid', uid)
-    .neq('session_id', currentSessionId);
+    .neq('session_id', currentSessionId)
+    .eq('is_revoked', false); // Only consider active sessions for revocation
 
   logger.info(`Found ${sessionsToRevoke?.length || 0} other sessions to revoke`);
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('device_sessions')
-    .delete()
+    .update({ is_revoked: true })
     .eq('uid', uid)
-    .neq('session_id', currentSessionId)
-    .select('session_id');
+    .neq('session_id', currentSessionId);
 
   if (error) {
-    logger.error(`Failed to revoke other sessions: ${error.message}`);
+    logger.error(`Failed to revoke other sessions in DB: ${error.message} (Code: ${error.code})`);
     return 0;
   }
 
-  const count = data?.length || 0;
+  const count = sessionsToRevoke?.length || 0;
   logger.info(`Successfully deleted ${count} other sessions from database`);
 
   // Notify specific revoked sessions to logout via socket (exclude current session)
@@ -488,17 +497,24 @@ export const revokeAllOtherSessions = async (
 export const getSessionByTokenId = async (
   firebaseTokenId: string,
 ): Promise<DeviceSession | null> => {
+  // Use limit(1) and ordering instead of .single() because soft-delete
+  // might leave multiple rows with the same fingerprint in the DB.
+  // We want the most recently active one (which would be the current or last known).
   const { data, error } = await supabase
     .from('device_sessions')
     .select('*')
     .eq('firebase_token_id', firebaseTokenId)
-    .single();
+    .order('last_active', { ascending: false })
+    .limit(1);
 
-  if (error || !data) {
+  if (error || !data || data.length === 0) {
+    if (error && error.code !== 'PGRST116') { // Ignore "no rows" error
+      logger.error(`Error searching for session by fingerprint: ${error.message}`);
+    }
     return null;
   }
 
-  return rowToSession(data as DeviceSessionRow);
+  return rowToSession(data[0] as DeviceSessionRow);
 };
 
 // Clean up duplicate sessions for a user (keep only the most recent ones)
@@ -515,15 +531,17 @@ export const cleanupDuplicateSessions = async (uid: string): Promise<void> => {
 
     // Group sessions by device fingerprint (same device/browser)
     const sessionGroups = new Map<string, DeviceSessionRow[]>();
+    const crypto = require('crypto');
     
     for (const session of sessions as DeviceSessionRow[]) {
-      // Create a device fingerprint based on user agent and IP
-      const deviceFingerprint = `${session.user_agent}_${session.ip_address}`;
+      // Use the same fingerprint logic as the middleware for consistency
+      const deviceFingerprint = crypto.createHash('md5').update(session.user_agent).digest('hex');
+      const sessionFingerprint = `${session.uid}_${deviceFingerprint}_${session.ip_address}`;
       
-      if (!sessionGroups.has(deviceFingerprint)) {
-        sessionGroups.set(deviceFingerprint, []);
+      if (!sessionGroups.has(sessionFingerprint)) {
+        sessionGroups.set(sessionFingerprint, []);
       }
-      sessionGroups.get(deviceFingerprint)!.push(session);
+      sessionGroups.get(sessionFingerprint)!.push(session);
     }
 
     // For each device, keep only the most recent session
@@ -541,14 +559,14 @@ export const cleanupDuplicateSessions = async (uid: string): Promise<void> => {
       }
     }
 
-    // Delete duplicate sessions
+    // Mark duplicate sessions as revoked
     if (sessionsToDelete.length > 0) {
       await supabase
         .from('device_sessions')
-        .delete()
+        .update({ is_revoked: true })
         .in('session_id', sessionsToDelete);
       
-      logger.info(`Cleaned up ${sessionsToDelete.length} duplicate sessions for user ${uid}`);
+      logger.info(`Cleaned up ${sessionsToDelete.length} duplicate sessions for user ${uid} by marking them as revoked`);
     }
   } catch (error) {
     logger.warn(`Failed to cleanup duplicate sessions: ${(error as Error).message}`);

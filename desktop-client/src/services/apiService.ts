@@ -23,6 +23,23 @@ const authFetch = async <T>(
     headers,
   });
 
+  // Handle 401 Unauthorized - specifically session revocation
+  if (response.status === 401) {
+    try {
+      const errorData = await response.clone().json();
+      if (errorData.error === 'SESSION_REVOKED') {
+        console.warn('[API] Session revoked. Forcing logout...');
+        // Force redirect to login page with revocation message
+        // Using window.location.href ensures a full page reload and clean state
+        const message = encodeURIComponent(errorData.message || 'Your session has been revoked from another device.');
+        window.location.href = `/login?logout=true&revoked=true&message=${message}`;
+        return errorData as ApiResponse<T>;
+      }
+    } catch (e) {
+      // Ignore parse errors for clone
+    }
+  }
+
   const data = await response.json();
 
   return data as ApiResponse<T>;
