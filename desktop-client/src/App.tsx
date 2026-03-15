@@ -73,9 +73,13 @@ const AppInner: React.FC = () => {
   const [isAppUnlocked, setIsAppUnlocked] = React.useState(false);
   const appUnlockedRef = useRef(false);
 
-  // Window focus/blur overlay
+  // Window focus/blur overlay (disabled when devtools are allowed)
   const [isWindowFocused, setIsWindowFocused] = React.useState(true);
   useEffect(() => {
+    // Only show blur overlay when devtools are NOT allowed
+    const allowDevTools = import.meta.env.VITE_ALLOW_DEVTOOLS === 'true';
+    if (allowDevTools) return;
+
     const onFocus = () => setIsWindowFocused(true);
     const onBlur = () => setIsWindowFocused(false);
     window.addEventListener('focus', onFocus);
@@ -86,17 +90,17 @@ const AppInner: React.FC = () => {
     };
   }, []);
 
-  // Disable right-click context menu in production (web browsers)
+  // Disable right-click context menu when devtools are not allowed
   useEffect(() => {
-    const isDev = import.meta.env.DEV;
-    if (isDev) return; // Allow in development
+    const allowDevTools = import.meta.env.VITE_ALLOW_DEVTOOLS === 'true';
+    if (allowDevTools) return; // Allow when explicitly enabled
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       return false;
     };
 
-    // Also block common DevTools shortcuts in web browsers
+    // Also block common DevTools shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       const isF12 = e.key === 'F12';
       const isDevToolsShortcut =

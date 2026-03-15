@@ -113,10 +113,11 @@ const VITE_DEV_SERVER_URL = 'http://localhost:5173';
 
 // Load .env file manually — Vite-prefixed vars are renderer-only and never reach the main process
 const loadEnvFile = () => {
-  // In dev: .env is in the project root (where package.json is)
-  // In prod: .env would be in the app.asar or app folder
+  // In dev: .env is in desktop-client/.env
+  // __dirname in compiled code is: desktop-client/dist-electron
+  // So we need to go up one level: ../
   const envPath = isDev 
-    ? path.join(__dirname, '../../.env')  // from dist-electron/main.js → project root
+    ? path.join(__dirname, '../.env')  // from dist-electron/main.js → desktop-client/.env
     : path.join(app.getAppPath(), '.env');
   
   try {
@@ -128,13 +129,17 @@ const loadEnvFile = () => {
         const eqIdx = trimmed.indexOf('=');
         if (eqIdx === -1) continue;
         const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim();
+        let val = trimmed.slice(eqIdx + 1).trim();
+        // Remove quotes if present
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
         if (key && !(key in process.env)) {
           process.env[key] = val;
         }
       }
       console.log('[Env] Loaded from:', envPath);
-      console.log('[Env] ALLOW_DEVTOOLS =', process.env.ALLOW_DEVTOOLS);
+      console.log('[Env] ALLOW_DEVTOOLS =', JSON.stringify(process.env.ALLOW_DEVTOOLS));
     } else {
       console.warn('[Env] File not found:', envPath);
     }
@@ -146,7 +151,7 @@ loadEnvFile();
 
 // ALLOW_DEVTOOLS=true in .env enables DevTools and right-click (for development)
 const allowDevTools = process.env.ALLOW_DEVTOOLS === 'true';
-console.log('[Main] allowDevTools =', allowDevTools);
+console.log('[Main] allowDevTools =', allowDevTools, '(raw value:', JSON.stringify(process.env.ALLOW_DEVTOOLS), ')');
 
 // Required on Windows for Toast notifications
 if (process.platform === 'win32') {
