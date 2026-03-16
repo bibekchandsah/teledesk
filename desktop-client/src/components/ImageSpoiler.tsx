@@ -232,24 +232,24 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
           {/* SPOILER label — only for real messages */}
           {!disableReveal && (
             <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${isHovered ? 1.05 : 1})`,
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                backdropFilter: 'blur(10px)',
-                padding: '12px 24px',
-                borderRadius: 12,
-                border: '2px solid rgba(255, 255, 255, 0.3)',
-                boxShadow: isHovered
-                  ? '0 0 20px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.1)'
-                  : '0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.05)',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                pointerEvents: 'none',
-              }}
+              // style={{
+              //   position: 'absolute',
+              //   top: '50%',
+              //   left: '50%',
+              //   transform: `translate(-50%, -50%) scale(${isHovered ? 1.05 : 1})`,
+              //   backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              //   backdropFilter: 'blur(10px)',
+              //   padding: '12px 24px',
+              //   borderRadius: 12,
+              //   border: '2px solid rgba(255, 255, 255, 0.3)',
+              //   boxShadow: isHovered
+              //     ? '0 0 20px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.1)'
+              //     : '0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.05)',
+              //   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              //   pointerEvents: 'none',
+              // }}
             >
-              <div style={{
+              {/* <div style={{
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,
@@ -267,7 +267,7 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
                 textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
               }}>
                 Click to reveal
-              </div>
+              </div> */}
             </div>
           )}
         </>

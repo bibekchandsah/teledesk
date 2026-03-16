@@ -3786,6 +3786,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             display: 'flex',
             alignItems: 'center',
             gap: 8,
+            zIndex: 1,
           }}
         >
           <div
