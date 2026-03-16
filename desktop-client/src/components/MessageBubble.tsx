@@ -1459,7 +1459,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
   // Pattern: [markers]content[markers] where markers can be *, _, __, ~, ||
   
   // Try to find the longest valid formatting pattern
-  let bestMatch: { start: number; end: number; flags: number; content: string; openLen: number; closeLen: number } | null = null;
+  let bestMatch: { start: number; end: number; flags: number; content: string; openLen: number; closeLen: number; rawContent: string } | null = null;
   
   for (let i = 0; i < text.length; i++) {
     // Try to match opening markers starting at position i
@@ -1490,20 +1490,20 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
       
       if (closeMarkers.length === 0) continue;
       
-      const content = text.substring(contentStart, closePos + 1);
-      if (content.length === 0) continue;
+      const rawContent = text.substring(contentStart, closePos + 1);
+      if (rawContent.length === 0) continue;
       
-      // Analyze ONLY boundary markers (not markers inside content)
-      const boundaryMarkers = openMarkers + closeMarkers;
+      // Analyze ALL markers (opening + closing + any inside content)
+      const allText = text.substring(i, endPos);
       let flags = 0;
       
-      // Count occurrences of each marker type in boundaries only
-      const asteriskCount = (boundaryMarkers.match(/\*/g) || []).length;
-      const underscoreCount = (boundaryMarkers.match(/_/g) || []).length;
-      const tildeCount = (boundaryMarkers.match(/~/g) || []).length;
-      const pipeCount = (boundaryMarkers.match(/\|/g) || []).length;
+      // Count occurrences of each marker type in the entire matched region
+      const asteriskCount = (allText.match(/\*/g) || []).length;
+      const underscoreCount = (allText.match(/_/g) || []).length;
+      const tildeCount = (allText.match(/~/g) || []).length;
+      const pipeCount = (allText.match(/\|/g) || []).length;
       
-      // Bold: at least 2 asterisks (one on each side)
+      // Bold: at least 2 asterisks
       if (asteriskCount >= 2) {
         flags |= 0b00001;
       }
@@ -1520,7 +1520,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
         flags |= 0b00010; // italic
       }
       
-      // Strikethrough: at least 2 tildes (one on each side)
+      // Strikethrough: at least 2 tildes
       if (tildeCount >= 2) {
         flags |= 0b01000;
       }
@@ -1539,9 +1539,10 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
             start: i,
             end: endPos,
             flags: flags,
-            content: content,
+            content: rawContent,
             openLen: openMarkers.length,
-            closeLen: closeMarkers.length
+            closeLen: closeMarkers.length,
+            rawContent: rawContent
           };
         }
       }

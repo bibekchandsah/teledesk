@@ -113,11 +113,32 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
         };
         
+        // Helper function to strip all formatting markers from text
+        const stripFormatting = (text: string): string => {
+          return text
+            // Remove code blocks first
+            .replace(/```[\s\S]*?```/g, (match) => {
+              // Extract content between triple backticks
+              const content = match.replace(/```\n?/g, '').replace(/\n?```/g, '');
+              return content;
+            })
+            // Remove inline code
+            .replace(/`([^`]+)`/g, '$1')
+            // Remove bold
+            .replace(/\*([^*\n]+)\*/g, '$1')
+            // Remove underline (must be before italic to avoid conflicts)
+            .replace(/__([^_\n]+)__/g, '$1')
+            // Remove italic
+            .replace(/_([^_\n]+)_/g, '$1')
+            // Remove strikethrough
+            .replace(/~([^~\n]+)~/g, '$1');
+        };
+        
         showNotification({
           title: nicknames[message.senderId] || message.senderName || 'New Message',
           body:
             message.type === 'text'
-              ? hideSpoilers((message.content || '').slice(0, 100))
+              ? stripFormatting(hideSpoilers((message.content || '').slice(0, 100)))
               : message.type === 'gif'
               ? 'Sent a GIF'
               : message.type === 'sticker'
