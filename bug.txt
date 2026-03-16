@@ -19,6 +19,7 @@ to be implemented:
 14. single emoji to full row animated 
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 16. in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
+17. Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
 
 
 

@@ -203,6 +203,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         mirrored?: boolean;
         forwarded?: boolean;
         groupId?: string;
+        isSpoiler?: boolean;
       }) => {
         try {
           const chat = await getChatById(payload.chatId, uid);
@@ -249,6 +250,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
             ...(payload.mirrored !== undefined && { mirrored: payload.mirrored }),
             ...(payload.forwarded && { forwarded: true }),
             ...(payload.groupId !== undefined && { groupId: payload.groupId }),
+            ...(payload.isSpoiler && { isSpoiler: true }),
           };
 
           await saveMessage(message);

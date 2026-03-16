@@ -29,6 +29,7 @@ import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import MessageContextMenu from '../components/MessageContextMenu';
 import ChatThemeModal from '../components/modals/ChatThemeModal';
+import ImageSpoiler from '../components/ImageSpoiler';
 
 export const downloadMessageFile = (m: Message) => {
   if (!m.fileUrl) return;
@@ -339,9 +340,25 @@ const MediaGroupBubble = ({
                   }}
                 >
                   {m.type === 'image' || m.type === 'gif' ? (
-                    <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    m.isSpoiler ? (
+                      <ImageSpoiler 
+                        src={m.fileUrl!} 
+                        alt={m.fileName}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )
                   ) : m.type === 'video' ? (
-                    <video src={m.fileUrl} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    m.isSpoiler ? (
+                      <ImageSpoiler 
+                        src={m.fileUrl!} 
+                        alt={m.fileName}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    ) : (
+                      <video src={m.fileUrl} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                       <Paperclip size={24} color="var(--text-secondary)" />
@@ -834,6 +851,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // ─── File upload preview (staging) ───
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [uploadCaption, setUploadCaption] = useState('');
+  const [uploadAsSpoiler, setUploadAsSpoiler] = useState(false);
 
   const syncMessageUpdate = useCallback((messageId: string, updates: Partial<Message>) => {
     // 1. Update the store (affects liveMsgs)
@@ -2299,7 +2317,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   // ─── File upload ──────────────────────────────────────────────────────────
-  const uploadFiles = async (files: File[], caption?: string) => {
+  const uploadFiles = async (files: File[], caption?: string, isSpoiler?: boolean) => {
     if (files.length === 0 || !chatId || !currentUser) return;
 
     // Generate a shared groupId for batch uploads (multi-file grid rendering)
@@ -2323,6 +2341,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         });
 
         const msgType = getMessageTypeFromMime(file.type);
+        const isMediaType = msgType === 'image' || msgType === 'video';
+        
         sendMessage({
           chatId,
           // Attach caption to last file message so it renders in the same bubble
@@ -2333,7 +2353,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           fileSize: result.fileSize,
           senderName: currentUser.name || 'Unknown',
           senderAvatar: currentUser.avatar || '',
-          ...(batchGroupId ? { groupId: batchGroupId } : {})
+          ...(batchGroupId ? { groupId: batchGroupId } : {}),
+          ...(isMediaType && isSpoiler ? { isSpoiler: true } : {})
         });
       } catch (err) {
         console.error('[Upload] Failed:', err);
@@ -2394,10 +2415,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const handleConfirmUpload = async () => {
     const files = pendingUploadFiles;
     const caption = uploadCaption.trim();
+    const isSpoiler = uploadAsSpoiler;
     setPendingUploadFiles([]);
     setUploadCaption('');
-    // Pass caption into uploadFiles so it attaches to the last file message
-    await uploadFiles(files, caption);
+    setUploadAsSpoiler(false);
+    // Pass caption and spoiler flag into uploadFiles
+    await uploadFiles(files, caption, isSpoiler);
   };
 
   const handleRemovePendingFile = (index: number) => {
@@ -3518,14 +3541,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 }}>
                   {pendingUploadFiles.map((file, idx) => {
                     const url = URL.createObjectURL(file);
+                    const isMediaFile = file.type.startsWith('image/') || file.type.startsWith('video/');
+                    const showSpoilerPreview = uploadAsSpoiler && isMediaFile;
+                    
                     return (
                       <div key={idx} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', aspectRatio: '1/1', backgroundColor: '#000' }}>
-                        <img
-                          src={url}
-                          onLoad={e => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          alt={file.name}
-                        />
+                        {showSpoilerPreview ? (
+                          <ImageSpoiler
+                            src={url}
+                            alt={file.name}
+                            style={{ width: '100%', height: '100%' }}
+                            disableReveal={true}
+                          />
+                        ) : (
+                          <img
+                            src={url}
+                            onLoad={e => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            alt={file.name}
+                          />
+                        )}
                         {pendingUploadFiles.length > 1 && (
                           <button
                             onClick={() => handleRemovePendingFile(idx)}
@@ -3536,6 +3571,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                               borderRadius: '50%', cursor: 'pointer',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               color: '#fff',
+                              zIndex: 10,
                             }}
                           >
                             <X size={12} />
@@ -3553,17 +3589,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     const isImage = file.type.startsWith('image/');
                     const sizeMB = (file.size / 1024 / 1024).toFixed(2);
                     const url = (isImage || isVideo) ? URL.createObjectURL(file) : null;
+                    const isMediaFile = isImage || isVideo;
+                    const showSpoilerPreview = uploadAsSpoiler && isMediaFile;
+                    
                     return (
                       <div key={idx} style={{
                         display: 'flex', alignItems: 'center', gap: 12,
                         padding: 12, backgroundColor: 'var(--bg-tertiary)',
                         borderRadius: 12, border: '1px solid var(--border)'
                       }}>
-                        <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg-primary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {isImage && url ? (
+                        <div style={{ width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg-primary)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                          {showSpoilerPreview && url ? (
+                            <ImageSpoiler
+                              src={url}
+                              alt={file.name}
+                              style={{ width: '100%', height: '100%' }}
+                              disableReveal={true}
+                            />
+                          ) : isImage && url ? (
                             <img src={url} onLoad={() => URL.revokeObjectURL(url!)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={file.name} />
                           ) : isVideo && url ? (
-                            <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                            showSpoilerPreview ? (
+                              <ImageSpoiler
+                                src={url}
+                                alt={file.name}
+                                style={{ width: '100%', height: '100%' }}
+                                disableReveal={true}
+                              />
+                            ) : (
+                              <video src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+                            )
                           ) : isAudio ? (
                             <Mic size={24} color="#a78bfa" />
                           ) : (
@@ -3611,39 +3666,79 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             </div>
 
             {/* Caption + Send */}
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                autoFocus
-                type="text"
-                value={uploadCaption}
-                onChange={e => setUploadCaption(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleConfirmUpload(); }}
-                placeholder="Add a caption..."
-                style={{
-                  flex: 1, padding: '10px 16px',
-                  borderRadius: 20, border: '1px solid var(--border)',
-                  backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)',
-                  fontSize: 14, outline: 'none',
-                }}
-              />
-              <button
-                onClick={handleConfirmUpload}
-                disabled={pendingUploadFiles.length === 0}
-                style={{
-                  width: 44, height: 44, borderRadius: '50%',
-                  backgroundColor: 'var(--accent)', border: 'none',
-                  color: '#fff', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'transform 0.15s, opacity 0.15s',
-                  opacity: pendingUploadFiles.length === 0 ? 0.5 : 1,
-                  flexShrink: 0,
-                }}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
-                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-                title="Send"
-              >
-                <Send size={18} />
-              </button>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+              {/* Spoiler checkbox for images/videos */}
+              {pendingUploadFiles.some(f => f.type.startsWith('image/') || f.type.startsWith('video/')) && (
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 12,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={uploadAsSpoiler}
+                    onChange={(e) => setUploadAsSpoiler(e.target.checked)}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      cursor: 'pointer',
+                      accentColor: 'var(--accent)',
+                    }}
+                  />
+                  <span style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: 'var(--text-primary)',
+                  }}>
+                    Mark as spoiler
+                  </span>
+                  <span style={{
+                    fontSize: 11,
+                    color: 'var(--text-secondary)',
+                    fontStyle: 'italic',
+                  }}>
+                    (Hidden with blur effect)
+                  </span>
+                </label>
+              )}
+              
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={uploadCaption}
+                  onChange={e => setUploadCaption(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleConfirmUpload(); }}
+                  placeholder="Add a caption..."
+                  style={{
+                    flex: 1, padding: '10px 16px',
+                    borderRadius: 20, border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)',
+                    fontSize: 14, outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={handleConfirmUpload}
+                  disabled={pendingUploadFiles.length === 0}
+                  style={{
+                    width: 44, height: 44, borderRadius: '50%',
+                    backgroundColor: 'var(--accent)', border: 'none',
+                    color: '#fff', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'transform 0.15s, opacity 0.15s',
+                    opacity: pendingUploadFiles.length === 0 ? 0.5 : 1,
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  title="Send"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </div>

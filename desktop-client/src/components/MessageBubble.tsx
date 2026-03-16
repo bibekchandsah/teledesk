@@ -9,6 +9,7 @@ import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import SpoilerText from './SpoilerText';
+import ImageSpoiler from './ImageSpoiler';
 
 // Simple deterministic hash to generate stable waveforms
 const getHash = (str: string) => {
@@ -721,26 +722,45 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       case 'sticker':
         return (
           <div className="message-image">
-            <img
-              src={message.fileUrl}
-              alt={message.fileName || 'image'}
-              style={{ 
-                maxWidth: '100%', 
-                maxHeight: 320, 
-                borderRadius: 8, 
-                cursor: 'pointer',
-                objectFit: 'contain'
-              }}
-              onClick={() => {
-                if (onPreview) {
-                  onPreview(message);
-                } else {
-                  window.open(message.fileUrl, '_blank');
-                }
-              }}
-            />
+            {message.isSpoiler ? (
+              <ImageSpoiler
+                src={message.fileUrl!}
+                alt={message.fileName || 'image'}
+                onClick={() => {
+                  if (onPreview) {
+                    onPreview(message);
+                  } else {
+                    window.open(message.fileUrl, '_blank');
+                  }
+                }}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: 320,
+                  borderRadius: 8,
+                }}
+              />
+            ) : (
+              <img
+                src={message.fileUrl}
+                alt={message.fileName || 'image'}
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: 320, 
+                  borderRadius: 8, 
+                  cursor: 'pointer',
+                  objectFit: 'contain'
+                }}
+                onClick={() => {
+                  if (onPreview) {
+                    onPreview(message);
+                  } else {
+                    window.open(message.fileUrl, '_blank');
+                  }
+                }}
+              />
+            )}
             {message.content && (
-              <p className="message-caption">{renderMessageText(message.content, searchQuery, isOwn)}</p>
+              <div className="message-caption" style={{ margin: 0 }}>{renderMessageText(message.content, searchQuery, isOwn)}</div>
             )}
           </div>
         );
@@ -748,29 +768,50 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       case 'video':
         return (
           <div className="message-video" onClick={() => onPreview?.(message)} style={{ cursor: onPreview ? 'pointer' : 'default', position: 'relative' }}>
-            <video
-              src={message.fileUrl}
-              controls={!onPreview}
-              style={{ maxWidth: '100%', borderRadius: 8, pointerEvents: onPreview ? 'none' : 'auto' }}
-            />
-            {onPreview && (
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-                backdropFilter: 'blur(4px)',
-              }}>
-                <Play size={28} style={{ color: '#fff', marginLeft: 4 }} fill="#fff" />
-              </div>
+            {message.isSpoiler ? (
+              <ImageSpoiler
+                src={message.fileUrl!}
+                alt={message.fileName || 'video'}
+                onClick={() => {
+                  if (onPreview) {
+                    onPreview(message);
+                  } else {
+                    window.open(message.fileUrl, '_blank');
+                  }
+                }}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: 320,
+                  borderRadius: 8,
+                }}
+              />
+            ) : (
+              <>
+                <video
+                  src={message.fileUrl}
+                  controls={!onPreview}
+                  style={{ maxWidth: '100%', borderRadius: 8, pointerEvents: onPreview ? 'none' : 'auto' }}
+                />
+                {onPreview && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                    backdropFilter: 'blur(4px)',
+                  }}>
+                    <Play size={28} style={{ color: '#fff', marginLeft: 4 }} fill="#fff" />
+                  </div>
+                )}
+              </>
             )}
           </div>
         );
@@ -805,7 +846,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       default:
         return (
-          <p style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery, isOwn)}</p>
+          <div style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery, isOwn)}</div>
         );
     }
   };

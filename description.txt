@@ -161,8 +161,22 @@ Key Features:
     Support toggle functionality to remove formatting if it's already applied
     Support multi-line code blocks with triple backticks
     Horizontal formating option scrolling for smaller devices 
+Spoiler Privacy Implementation
+    1. Desktop Notifications
+    When a message with spoilers is received and a notification is shown:
+        Original: ||secret text||
+        Notification shows: ::::::::::::::::::::::::
+    2. Chat List Preview
+    In the sidebar chat list, the last message preview:
+        Original: Check this ||spoiler||
+        Preview shows: Check this ::::::::::::::::::::::::
+    Examples:
+        ||hello|| → ::::::::::::::::::::::::
+        This is ||a secret|| message → This is ::::::::::::::::::::::::: message
+        ||multi\nline\nspoiler|| → ::::::::::::::::::::::::
 
 URL option added 
+-------------------------
 URL Button in Toolbar:
     Added a link button (🔗) to the formatting toolbar after the quote button
     Separated by a divider for visual clarity
@@ -197,3 +211,46 @@ User Experience:
     After inserting link, cursor is positioned after the link
     Textarea auto-resizes to accommodate the new content
     Modal closes automatically after insertion
+
+
+<------------------ image/video in grid too spoiler ---------------->
+Grid layout now wraps images/videos with ImageSpoiler component when isSpoiler === true
+Single image/video messages in MessageBubble also use ImageSpoiler for spoilers
+Upload preview has a "Mark as spoiler" checkbox (only shows for images/videos)
+ImageSpoiler component features premium effects: animated particles, blur, shimmer, and smooth reveal
+
+in upload modal preview:
+    When "Mark as spoiler" checkbox is checked, the upload preview shows the spoiler effect (blur, particles)
+    Clicking does nothing (just preview, not interactive)
+    When checkbox is unchecked, shows normal clear preview
+    Works for both grid layout (all images) and list layout (mixed files)
+    Users can see exactly how the spoiler will look before sending
+
+in messages: 
+    Spoilers always start hidden
+    Spoiler resets to hidden when page reloads or switching chats
+    Click once → Reveals image (blur and particles fade away)
+    Click revealed image → Opens preview modal
+    Reload page or switch chat → Spoiler resets to hidden state
+
+User Flow:
+    Click hidden spoiler → Reveals content
+    Click revealed spoiler → Hides content again
+    Click revealed image (when preview available) → Opens modal
+
+Testing checklist:
+    Test single image spoiler
+    Test grid layout spoiler (multiple images)
+    Test video spoiler
+    Verify cross-device synchronization
+
+User Experience:
+    Upload images/videos
+    Check "Mark as spoiler" checkbox
+    Preview immediately shows blur effect with particles 
+    Uncheck to see clear preview again
+    Send to deliver with spoiler effect
+    Spoiler appears with blur and particles
+    Click once to reveal
+    On page reload, spoiler resets to hidden state
+    Clicking revealed image opens preview modal, not hide it 

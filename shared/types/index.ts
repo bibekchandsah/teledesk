@@ -71,6 +71,7 @@ export interface Message {
   deletedFor?: string[];     // UIDs who deleted this for themselves only
   isEdited?: boolean;        // true when the sender has edited the message
   forwarded?: boolean;       // true when this message was forwarded from another chat
+  isSpoiler?: boolean;       // true when image/video should be hidden with spoiler effect
   replyTo?: {               // quoted message this is a reply to
     messageId: string;
     senderId: string;
