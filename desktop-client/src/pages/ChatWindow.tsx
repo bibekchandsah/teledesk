@@ -595,6 +595,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   
+  // ─── Text formatting toolbar ─────────────────────────────────────────────
+  const [showFormatToolbar, setShowFormatToolbar] = useState(false);
+  const [formatToolbarPos, setFormatToolbarPos] = useState({ top: 0, left: 0 });
+  const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
+  
   // ─── Draft management ────────────────────────────────────────────────────
   const { getDraft, setDraft: setDraftInStore, clearDraft } = useDraftStore();
   const draftSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1407,6 +1412,214 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       sendTyping(chatId, false, currentUser.name);
       if (liveTypingEnabled) sendLiveTyping(chatId, '', currentUser.name);
     }, APP_CONFIG.TYPING_TIMEOUT_MS);
+  };
+
+  // ─── Text formatting functions ────────────────────────────────────────────
+  const handleTextSelection = () => {
+    if (!inputRef.current) return;
+    
+    const start = inputRef.current.selectionStart;
+    const end = inputRef.current.selectionEnd;
+    
+    if (start !== end) {
+      // Text is selected
+      setTextSelection({ start, end });
+      
+      // Calculate toolbar position
+      const rect = inputRef.current.getBoundingClientRect();
+      setFormatToolbarPos({
+        top: rect.top - 50,
+        left: rect.left + (rect.width / 2)
+      });
+      setShowFormatToolbar(true);
+    } else {
+      setShowFormatToolbar(false);
+      setTextSelection(null);
+    }
+  };
+
+  const applyFormatting = (formatType: 'bold' | 'italic' | 'strikethrough' | 'underline' | 'code' | 'spoiler' | 'quote' | 'numberedList' | 'bulletList') => {
+    if (!inputRef.current || !textSelection) return;
+    
+    const { start, end } = textSelection;
+    const selectedText = inputText.substring(start, end);
+    const before = inputText.substring(0, start);
+    const after = inputText.substring(end);
+    
+    let formattedText = '';
+    let newCursorPos = end;
+    
+    // Helper function to check if text is already formatted and toggle it
+    const toggleFormat = (text: string, prefix: string, suffix?: string) => {
+      const suffixToUse = suffix || prefix;
+      if (text.startsWith(prefix) && text.endsWith(suffixToUse)) {
+        // Remove formatting
+        return {
+          text: text.slice(prefix.length, -suffixToUse.length),
+          wasToggled: true
+        };
+      }
+      // Add formatting
+      return {
+        text: `${prefix}${text}${suffixToUse}`,
+        wasToggled: false
+      };
+    };
+    
+    switch (formatType) {
+      case 'bold': {
+        const result = toggleFormat(selectedText, '*');
+        formattedText = result.text;
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'italic': {
+        const result = toggleFormat(selectedText, '_');
+        formattedText = result.text;
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'strikethrough': {
+        const result = toggleFormat(selectedText, '~');
+        formattedText = result.text;
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'underline': {
+        const result = toggleFormat(selectedText, '__');
+        formattedText = result.text;
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'spoiler': {
+        const result = toggleFormat(selectedText, '||');
+        formattedText = result.text;
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'code': {
+        // Check if it's multi-line
+        const hasNewlines = selectedText.includes('\n');
+        
+        if (hasNewlines) {
+          // Multi-line code block with triple backticks
+          const result = toggleFormat(selectedText, '```\n', '\n```');
+          formattedText = result.text;
+        } else {
+          // Single-line inline code
+          const result = toggleFormat(selectedText, '`');
+          formattedText = result.text;
+        }
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'quote': {
+        // Check if already quoted
+        if (selectedText.startsWith('> ')) {
+          // Remove quote from all lines
+          formattedText = selectedText.split('\n').map(line => 
+            line.startsWith('> ') ? line.slice(2) : line
+          ).join('\n');
+        } else {
+          // Add quote to all lines
+          formattedText = selectedText.split('\n').map(line => `> ${line}`).join('\n');
+        }
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'numberedList': {
+        const lines = selectedText.split('\n');
+        // Check if already a numbered list
+        const isNumberedList = lines.every(line => /^\d+\.\s/.test(line));
+        
+        if (isNumberedList) {
+          // Remove numbering
+          formattedText = lines.map(line => line.replace(/^\d+\.\s/, '')).join('\n');
+        } else {
+          // Add numbering
+          formattedText = lines.map((line, i) => `${i + 1}. ${line}`).join('\n');
+        }
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+      case 'bulletList': {
+        const lines = selectedText.split('\n');
+        // Check if already a bullet list
+        const isBulletList = lines.every(line => line.startsWith('• '));
+        
+        if (isBulletList) {
+          // Remove bullets
+          formattedText = lines.map(line => line.slice(2)).join('\n');
+        } else {
+          // Add bullets
+          formattedText = lines.map(line => `• ${line}`).join('\n');
+        }
+        newCursorPos = start + formattedText.length;
+        break;
+      }
+    }
+    
+    const newText = before + formattedText + after;
+    setInputText(newText);
+    
+    // Reset selection and hide toolbar
+    setShowFormatToolbar(false);
+    setTextSelection(null);
+    
+    // Restore focus and cursor position
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        // Auto-resize textarea
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+      }
+    }, 0);
+  };
+
+  // Handle keyboard shortcuts for formatting
+  const handleFormattingShortcut = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!inputRef.current) return;
+    
+    const start = inputRef.current.selectionStart;
+    const end = inputRef.current.selectionEnd;
+    
+    // Only apply shortcuts if text is selected
+    if (start === end) return;
+    
+    setTextSelection({ start, end });
+    
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'b') {
+        e.preventDefault();
+        applyFormatting('bold');
+      } else if (e.key === 'i') {
+        e.preventDefault();
+        applyFormatting('italic');
+      } else if (e.key === 'u') {
+        e.preventDefault();
+        applyFormatting('underline');
+      } else if (e.shiftKey && e.key === 'X') {
+        e.preventDefault();
+        applyFormatting('strikethrough');
+      } else if (e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+        applyFormatting('spoiler');
+      } else if (e.shiftKey && e.key === 'I') {
+        e.preventDefault();
+        applyFormatting('code');
+      } else if (e.shiftKey && e.key === '&') { // Ctrl+Shift+7
+        e.preventDefault();
+        applyFormatting('numberedList');
+      } else if (e.shiftKey && e.key === '*') { // Ctrl+Shift+8
+        e.preventDefault();
+        applyFormatting('bulletList');
+      } else if (e.shiftKey && e.key === '>') { // Ctrl+Shift+.
+        e.preventDefault();
+        applyFormatting('quote');
+      }
+    }
   };
 
   // ─── Send text message ────────────────────────────────────────────────────
@@ -3433,6 +3646,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             padding: '8px 16px',
             borderTop: '1px solid var(--border)',
             backgroundColor: 'var(--bg-tertiary)',
+            zIndex: 1,
           }}
         >
           <Pencil size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
@@ -3703,11 +3917,245 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   ))}
                 </div>
               )}
+              
+              {/* Text Formatting Toolbar */}
+              {showFormatToolbar && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: formatToolbarPos.top,
+                    left: formatToolbarPos.left,
+                    transform: 'translateX(-50%)',
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    gap: 4,
+                    padding: 4,
+                    animation: 'fadeIn 0.15s ease-out'
+                  }}
+                  onMouseDown={(e) => e.preventDefault()} // Prevent blur on click
+                >
+                  <button
+                    onClick={() => applyFormatting('bold')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Bold (Ctrl+B)"
+                  >
+                    <span style={{ fontWeight: 'bold' }}>B</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('italic')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontStyle: 'italic',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Italic (Ctrl+I)"
+                  >
+                    <span style={{ fontStyle: 'italic' }}>I</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('strikethrough')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Strikethrough (Ctrl+Shift+X)"
+                  >
+                    <span style={{ textDecoration: 'line-through' }}>S</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('underline')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Underline (Ctrl+U)"
+                  >
+                    <span style={{ textDecoration: 'underline' }}>U</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('spoiler')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Spoiler (Ctrl+Shift+P)"
+                  >
+                    <span style={{ filter: 'blur(4px)' }}>SP</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('code')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Inline Code (Ctrl+Shift+I)"
+                  >
+                    <span style={{ fontFamily: 'monospace' }}>&lt;/&gt;</span>
+                  </button>
+                  
+                  <div style={{ width: 1, backgroundColor: 'var(--border)', margin: '4px 0' }} />
+                  
+                  <button
+                    onClick={() => applyFormatting('numberedList')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Numbered List (Ctrl+Shift+7)"
+                  >
+                    <span>1.</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('bulletList')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Bullet List (Ctrl+Shift+8)"
+                  >
+                    <span>•</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => applyFormatting('quote')}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    title="Quote (Ctrl+Shift+.)"
+                  >
+                    <span>"</span>
+                  </button>
+                </div>
+              )}
+              
               <textarea
                 ref={inputRef}
                 value={inputText}
                 onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => {
+                  handleFormattingShortcut(e);
+                  handleKeyDown(e);
+                }}
+                onSelect={handleTextSelection}
+                onBlur={() => {
+                  // Delay hiding toolbar to allow clicking on buttons
+                  setTimeout(() => setShowFormatToolbar(false), 200);
+                }}
                 onPaste={handlePaste}
 
                 placeholder="Write a message..."

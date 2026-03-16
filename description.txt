@@ -92,3 +92,71 @@ When VITE_ALLOW_DEVTOOLS=false → blur overlay enabled, right-click blocked, sh
 
 <------------------- Message input box ---------------------->
 The input box will now properly expand upward without affecting the background image, and will reset to its normal size right after you send a message
+message send and received as same if there is line break
+    First splitting the text by newline characters (\n)
+    For each line, processing URLs and search highlighting as before
+    Adding <br /> tags between lines to create visual line breaks in the HTML
+    This preserves the original formatting while still maintaining all the existing functionality like clickable URLs and search highlighting.
+Formatting Options:
+    Bold - Wrap text with *asterisks* (Ctrl+B)
+    Italic - Wrap text with _underscores_ (Ctrl+I)
+    underline - wrap text with __double underscores__ (ctrl+U)
+    Strikethrough - Wrap text with ~tildes~ (Ctrl+Shift+X)
+    Inline Code - Wrap text with `backticks` for inline ```three backticks``` for multiple line (Ctrl+Shift+I)
+    Numbered List - Prefix lines with 1. text , 2. text , etc. (Ctrl+Shift+7)
+    Bullet List - Prefix lines with • text (Ctrl+Shift+8)
+    Quote - Prefix line with > (Ctrl+Shift+.)
+    spoiler - ||spoiler text|| (ctrl+shift+P)
+    link - (ctrl+K)
+Nested/Multiple 64 type Formatting Support
+    *text* → bold
+    _text_ → italic
+    __text__ → underline
+    ~text~ → strikethrough
+    *_text_* → bold + italic
+    *__text__* → bold + underline
+    _*text*_ → italic + bold
+    ~*text*~ → strikethrough + bold
+    *___text___* → bold + underline + italic
+    ~___*text*___~ → all 4 formats
+    _*__~text~__*_ → all 4 formats (different order)
+    *___~text_~__* → all 4 formats (asymmetric)
+    ||This is a spoiler|| → Hidden text with particles
+    This is ||a secret|| message → Inline spoiler
+    ||Spoiler 1|| and ||Spoiler 2|| → Multiple spoiler
+
+    ||Line 1
+    Line 2
+    Line 3||
+
+    Normal text ||spoiler
+    with multiple
+    lines|| more text
+Priority System
+    URLs (highest priority - never formatted)
+    Code blocks (never formatted inside)
+    Bold
+    Italic
+    Underline
+    Strikethrough
+
+For Senders:
+    Select text in the input box
+    A formatting toolbar appears above the selection
+    Click any formatting button or use keyboard shortcuts
+    The selected text is automatically wrapped with the appropriate syntax
+For Receivers:
+    Messages are rendered with proper formatting:
+    Bold text appears in bold
+    Italic text appears in italic
+    Strikethrough text has a line through it
+    Code appears in a monospace font with background
+    Quotes have a left border and italic styling
+    Lists are properly indented with markers
+Key Features:
+    Toolbar only appears when text is selected in the input box
+    Keyboard shortcuts work only when text is selected
+    Formatting is preserved across line breaks
+    Works alongside existing features (URLs, emoji suggestions)
+    Support toggle functionality to remove formatting if it's already applied
+    Support multi-line code blocks with triple backticks

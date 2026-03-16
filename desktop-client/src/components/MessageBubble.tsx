@@ -8,6 +8,7 @@ import { useBookmarkStore } from '../store/bookmarkStore';
 import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import SpoilerText from './SpoilerText';
 
 // Simple deterministic hash to generate stable waveforms
 const getHash = (str: string) => {
@@ -1250,40 +1251,162 @@ const highlightText = (text: string, query?: string): React.ReactNode => {
 const renderMessageText = (text: string, query?: string): React.ReactNode => {
   if (!text) return null;
 
-  // Regex for http/https URLs
-  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  // First, handle multi-line code blocks before splitting by lines
+  const codeBlockRegex = /```\n?([\s\S]*?)\n?```/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  let partIndex = 0;
   
-  // Split the text into parts that are either URLs or non-URLs
-  const parts = text.split(urlRegex);
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    // Add text before the code block
+    if (match.index > lastIndex) {
+      const beforeText = text.substring(lastIndex, match.index);
+      parts.push(
+        <React.Fragment key={`before-${partIndex}`}>
+          {renderTextWithFormatting(beforeText, query)}
+        </React.Fragment>
+      );
+      partIndex++;
+    }
+    
+    // Add the code block
+    const codeContent = match[1];
+    parts.push(
+      <pre
+        key={`codeblock-${partIndex}`}
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          padding: '8px 12px',
+          borderRadius: 6,
+          fontFamily: 'monospace',
+          fontSize: '0.9em',
+          overflowX: 'auto',
+          margin: '4px 0',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word'
+        }}
+      >
+        <code>{codeContent}</code>
+      </pre>
+    );
+    partIndex++;
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    const remainingText = text.substring(lastIndex);
+    parts.push(
+      <React.Fragment key={`remaining-${partIndex}`}>
+        {renderTextWithFormatting(remainingText, query)}
+      </React.Fragment>
+    );
+  }
+  
+  return parts.length > 0 ? parts : renderTextWithFormatting(text, query);
+};
 
-  return parts.map((part, i) => {
-    // Check if this part is a URL (using a non-global regex to avoid lastIndex issues)
-    const isUrl = /^https?:\/\/[^\s]+$/i.test(part);
+/** Render text with line breaks and inline formatting */
+const renderTextWithFormatting = (text: string, query?: string): React.ReactNode => {
+  // First check for spoilers (can span multiple lines)
+  const spoilerRegex = /\|\|([\s\S]+?)\|\|/;
+  const spoilerMatch = text.match(spoilerRegex);
+  
+  if (spoilerMatch && spoilerMatch.index !== undefined) {
+    const before = text.substring(0, spoilerMatch.index);
+    const spoilerContent = spoilerMatch[1];
+    const after = text.substring(spoilerMatch.index + spoilerMatch[0].length);
+    
+    return (
+      <>
+        {renderTextWithFormatting(before, query)}
+        <SpoilerText>
+          {renderTextWithFormatting(spoilerContent, query)}
+        </SpoilerText>
+        {renderTextWithFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // Then handle line breaks
+  const lines = text.split('\n');
 
-    if (isUrl) {
-      // It's a URL
-      const url = part.trim();
-      return (
+  return lines.map((line, lineIndex) => (
+    <React.Fragment key={`line-${lineIndex}`}>
+      {lineIndex > 0 && <br />}
+      {(() => {
+        // Check if line starts with list markers or quote
+        const numberedListMatch = line.match(/^(\d+)\.\s+(.*)$/);
+        const bulletListMatch = line.match(/^•\s+(.*)$/);
+        const quoteMatch = line.match(/^>\s+(.*)$/);
+        
+        let lineContent = line;
+        let linePrefix: React.ReactNode = null;
+        
+        if (numberedListMatch) {
+          linePrefix = <span style={{ marginRight: 6, fontWeight: 600 }}>{numberedListMatch[1]}.</span>;
+          lineContent = numberedListMatch[2];
+        } else if (bulletListMatch) {
+          linePrefix = <span style={{ marginRight: 6 }}>•</span>;
+          lineContent = bulletListMatch[1];
+        } else if (quoteMatch) {
+          lineContent = quoteMatch[1];
+          return (
+            <div style={{ 
+              borderLeft: '3px solid var(--accent)', 
+              paddingLeft: 10, 
+              marginLeft: 4,
+              opacity: 0.8,
+              fontStyle: 'italic'
+            }}>
+              {parseInlineFormatting(lineContent, query)}
+            </div>
+          );
+        }
+        
+        return (
+          <>
+            {linePrefix}
+            {parseInlineFormatting(lineContent, query)}
+          </>
+        );
+      })()}
+    </React.Fragment>
+  ));
+};
+
+/** Parse inline formatting (bold, italic, strikethrough, underline, inline code, URLs) with support for multiple formats */
+const parseInlineFormatting = (text: string, query?: string): React.ReactNode => {
+  if (!text) return null;
+  
+  // Priority order: URLs > Code > Combined text formatting
+  
+  // 1. First, handle URLs (highest priority - no formatting inside URLs)
+  const urlRegex = /(https?:\/\/[^\s]+)/;
+  const urlMatch = text.match(urlRegex);
+  if (urlMatch && urlMatch.index !== undefined) {
+    const before = text.substring(0, urlMatch.index);
+    const url = urlMatch[0];
+    const after = text.substring(urlMatch.index + url.length);
+    
+    return (
+      <>
+        {parseInlineFormatting(before, query)}
         <span
-          key={`url-${i}`}
           onClick={async (e) => {
             e.stopPropagation();
             e.preventDefault();
-            console.log('URL Clicked:', url);
             if (window.electronAPI?.openExternalUrl) {
               try {
-                console.log('Attempting to open via Electron API');
                 const success = await window.electronAPI.openExternalUrl(url);
-                if (!success) {
-                  console.warn('Electron API failed to open URL, falling back to window.open');
-                  window.open(url, '_blank');
-                }
+                if (!success) window.open(url, '_blank');
               } catch (err) {
                 console.error('Error calling openExternalUrl:', err);
                 window.open(url, '_blank');
               }
             } else {
-              console.log('Opening via window.open');
               window.open(url, '_blank');
             }
           }}
@@ -1297,13 +1420,253 @@ const renderMessageText = (text: string, query?: string): React.ReactNode => {
           onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
           onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
         >
-          {highlightText(part, query)}
+          {highlightText(url, query)}
         </span>
-      );
+        {parseInlineFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // 2. Handle inline code (no formatting inside code)
+  const codeRegex = /`([^`]+)`/;
+  const codeMatch = text.match(codeRegex);
+  if (codeMatch && codeMatch.index !== undefined) {
+    const before = text.substring(0, codeMatch.index);
+    const codeText = codeMatch[1];
+    const after = text.substring(codeMatch.index + codeMatch[0].length);
+    
+    return (
+      <>
+        {parseInlineFormatting(before, query)}
+        <code
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontFamily: 'monospace',
+            fontSize: '0.9em'
+          }}
+        >
+          {highlightText(codeText, query)}
+        </code>
+        {parseInlineFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // 3. Handle combined text formatting using bitwise flags (including spoiler)
+  // Match any combination of formatting markers around text
+  // Pattern: [markers]content[markers] where markers can be *, _, __, ~, ||
+  
+  // Try to find the longest valid formatting pattern
+  let bestMatch: { start: number; end: number; flags: number; content: string; openLen: number; closeLen: number } | null = null;
+  
+  for (let i = 0; i < text.length; i++) {
+    // Try to match opening markers starting at position i
+    let openMarkers = '';
+    let pos = i;
+    
+    // Collect opening markers (*, _, ~, |)
+    while (pos < text.length && (text[pos] === '*' || text[pos] === '_' || text[pos] === '~' || text[pos] === '|')) {
+      openMarkers += text[pos];
+      pos++;
     }
-    // It's regular text, just highlight it
-    return highlightText(part, query);
-  });
+    
+    if (openMarkers.length === 0) continue;
+    
+    const contentStart = pos;
+    
+    // Now we need to find matching closing markers
+    // We'll search for a position where we have enough closing markers to match the opening
+    for (let endPos = contentStart + 1; endPos <= text.length; endPos++) {
+      // Look backwards from endPos to collect closing markers
+      let closePos = endPos - 1;
+      let closeMarkers = '';
+      
+      while (closePos >= contentStart && (text[closePos] === '*' || text[closePos] === '_' || text[closePos] === '~' || text[closePos] === '|')) {
+        closeMarkers = text[closePos] + closeMarkers;
+        closePos--;
+      }
+      
+      if (closeMarkers.length === 0) continue;
+      
+      const content = text.substring(contentStart, closePos + 1);
+      if (content.length === 0) continue;
+      
+      // Analyze ONLY boundary markers (not markers inside content)
+      const boundaryMarkers = openMarkers + closeMarkers;
+      let flags = 0;
+      
+      // Count occurrences of each marker type in boundaries only
+      const asteriskCount = (boundaryMarkers.match(/\*/g) || []).length;
+      const underscoreCount = (boundaryMarkers.match(/_/g) || []).length;
+      const tildeCount = (boundaryMarkers.match(/~/g) || []).length;
+      const pipeCount = (boundaryMarkers.match(/\|/g) || []).length;
+      
+      // Bold: at least 2 asterisks (one on each side)
+      if (asteriskCount >= 2) {
+        flags |= 0b00001;
+      }
+      
+      // Italic: odd number of underscores (after removing pairs for underline)
+      // Underline: at least 4 underscores (__ on each side)
+      if (underscoreCount >= 4) {
+        flags |= 0b00100; // underline
+        const remaining = underscoreCount - 4;
+        if (remaining >= 2) {
+          flags |= 0b00010; // italic
+        }
+      } else if (underscoreCount >= 2) {
+        flags |= 0b00010; // italic
+      }
+      
+      // Strikethrough: at least 2 tildes (one on each side)
+      if (tildeCount >= 2) {
+        flags |= 0b01000;
+      }
+      
+      // Spoiler: at least 4 pipes (|| on each side)
+      if (pipeCount >= 4) {
+        flags |= 0b10000;
+      }
+      
+      // Only consider this a valid match if we detected at least one format
+      if (flags > 0) {
+        const matchLength = endPos - i;
+        // Check if this is a better match than what we found before
+        if (!bestMatch || matchLength > (bestMatch.end - bestMatch.start)) {
+          bestMatch = {
+            start: i,
+            end: endPos,
+            flags: flags,
+            content: content,
+            openLen: openMarkers.length,
+            closeLen: closeMarkers.length
+          };
+        }
+      }
+    }
+  }
+  
+  if (bestMatch) {
+    const before = text.substring(0, bestMatch.start);
+    const after = text.substring(bestMatch.end);
+    
+    // Apply formats based on flags
+    let formattedContent: React.ReactNode = parseInlineFormatting(bestMatch.content, query);
+    
+    // Apply in order: bold, italic, underline, strikethrough, spoiler (outermost)
+    if (bestMatch.flags & 0b00001) { // bold
+      formattedContent = <strong>{formattedContent}</strong>;
+    }
+    if (bestMatch.flags & 0b00010) { // italic
+      formattedContent = <em>{formattedContent}</em>;
+    }
+    if (bestMatch.flags & 0b00100) { // underline
+      formattedContent = <span style={{ textDecoration: 'underline' }}>{formattedContent}</span>;
+    }
+    if (bestMatch.flags & 0b01000) { // strikethrough
+      formattedContent = <span style={{ textDecoration: 'line-through' }}>{formattedContent}</span>;
+    }
+    if (bestMatch.flags & 0b10000) { // spoiler (applied last, wraps everything)
+      formattedContent = <SpoilerText>{formattedContent}</SpoilerText>;
+    }
+    
+    return (
+      <>
+        {parseInlineFormatting(before, query)}
+        {formattedContent}
+        {parseInlineFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // 4. Fallback to individual format matching (for non-symmetric patterns)
+  const formatMatches = [];
+  
+  // Bold: *text*
+  const boldMatch = text.match(/\*([^*\n]+)\*/);
+  if (boldMatch && boldMatch.index !== undefined) {
+    formatMatches.push({ type: 'bold', match: boldMatch, index: boldMatch.index });
+  }
+  
+  // Italic: _text_ (but not __text__)
+  let italicIndex = 0;
+  while (italicIndex < text.length) {
+    const searchText = text.substring(italicIndex);
+    const italicMatch = searchText.match(/_([^_\n]+)_/);
+    if (italicMatch && italicMatch.index !== undefined) {
+      const actualIndex = italicIndex + italicMatch.index;
+      const beforeChar = actualIndex > 0 ? text[actualIndex - 1] : '';
+      const afterEndIndex = actualIndex + italicMatch[0].length;
+      const afterChar = afterEndIndex < text.length ? text[afterEndIndex] : '';
+      
+      if (beforeChar !== '_' && afterChar !== '_') {
+        formatMatches.push({ 
+          type: 'italic', 
+          match: italicMatch, 
+          index: actualIndex,
+          fullMatch: italicMatch[0]
+        });
+        break;
+      }
+      italicIndex = actualIndex + 1;
+    } else {
+      break;
+    }
+  }
+  
+  // Underline: __text__
+  const underlineMatch = text.match(/__([^_\n]+?)__/);
+  if (underlineMatch && underlineMatch.index !== undefined) {
+    formatMatches.push({ type: 'underline', match: underlineMatch, index: underlineMatch.index });
+  }
+  
+  // Strikethrough: ~text~
+  const strikeMatch = text.match(/~([^~\n]+)~/);
+  if (strikeMatch && strikeMatch.index !== undefined) {
+    formatMatches.push({ type: 'strikethrough', match: strikeMatch, index: strikeMatch.index });
+  }
+  
+  formatMatches.sort((a, b) => a.index - b.index);
+  
+  if (formatMatches.length > 0) {
+    const first = formatMatches[0];
+    const match = first.match!;
+    const before = text.substring(0, first.index);
+    const formattedText = match[1];
+    const after = text.substring(first.index + match[0].length);
+    
+    let wrappedContent: React.ReactNode;
+    
+    switch (first.type) {
+      case 'bold':
+        wrappedContent = <strong>{parseInlineFormatting(formattedText, query)}</strong>;
+        break;
+      case 'italic':
+        wrappedContent = <em>{parseInlineFormatting(formattedText, query)}</em>;
+        break;
+      case 'underline':
+        wrappedContent = <span style={{ textDecoration: 'underline' }}>{parseInlineFormatting(formattedText, query)}</span>;
+        break;
+      case 'strikethrough':
+        wrappedContent = <span style={{ textDecoration: 'line-through' }}>{parseInlineFormatting(formattedText, query)}</span>;
+        break;
+      default:
+        wrappedContent = parseInlineFormatting(formattedText, query);
+    }
+    
+    return (
+      <>
+        {parseInlineFormatting(before, query)}
+        {wrappedContent}
+        {parseInlineFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // No formatting found, return highlighted text
+  return highlightText(text, query);
 };
 
 export default MessageBubble;

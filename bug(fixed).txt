@@ -96,9 +96,17 @@ Last seen Invalid Date
     Try the "Log Out of All Devices" option, all remote sessions will be killed and you will be forcefully logged out of your current session as well.
     works for online / offline sessions
 (fixed) input box of send message height adjustment
+(fixed) message send and received as same if there is line break
+    First splitting the text by newline characters (\n)
+    For each line, processing URLs and search highlighting as before
+    Adding <br /> tags between lines to create visual line breaks in the HTML
+    This preserves the original formatting while still maintaining all the existing functionality like clickable URLs and search highlighting.
+bold (ctrl +b), italic(ctrl + i), strike through (ctrl + shift + x), inline code (ctrl + shift + i), number list (ctrl + shift + 7) , bullet list (ctrl + shift + 8), quote (ctrl + shift + .)
+Missed, declined, incomming, outgoing icon for audio and video calls
+clicking on username/email will redirect it to their chat 
+
 (partially) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
 draft message is hard to write as it
-
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive
 redesign calling functions and sound for calling 
