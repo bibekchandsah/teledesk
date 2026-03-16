@@ -160,3 +160,4 @@ Key Features:
     Works alongside existing features (URLs, emoji suggestions)
     Support toggle functionality to remove formatting if it's already applied
     Support multi-line code blocks with triple backticks
+    Horizontal formating option scrolling for smaller devices 

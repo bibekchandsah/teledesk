@@ -599,6 +599,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [showFormatToolbar, setShowFormatToolbar] = useState(false);
   const [formatToolbarPos, setFormatToolbarPos] = useState({ top: 0, left: 0 });
   const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
+  const [toolbarScrollState, setToolbarScrollState] = useState<{ canScrollLeft: boolean; canScrollRight: boolean }>({ canScrollLeft: false, canScrollRight: true });
+  const toolbarScrollRef = useRef<HTMLDivElement>(null);
   
   // ─── Draft management ────────────────────────────────────────────────────
   const { getDraft, setDraft: setDraftInStore, clearDraft } = useDraftStore();
@@ -679,6 +681,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       }
     };
   }, [inputText, chatId, setDraftInStore, saveDraftToBackend]);
+
+  // ─── Initialize toolbar scroll state when it appears ────────────────────
+  useEffect(() => {
+    if (showFormatToolbar && toolbarScrollRef.current) {
+      const toolbar = toolbarScrollRef.current;
+      const canScrollLeft = toolbar.scrollLeft > 0;
+      const canScrollRight = toolbar.scrollLeft < (toolbar.scrollWidth - toolbar.clientWidth - 1);
+      setToolbarScrollState({ canScrollLeft, canScrollRight });
+    }
+  }, [showFormatToolbar]);
 
   // ─── Chat header three-dot menu ──────────────────────────────────────────
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1562,15 +1574,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const newText = before + formattedText + after;
     setInputText(newText);
     
-    // Reset selection and hide toolbar
-    setShowFormatToolbar(false);
-    setTextSelection(null);
+    // Calculate new selection range (select the formatted text)
+    const newStart = start;
+    const newEnd = start + formattedText.length;
     
-    // Restore focus and cursor position
+    // Update text selection state to reflect the new formatted text
+    setTextSelection({ start: newStart, end: newEnd });
+    
+    // Restore focus and maintain selection
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
-        inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        // Select the formatted text so user can apply more formats
+        inputRef.current.setSelectionRange(newStart, newEnd);
         // Auto-resize textarea
         inputRef.current.style.height = 'auto';
         inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
@@ -3924,222 +3940,286 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   style={{
                     position: 'fixed',
                     top: formatToolbarPos.top,
-                    left: formatToolbarPos.left,
+                    left: '50%',
                     transform: 'translateX(-50%)',
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                     zIndex: 1000,
-                    display: 'flex',
-                    gap: 4,
-                    padding: 4,
-                    animation: 'fadeIn 0.15s ease-out'
+                    maxWidth: 'calc(100vw - 32px)',
+                    animation: 'fadeIn 0.15s ease-out',
                   }}
                   onMouseDown={(e) => e.preventDefault()} // Prevent blur on click
                 >
-                  <button
-                    onClick={() => applyFormatting('bold')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontWeight: 'bold',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Bold (Ctrl+B)"
-                  >
-                    <span style={{ fontWeight: 'bold' }}>B</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('italic')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      fontStyle: 'italic',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Italic (Ctrl+I)"
-                  >
-                    <span style={{ fontStyle: 'italic' }}>I</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('strikethrough')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Strikethrough (Ctrl+Shift+X)"
-                  >
-                    <span style={{ textDecoration: 'line-through' }}>S</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('underline')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Underline (Ctrl+U)"
-                  >
-                    <span style={{ textDecoration: 'underline' }}>U</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('spoiler')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Spoiler (Ctrl+Shift+P)"
-                  >
-                    <span style={{ filter: 'blur(4px)' }}>SP</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('code')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      fontFamily: 'monospace',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Inline Code (Ctrl+Shift+I)"
-                  >
-                    <span style={{ fontFamily: 'monospace' }}>&lt;/&gt;</span>
-                  </button>
-                  
-                  <div style={{ width: 1, backgroundColor: 'var(--border)', margin: '4px 0' }} />
-                  
-                  <button
-                    onClick={() => applyFormatting('numberedList')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Numbered List (Ctrl+Shift+7)"
-                  >
-                    <span>1.</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('bulletList')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Bullet List (Ctrl+Shift+8)"
-                  >
-                    <span>•</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => applyFormatting('quote')}
-                    style={{
-                      padding: '6px 10px',
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      borderRadius: 6,
-                      color: 'var(--text-primary)',
-                      cursor: 'pointer',
-                      fontSize: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    title="Quote (Ctrl+Shift+.)"
-                  >
-                    <span>"</span>
-                  </button>
+                  <div style={{ position: 'relative' }}>
+                    {/* Left gradient fade indicator */}
+                    {toolbarScrollState.canScrollLeft && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 40,
+                          background: 'linear-gradient(to right, var(--bg-secondary) 0%, transparent 100%)',
+                          zIndex: 2,
+                          pointerEvents: 'none',
+                          borderRadius: '8px 0 0 8px',
+                        }}
+                      />
+                    )}
+                    
+                    {/* Right gradient fade indicator */}
+                    {toolbarScrollState.canScrollRight && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 40,
+                          background: 'linear-gradient(to left, var(--bg-secondary) 0%, transparent 100%)',
+                          zIndex: 2,
+                          pointerEvents: 'none',
+                          borderRadius: '0 8px 8px 0',
+                        }}
+                      />
+                    )}
+                    
+                    <div
+                      ref={toolbarScrollRef}
+                      className="formatting-toolbar-scroll"
+                      onScroll={(e) => {
+                        const target = e.currentTarget;
+                        const canScrollLeft = target.scrollLeft > 0;
+                        const canScrollRight = target.scrollLeft < (target.scrollWidth - target.clientWidth - 1);
+                        setToolbarScrollState({ canScrollLeft, canScrollRight });
+                      }}
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        display: 'flex',
+                        gap: 4,
+                        padding: 4,
+                        overflowX: 'auto',
+                        overflowY: 'hidden',
+                        // Hide scrollbar but keep functionality
+                        scrollbarWidth: 'none', // Firefox
+                        msOverflowStyle: 'none', // IE/Edge
+                      }}
+                    >
+                      <button
+                        onClick={() => applyFormatting('bold')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Bold (Ctrl+B)"
+                      >
+                        <span style={{ fontWeight: 'bold' }}>B</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('italic')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          fontStyle: 'italic',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Italic (Ctrl+I)"
+                      >
+                        <span style={{ fontStyle: 'italic' }}>I</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('strikethrough')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Strikethrough (Ctrl+Shift+X)"
+                      >
+                        <span style={{ textDecoration: 'line-through' }}>S</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('underline')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Underline (Ctrl+U)"
+                      >
+                        <span style={{ textDecoration: 'underline' }}>U</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('spoiler')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Spoiler (Ctrl+Shift+P)"
+                      >
+                        <span style={{ filter: 'blur(4px)' }}>SP</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('code')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Inline Code (Ctrl+Shift+I)"
+                      >
+                        <span style={{ fontFamily: 'monospace' }}>&lt;/&gt;</span>
+                      </button>
+                      
+                      <div style={{ width: 1, backgroundColor: 'var(--border)', margin: '4px 0', flexShrink: 0 }} />
+                      
+                      <button
+                        onClick={() => applyFormatting('numberedList')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Numbered List (Ctrl+Shift+7)"
+                      >
+                        <span>1.</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('bulletList')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Bullet List (Ctrl+Shift+8)"
+                      >
+                        <span>•</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => applyFormatting('quote')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Quote (Ctrl+Shift+.)"
+                      >
+                        <span>"</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -5805,6 +5885,11 @@ const FileErrorModal: React.FC<{ error: string; onClose: () => void }> = ({ erro
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* Hide scrollbar for formatting toolbar */
+        .formatting-toolbar-scroll::-webkit-scrollbar {
+          display: none;
+        }
       `}</style>
       <div style={{
         width: '100%',
