@@ -1381,9 +1381,55 @@ const renderTextWithFormatting = (text: string, query?: string): React.ReactNode
 const parseInlineFormatting = (text: string, query?: string): React.ReactNode => {
   if (!text) return null;
   
-  // Priority order: URLs > Code > Combined text formatting
+  // Priority order: Markdown Links > URLs > Code > Combined text formatting
   
-  // 1. First, handle URLs (highest priority - no formatting inside URLs)
+  // 0. First, handle markdown-style links [text](url)
+  const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/;
+  const markdownMatch = text.match(markdownLinkRegex);
+  if (markdownMatch && markdownMatch.index !== undefined) {
+    const before = text.substring(0, markdownMatch.index);
+    const linkText = markdownMatch[1];
+    const linkUrl = markdownMatch[2];
+    const after = text.substring(markdownMatch.index + markdownMatch[0].length);
+    
+    return (
+      <>
+        {parseInlineFormatting(before, query)}
+        <span
+          onClick={async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (window.electronAPI?.openExternalUrl) {
+              try {
+                const success = await window.electronAPI.openExternalUrl(linkUrl);
+                if (!success) window.open(linkUrl, '_blank');
+              } catch (err) {
+                console.error('Error calling openExternalUrl:', err);
+                window.open(linkUrl, '_blank');
+              }
+            } else {
+              window.open(linkUrl, '_blank');
+            }
+          }}
+          style={{ 
+            color: 'var(--accent)', 
+            textDecoration: 'underline', 
+            cursor: 'pointer',
+            transition: 'opacity 0.2s',
+            fontWeight: 500
+          }}
+          title={linkUrl}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {highlightText(linkText, query)}
+        </span>
+        {parseInlineFormatting(after, query)}
+      </>
+    );
+  }
+  
+  // 1. Handle plain URLs (highest priority - no formatting inside URLs)
   const urlRegex = /(https?:\/\/[^\s]+)/;
   const urlMatch = text.match(urlRegex);
   if (urlMatch && urlMatch.index !== undefined) {

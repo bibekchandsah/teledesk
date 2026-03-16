@@ -700,6 +700,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
+  
+  // ─── URL Link Modal ──────────────────────────────────────────────────────
+  const [showUrlModal, setShowUrlModal] = useState(false);
+  const [urlLinkText, setUrlLinkText] = useState('');
+  const [urlLinkUrl, setUrlLinkUrl] = useState('');
+  const urlModalTextRef = useRef<HTMLInputElement>(null);
+  const urlModalUrlRef = useRef<HTMLInputElement>(null);
   const [chatConfirmDelete, setChatConfirmDelete] = useState<'me' | 'both' | null>(null);
   const [chatDeleting, setChatDeleting] = useState(false);
   const [msgConfirmDelete, setMsgConfirmDelete] = useState<{ ids: string[]; scope: 'me' | 'both' } | null>(null);
@@ -1450,8 +1457,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }
   };
 
-  const applyFormatting = (formatType: 'bold' | 'italic' | 'strikethrough' | 'underline' | 'code' | 'spoiler' | 'quote' | 'numberedList' | 'bulletList') => {
+  const applyFormatting = (formatType: 'bold' | 'italic' | 'strikethrough' | 'underline' | 'code' | 'spoiler' | 'quote' | 'numberedList' | 'bulletList' | 'url') => {
     if (!inputRef.current || !textSelection) return;
+    
+    // Special handling for URL - open modal
+    if (formatType === 'url') {
+      const { start, end } = textSelection;
+      const selectedText = inputText.substring(start, end);
+      setUrlLinkText(selectedText);
+      setUrlLinkUrl('');
+      setShowUrlModal(true);
+      setShowFormatToolbar(false);
+      return;
+    }
     
     const { start, end } = textSelection;
     const selectedText = inputText.substring(start, end);
@@ -1594,6 +1612,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }, 0);
   };
 
+  // Insert URL link from modal
+  const insertUrlLink = () => {
+    if (!inputRef.current || !textSelection || !urlLinkText.trim() || !urlLinkUrl.trim()) return;
+    
+    const { start, end } = textSelection;
+    const before = inputText.substring(0, start);
+    const after = inputText.substring(end);
+    
+    // Format: [text](url)
+    const linkText = `[${urlLinkText}](${urlLinkUrl})`;
+    const newText = before + linkText + after;
+    setInputText(newText);
+    
+    // Close modal and reset
+    setShowUrlModal(false);
+    setUrlLinkText('');
+    setUrlLinkUrl('');
+    setTextSelection(null);
+    
+    // Restore focus
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const newCursorPos = start + linkText.length;
+        inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        // Auto-resize textarea
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+      }
+    }, 0);
+  };
+
   // Handle keyboard shortcuts for formatting
   const handleFormattingShortcut = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!inputRef.current) return;
@@ -1634,6 +1684,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       } else if (e.shiftKey && e.key === '>') { // Ctrl+Shift+.
         e.preventDefault();
         applyFormatting('quote');
+      } else if (e.key === 'k') { // Ctrl+K
+        e.preventDefault();
+        applyFormatting('url');
       }
     }
   };
@@ -4218,6 +4271,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       >
                         <span>"</span>
                       </button>
+                      
+                      <div style={{ width: 1, backgroundColor: 'var(--border)', margin: '4px 0', flexShrink: 0 }} />
+                      
+                      <button
+                        onClick={() => applyFormatting('url')}
+                        style={{
+                          padding: '6px 10px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: 'var(--text-primary)',
+                          cursor: 'pointer',
+                          fontSize: 14,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'background-color 0.1s',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        title="Insert Link (Ctrl+K)"
+                      >
+                        <span>🔗</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -5285,6 +5363,155 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             // Theme is already updated via socket/API
           }}
         />
+      )}
+      
+      {/* URL Link Modal */}
+      {showUrlModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={() => {
+            setShowUrlModal(false);
+            setUrlLinkText('');
+            setUrlLinkUrl('');
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 16,
+              padding: '24px',
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              margin: '20px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 20px 0', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)' }}>
+              Insert Link
+            </h3>
+            
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Link Text
+              </label>
+              <input
+                ref={urlModalTextRef}
+                type="text"
+                value={urlLinkText}
+                onChange={(e) => setUrlLinkText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && urlLinkText.trim() && urlLinkUrl.trim()) {
+                    insertUrlLink();
+                  } else if (e.key === 'Escape') {
+                    setShowUrlModal(false);
+                    setUrlLinkText('');
+                    setUrlLinkUrl('');
+                  }
+                }}
+                placeholder="Enter text to display"
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                URL
+              </label>
+              <input
+                ref={urlModalUrlRef}
+                type="url"
+                value={urlLinkUrl}
+                onChange={(e) => setUrlLinkUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && urlLinkText.trim() && urlLinkUrl.trim()) {
+                    insertUrlLink();
+                  } else if (e.key === 'Escape') {
+                    setShowUrlModal(false);
+                    setUrlLinkText('');
+                    setUrlLinkUrl('');
+                  }
+                }}
+                placeholder="https://example.com"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowUrlModal(false);
+                  setUrlLinkText('');
+                  setUrlLinkUrl('');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={insertUrlLink}
+                disabled={!urlLinkText.trim() || !urlLinkUrl.trim()}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 8,
+                  border: 'none',
+                  backgroundColor: (!urlLinkText.trim() || !urlLinkUrl.trim()) ? 'var(--bg-tertiary)' : 'var(--accent)',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: (!urlLinkText.trim() || !urlLinkUrl.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (!urlLinkText.trim() || !urlLinkUrl.trim()) ? 0.5 : 1,
+                  transition: 'opacity 0.15s'
+                }}
+              >
+                Insert Link
+              </button>
+            </div>
+          </div>
+        </div>
       )}
         </div>
       )}
