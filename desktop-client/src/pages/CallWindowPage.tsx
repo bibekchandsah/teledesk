@@ -16,6 +16,7 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
 import { getUserById } from '../services/apiService';
+import { signalingLock } from '../utils/SignalingLock';
 
 interface CallWindowInitData {
   callId: string;
@@ -487,6 +488,8 @@ const CallWindowPage: React.FC = () => {
 
   // ─── Mount: register IPC relay listener and immediately start capturing media ─────
   useEffect(() => {
+    const cd = callDataRef.current;
+
     // Register socket relay listener (Electron IPC)
     const unsubSocket = window.electronAPI?.onRelayedSocketEvent?.((event, data) => {
       handleSocketEvent(event, data);
@@ -510,8 +513,15 @@ const CallWindowPage: React.FC = () => {
       window.opener.postMessage({ type: 'call-window-ready' }, window.location.origin);
     }
 
+    // MULTI-TAB SYNC: Dedicated call window always acquires the lock
+    if (cd) {
+      signalingLock.acquire(cd.callId);
+    }
+    const lockInterval = setInterval(() => {
+      if (cd) signalingLock.keepAlive(cd.callId);
+    }, 2000);
+
     // callData is already set from URL params — start capturing media ONLY if outgoing
-    const cd = callDataRef.current;
     if (cd && cd.isOutgoing) {
       captureLocalStream(cd.callType)
         .then((stream) => {
@@ -552,11 +562,13 @@ const CallWindowPage: React.FC = () => {
 
     return () => {
       unsubSocket?.();
-      window.removeEventListener('message', handleWebMessage);
-      cleanup();
+      if (!window.electronAPI) {
+        window.removeEventListener('message', handleWebMessage);
+      }
+      clearInterval(lockInterval);
+      if (cd) signalingLock.release(cd.callId);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleSocketEvent, currentUser?.uid]);
 
   // ─── Play remote stream through hidden <audio> element ───────────────────
   useEffect(() => {
@@ -581,7 +593,9 @@ const CallWindowPage: React.FC = () => {
 
   // ─── Audio visualiser — analyses remote stream volume ────────────────────
   useEffect(() => {
-    if (!remoteStream) return;
+    // If there is no remote stream or it has no audio tracks, skip creating an AudioContext.
+    if (!remoteStream || remoteStream.getAudioTracks().length === 0) return;
+
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
     audioCtx.resume().catch(() => {});

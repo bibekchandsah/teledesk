@@ -21,6 +21,7 @@ const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
+  // const { setIncomingCall } = useCallStore();
   const { setIncomingCall, setIsCallInPopup } = useCallStore();
   const { currentUser } = useAuthStore();
   const { logout } = useAuth();
@@ -176,6 +177,37 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const handleMessageStatusChanged = (data: { userId: string; showMessageStatus: boolean }) => {
       setUserShowMessageStatus(data.userId, data.showMessageStatus);
+    };
+
+    // ─── Incoming Call Event ─────────────────────────────────────────────
+    const handleIncomingCall = (data: {
+      callId: string;
+      callerId: string;
+      callerName: string;
+      callerAvatar?: string;
+      callType: 'video' | 'voice';
+    }) => {
+      setIncomingCall({
+        callId: data.callId,
+        callerId: data.callerId,
+        callerName: data.callerName,
+        callerAvatar: data.callerAvatar,
+        receiverId: currentUser.uid,
+        type: data.callType,
+        status: 'ringing',
+      });
+
+      // In Electron: open a single merged call window for the incoming call
+      if (window.electronAPI?.openCallWindow) {
+        window.electronAPI.openCallWindow({
+          callId: data.callId,
+          callType: data.callType,
+          isOutgoing: false,
+          targetUserId: data.callerId,
+          targetName: nicknames[data.callerId] || data.callerName,
+          targetAvatar: data.callerAvatar,
+        });
+      }
     };
 
     // ─── Chat Deleted Event ──────────────────────────────────────────────

@@ -58,6 +58,7 @@ const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId, appLockModal, setAppLockModal } = useUIStore();
   const { activeCall, incomingCall, isCallInPopup, showPopupBlockedNotification } = useCallStore();
+  // const { activeCall, incomingCall } = useCallStore();
   const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
   const { accounts, activeAccountUid } = useMultiAccountStore();
@@ -72,12 +73,19 @@ const AppInner: React.FC = () => {
   // Debug logging for call state
   useEffect(() => {
     if (activeCall) {
+      const willShow = !window.electronAPI?.openCallWindow && !isCallInPopup;
       console.log('[App] ActiveCall state changed:', { 
         callId: activeCall.callId, 
         isCallInPopup, 
         hasElectronAPI: !!window.electronAPI?.openCallWindow,
-        willShowCallScreen: !window.electronAPI?.openCallWindow && !isCallInPopup
+        willShowCallScreen: willShow
       });
+      
+      if (!willShow && activeCall) {
+        console.warn('[App] CallScreen will NOT render - isCallInPopup:', isCallInPopup, 'hasElectron:', !!window.electronAPI?.openCallWindow);
+      }
+    } else {
+      console.log('[App] activeCall is null, CallScreen will unmount');
     }
   }, [activeCall, isCallInPopup]);
   
@@ -587,8 +595,10 @@ const AppInner: React.FC = () => {
           </div>
 
           {/* Overlays — shown only as fallback when not running in Electron or when popup is blocked */}
-          {activeCall && !window.electronAPI?.openCallWindow && !isCallInPopup && <CallScreen />}
-          {incomingCall && !window.electronAPI?.openIncomingCallWindow && !isCallInPopup && <IncomingCallModal />}
+          {activeCall && !window.electronAPI?.openCallWindow && !isCallInPopup && <CallScreen key={activeCall.callId} />}
+          {incomingCall && !window.electronAPI?.openIncomingCallWindow && !isCallInPopup && <IncomingCallModal key={incomingCall.callId} />}
+          {/* {activeCall && !window.electronAPI?.openCallWindow && <CallScreen key={activeCall.callId} />}
+          {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal key={incomingCall.callId} />} */}
 
           {/* Popup blocked notification */}
           {showPopupBlockedNotification && activeCall && (

@@ -12,3 +12,14 @@
     Under Authorization callback URL, add: https://teledesk-backend-production.up.railway.app/api/auth/desktop/github/callback
 4. Railway — Add Environment Variable
     In your Railway project settings, add: BACKEND_URL=https://teledesk-backend-production.up.railway.app
+
+
+
+
+turn server implemented
+----------
+connectionTest.tsx
+turnTest.ts
+
+emoji reaction added
+----------

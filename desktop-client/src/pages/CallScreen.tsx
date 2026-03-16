@@ -136,29 +136,9 @@ const CallScreen: React.FC = () => {
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // Hidden <audio> element ref — plays remote stream for audio calls
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Attach remoteStream to hidden audio element so speakers actually play it
-  useEffect(() => {
-    if (!remoteStream) return;
-    if (!remoteAudioRef.current) {
-      const audio = new Audio();
-      audio.autoplay = true;
-      remoteAudioRef.current = audio;
-    }
-    remoteAudioRef.current.srcObject = remoteStream;
-    const savedSpeaker = localStorage.getItem('selectedSpeakerId');
-    if (savedSpeaker && typeof (remoteAudioRef.current as any).setSinkId === 'function') {
-      (remoteAudioRef.current as any).setSinkId(savedSpeaker).catch(() => {});
-    }
-    remoteAudioRef.current.play().catch(() => {});
-    return () => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = null;
-      }
-    };
-  }, [remoteStream]);
+  // NOTE: remote audio playback is handled globally by CallProvider so we
+  // don't create or manage any <audio> elements here. This component only
+  // uses remoteStream for visualisation and video rendering.
 
   // Audio visualiser — analyses remote stream volume (analyser only, no destination)
   useEffect(() => {
@@ -355,9 +335,7 @@ const CallScreen: React.FC = () => {
 
   const handleSwitchSpeaker = async (deviceId: string) => {
     localStorage.setItem('selectedSpeakerId', deviceId);
-    if (remoteAudioRef.current && typeof (remoteAudioRef.current as any).setSinkId === 'function') {
-      try { await (remoteAudioRef.current as any).setSinkId(deviceId); } catch (e) { console.error('[Call] setSinkId', e); }
-    }
+    // Speaker output routing is handled by the global audio element in CallProvider.
   };
 
   const handleGridResizeMouseDown = (e: React.MouseEvent) => {

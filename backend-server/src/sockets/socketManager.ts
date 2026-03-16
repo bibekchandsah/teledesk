@@ -30,6 +30,8 @@ const activeCalls = new Map<string, {
   callerName: string;
   callerAvatar?: string;
   callType: 'video' | 'voice';
+  callerSocketId?: string;
+  receiverSocketId?: string;
 }>();
 // Reverse lookup: userId -> callId
 const userActiveCall = new Map<string, string>();
@@ -362,7 +364,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     socket.on(
       SOCKET_EVENTS.CALL_USER,
       (payload: { targetUserId: string; callType: 'video' | 'voice'; callId: string; callerName: string; callerAvatar?: string }) => {
-        logger.info(`Call initiated from ${uid} to ${payload.targetUserId}`);
+        logger.info(`Call initiated from ${uid} to ${payload.targetUserId} (socket: ${socket.id})`);
         // Track this call
         activeCalls.set(payload.callId, {
           callerId: uid,
@@ -371,6 +373,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           callerName: payload.callerName,
           callerAvatar: payload.callerAvatar,
           callType: payload.callType,
+          callerSocketId: socket.id,
         });
         userActiveCall.set(uid, payload.callId);
         userActiveCall.set(payload.targetUserId, payload.callId);
@@ -391,10 +394,22 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, (payload: { callId: string; callerId: string }) => {
       const call = activeCalls.get(payload.callId);
-      if (call) activeCalls.set(payload.callId, { ...call, status: 'active' });
+      if (call) {
+        activeCalls.set(payload.callId, { 
+          ...call, 
+          status: 'active',
+          receiverSocketId: socket.id 
+        });
+      }
       io.to(`user:${payload.callerId}`).emit(SOCKET_EVENTS.ACCEPT_CALL, {
         callId: payload.callId,
         acceptorId: uid,
+      });
+      // Notify other tabs of the receiver that the call was accepted elsewhere to stop ringing
+      socket.to(`user:${uid}`).emit(SOCKET_EVENTS.ACCEPT_CALL, {
+        callId: payload.callId,
+        acceptorId: uid,
+        isSecondary: true, // Internal flag to indicate it was accepted elsewhere
       });
     });
 
@@ -406,38 +421,77 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         callId: payload.callId,
         rejectedBy: uid,
       });
+      // Notify other tabs of the receiver that the call was rejected elsewhere to stop ringing
+      socket.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_REJECTED, {
+        callId: payload.callId,
+        isSecondary: true,
+      });
     });
 
     socket.on(
       SOCKET_EVENTS.OFFER,
       (payload: { to: string; callId: string; offer: { type?: string; sdp?: string } }) => {
-        io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.OFFER, {
-          from: uid,
-          callId: payload.callId,
-          offer: payload.offer,
-        });
+        const call = activeCalls.get(payload.callId);
+        const targetSocketId = call?.receiverSocketId;
+        
+        if (targetSocketId) {
+          io.to(targetSocketId).emit(SOCKET_EVENTS.OFFER, {
+            from: uid,
+            callId: payload.callId,
+            offer: payload.offer,
+          });
+        } else {
+          io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.OFFER, {
+            from: uid,
+            callId: payload.callId,
+            offer: payload.offer,
+          });
+        }
       },
     );
 
     socket.on(
       SOCKET_EVENTS.ANSWER,
       (payload: { to: string; callId: string; answer: { type?: string; sdp?: string } }) => {
-        io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.ANSWER, {
-          from: uid,
-          callId: payload.callId,
-          answer: payload.answer,
-        });
+        const call = activeCalls.get(payload.callId);
+        const targetSocketId = call?.callerSocketId;
+
+        if (targetSocketId) {
+          io.to(targetSocketId).emit(SOCKET_EVENTS.ANSWER, {
+            from: uid,
+            callId: payload.callId,
+            answer: payload.answer,
+          });
+        } else {
+          io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.ANSWER, {
+            from: uid,
+            callId: payload.callId,
+            answer: payload.answer,
+          });
+        }
       },
     );
 
     socket.on(
       SOCKET_EVENTS.ICE_CANDIDATE,
       (payload: { to: string; callId: string; candidate: { candidate: string; sdpMLineIndex: number | null; sdpMid: string | null } }) => {
-        io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.ICE_CANDIDATE, {
-          from: uid,
-          callId: payload.callId,
-          candidate: payload.candidate,
-        });
+        const call = activeCalls.get(payload.callId);
+        // ICE candidates should go to the other party
+        const targetSocketId = (uid === call?.callerId) ? call?.receiverSocketId : call?.callerSocketId;
+
+        if (targetSocketId) {
+          io.to(targetSocketId).emit(SOCKET_EVENTS.ICE_CANDIDATE, {
+            from: uid,
+            callId: payload.callId,
+            candidate: payload.candidate,
+          });
+        } else {
+          io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.ICE_CANDIDATE, {
+            from: uid,
+            callId: payload.callId,
+            candidate: payload.candidate,
+          });
+        }
       },
     );
 

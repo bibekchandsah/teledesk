@@ -18,6 +18,7 @@ import { showNotification } from '../services/notificationService';
 import { sendMessage } from '../services/socketService';
 import { useChatStore } from '../store/chatStore';
 import callAudioService from '../services/callAudioService';
+import { signalingLock } from '../utils/SignalingLock';
 
 interface CallContextValue {
   startCall: (
@@ -129,6 +130,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsCalleeRinging,
     setIsCallInPopup,
     setShowPopupBlockedNotification,
+    remoteStream,
   } = useCallStore();
   const { currentUser } = useAuthStore();
   const { activeChat, chats, nicknames } = useChatStore();
@@ -147,6 +149,45 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const callPopupRef = useRef<Window | null>(null);
   const popupReadyRef = useRef<boolean>(false);
   const relayBufferRef = useRef<Array<{ event: string; data: any }>>([]);
+  
+  // Global remote audio element that persists across component lifecycles
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Handle remote audio playback at provider level (persists across CallScreen mounts/unmounts)
+  useEffect(() => {
+    if (!remoteStream) {
+      console.log('[CallProvider] No remote stream');
+      return;
+    }
+    
+    console.log('[CallProvider] Setting up remote audio:', {
+      hasAudio: remoteStream.getAudioTracks().length > 0,
+      hasVideo: remoteStream.getVideoTracks().length > 0
+    });
+    
+    if (!remoteAudioRef.current) {
+      const audio = new Audio();
+      audio.autoplay = true;
+      remoteAudioRef.current = audio;
+      console.log('[CallProvider] Created audio element');
+    }
+    
+    remoteAudioRef.current.srcObject = remoteStream;
+    remoteAudioRef.current.play()
+      .then(() => console.log('[CallProvider] Audio playing'))
+      .catch((err: Error) => console.error('[CallProvider] Audio play failed:', err));
+    
+    return () => {
+      // Only cleanup when provider unmounts (app closes), not on every stream change
+      if (!activeCall && !incomingCall) {
+        console.log('[CallProvider] Cleaning up audio (no active calls)');
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.pause();
+          remoteAudioRef.current.srcObject = null;
+        }
+      }
+    };
+  }, [remoteStream, activeCall, incomingCall]);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
@@ -263,20 +304,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           callAudioService.stopIncomingRingtone();
           setIncomingCall(null);
         } else if (socketEvent === SOCKET_EVENTS.END_CALL) {
+          // Popup initiated END_CALL; the main socket will handle CALL_ENDED.
+          // Just stop local timers/audio and cleanup UI state here.
           const call = activeCallRef.current || incomingCallRef.current;
-          if (call) {
-            if (call.callerId === currentUserRef.current?.uid) {
-              const dur = call.status === 'active' ? callDurationRef.current : 0;
-              const status = call.status === 'active' ? 'completed' : 'cancelled';
-              sendCallSummary(call as any, status, dur, status);
-            }
-            clearRingingTimer();
-            // Stop all ringtones when ending call from popup
-            callAudioService.stopAllRingtones();
-            stopCallTimer();
-            endCallCleanup();
-            setIsCallInPopup(false);
-          }
+          clearRingingTimer();
+          callAudioService.stopAllRingtones();
+          stopCallTimer();
+          endCallCleanup();
+          setIsCallInPopup(false);
         }
       }
     };
@@ -292,21 +327,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const targetId = call.callerId === currentUserRef.current?.uid 
             ? call.receiverId 
             : call.callerId;
-          
-          // Send END_CALL event to notify the other party
+
+          // Notify the other party that the call ended; the usual CALL_ENDED
+          // flow will drive summary creation on the caller side.
           socket?.emit(SOCKET_EVENTS.END_CALL, { 
             to: targetId, 
             callId: call.callId 
           });
-          
-          // Only caller sends the summary
-          if (call.callerId === currentUserRef.current?.uid) {
-            const dur = call.status === 'active' ? callDurationRef.current : 0;
-            const status = call.status === 'active' ? 'completed' : 'cancelled';
-            sendCallSummary(call, status, dur, status);
-          }
         }
-        
+
         // Clean up popup references
         clearInterval(interval);
         callPopupRef.current = null;
@@ -334,10 +363,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!socket) return;
 
     // â”€â”€â”€ Accept Call Confirmation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const handleCallAccepted = (data: { callId: string; acceptorId: string }) => {
+    const handleCallAccepted = (data: { callId: string; acceptorId: string; isSecondary?: boolean }) => {
       const ac = activeCallRef.current;
       const ic = incomingCallRef.current;
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+      
+      if (data.isSecondary) {
+        console.log('[Call] Call accepted on another device/tab, cleaning up local ringing');
+        clearRingingTimer();
+        callAudioService.stopAllRingtones();
+        setIncomingCall(null);
+        return;
+      }
       
       clearRingingTimer();
       // Stop all ringtones when call is accepted
@@ -354,16 +391,55 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       relayToCallWindow(SOCKET_EVENTS.ACCEPT_CALL, data);
       startCallTimer();
 
+      // If call is handled in a popup (Web) or in Electron (which always uses popup),
+      // do NOT create a peer in the main window context.
+      if (isElectron() || callPopupRef.current) {
+        console.log('[Call] Call is in popup or Electron, skipping local peer creation in main window');
+        return;
+      }
+
+      // MULTI-TAB SYNC: Only one tab should process signaling for this call.
+      if (!signalingLock.acquire(data.callId)) {
+        console.log('[Call] Another tab is handling signaling for this call, skipping local peer creation');
+        return;
+      }
+
       if (!isElectron() && !callPopupRef.current) {
+        // Check if peer already exists to prevent duplicates
+        if (hasPeer()) {
+          console.log('[Call] Peer already exists, skipping creation');
+          return;
+        }
+        
         // Non-Electron fallback (in-app modal): create peer in this renderer
         const stream = localStreamRef.current;
-        if (!stream) return;
-        setCallTarget(activeCallRef.current!.receiverId, data.callId);
+        if (!stream) {
+          console.error('[Call] No local stream available when call accepted');
+          return;
+        }
+        
+        // Determine the peer user ID (the other person in the call)
+        const call = activeCallRef.current;
+        if (!call) {
+          console.error('[Call] No active call when creating peer');
+          return;
+        }
+        
+        const peerUserId = call.callerId === currentUser?.uid ? call.receiverId : call.callerId;
+        console.log('[Call] Creating initiator peer for accepted call, peer:', peerUserId);
+        
+        setCallTarget(peerUserId, data.callId);
         createInitiatorPeer(
           stream,
           data.callId,
-          activeCallRef.current!.receiverId,
-          (remoteStream) => { setRemoteStream(remoteStream); },
+          peerUserId,
+          (remoteStream) => { 
+            console.log('[Call] Remote stream received:', {
+              hasAudio: remoteStream.getAudioTracks().length > 0,
+              hasVideo: remoteStream.getVideoTracks().length > 0
+            });
+            setRemoteStream(remoteStream); 
+          },
           (err) => {
             console.error('[Call] Peer error:', err);
             endCallCleanup();
@@ -376,6 +452,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleAnswer = (data: { from: string; callId: string; answer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId && incomingCallRef.current?.callId !== data.callId) return;
       relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
+      
+      if (isElectron() || callPopupRef.current) return;
+      
+      // MULTI-TAB SYNC: Only the window holding the lock processes signaling
+      if (!signalingLock.acquire(data.callId)) return;
+
       if (!isElectron() && !callPopupRef.current) {
         processRenegotiationAnswer(data.answer);
       }
@@ -389,6 +471,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }) => {
       if (activeCallRef.current?.callId !== data.callId && incomingCallRef.current?.callId !== data.callId) return;
       relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
+
+      if (isElectron() || callPopupRef.current) return;
+
+      // MULTI-TAB SYNC: Only the window holding the lock processes signaling
+      if (!signalingLock.acquire(data.callId)) return;
+
       if (!isElectron() && !callPopupRef.current) {
         processSignal(data.candidate);
       }
@@ -432,14 +520,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // â”€â”€â”€ Call Rejected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const handleCallRejected = (data: { callId: string }) => {
+  const handleCallRejected = (data: { callId: string; isSecondary?: boolean }) => {
       const ac = activeCallRef.current;
-      if (ac?.callId !== data.callId) return;
+      const ic = incomingCallRef.current;
+      if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+
+      if (data.isSecondary) {
+        console.log('[Call] Call rejected on another device/tab, cleaning up local ringing');
+        clearRingingTimer();
+        callAudioService.stopAllRingtones();
+        setIncomingCall(null);
+        return;
+      }
       clearRingingTimer();
       // Stop all ringtones when call is rejected
       callAudioService.stopAllRingtones();
       
-      sendCallSummary(ac, 'declined', 0, 'declined');
+      const session = ac || ic;
+      // Only the original caller should emit the summary for a declined call.
+      if (session && session.callerId === currentUserRef.current?.uid) {
+        sendCallSummary(session, 'declined', 0, 'declined');
+      }
       
       relayToCallWindow(SOCKET_EVENTS.CALL_REJECTED, data);
       
@@ -461,6 +562,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleRenegotiationOffer = (data: { from: string; callId: string; offer: RTCSessionDescriptionInit }) => {
       if (activeCallRef.current?.callId !== data.callId && incomingCallRef.current?.callId !== data.callId) return;
       relayToCallWindow(SOCKET_EVENTS.OFFER, data);
+
+      if (isElectron() || callPopupRef.current) return;
+
+      // MULTI-TAB SYNC: Only the window holding the lock processes signaling
+      if (!signalingLock.acquire(data.callId)) return;
+
       if (!isElectron() && !callPopupRef.current) {
         if (!hasPeer()) return;
         processRenegotiationOffer(data.offer, data.from, data.callId);
@@ -648,98 +755,123 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // â”€â”€â”€ startCall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const startCall = (
+  const startCall = async (
     targetUserId: string,
     targetName: string,
     callType: 'video' | 'voice',
     targetAvatar?: string,
-  ): void => {
+  ): Promise<void> => {
     if (!currentUser) return;
     const callId = `${currentUser.uid}_${targetUserId}_${Date.now()}`;
     const socket = getSocket();
 
-    const callSession = {
-      callId,
-      callerId: currentUser.uid,
-      callerName: currentUser.name,
-      receiverId: targetUserId,
-      receiverName: targetName,
-      receiverAvatar: targetAvatar,
-      type: callType,
-      status: 'ringing' as const,
-    };
+    // #region agent log
+    fetch('http://127.0.0.1:7473/ingest/5ae8654d-2f22-4424-ad8a-024ec157c042', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '914519',
+      },
+      body: JSON.stringify({
+        sessionId: '914519',
+        runId: 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'CallContext.tsx:startCall',
+        message: 'startCall invoked',
+        data: {
+          callId,
+          targetUserId,
+          callType,
+          callerId: currentUser.uid,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
 
-    setActiveCall(callSession);
-    activeCallRef.current = callSession;
-
-    // Start playing outgoing ringtone for the caller
-    callAudioService.playOutgoingRingtone();
-
-    socket?.emit(SOCKET_EVENTS.CALL_USER, {
-      targetUserId,
-      callType,
-      callId,
-      callerName: currentUser.name,
-      callerAvatar: currentUser.avatar,
-    });
-
-    if (isElectron()) {
-      // Electron: open the call window â€” it captures its own stream and handles WebRTC
-      window.electronAPI!.openCallWindow!({
+    try {
+      // Ensure local media is ready before notifying the callee so ACCEPT_CALL
+      // never races ahead of localStreamRef being available.
+      const stream = await getLocalStream(callType);
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      console.log('[Call] Media captured for outgoing call:', {
+        hasAudio: stream.getAudioTracks().length > 0,
+        hasVideo: stream.getVideoTracks().length > 0,
         callId,
-        callType,
-        isOutgoing: true,
-        targetUserId,
-        targetName: nicknames[targetUserId] || targetName,
-        targetAvatar,
       });
-    } else {
-      // Web: use in-app CallScreen (popup has service worker issues)
-      console.log('[Call] Using in-app CallScreen for outgoing call');
-      setIsCallInPopup(false);
-      
-      // Immediately capture media for in-app CallScreen
-      getLocalStream(callType)
-        .then((stream) => {
-          localStreamRef.current = stream;
-          setLocalStream(stream);
-          console.log('[Call] Media captured for in-app outgoing call');
-          
-          // Create WebRTC peer connection for outgoing call
-          // This will be triggered when the other side accepts
-        })
-        .catch((err) => {
-          console.error('[Call] getLocalStream failed for outgoing call:', err);
-          callAudioService.stopOutgoingRingtone();
-          endCallCleanup();
-        });
-    }
 
-    // Auto-cancel after 30 s if receiver doesn't answer
-    clearRingingTimer();
-    ringingTimerRef.current = setTimeout(() => {
-      const call = activeCallRef.current;
-      if (!call || call.callId !== callId || call.status !== 'ringing') return;
-      const socket2 = getSocket();
-      
-      // Stop outgoing ringtone when call times out
-      callAudioService.stopOutgoingRingtone();
-      
-      socket2?.emit(SOCKET_EVENTS.END_CALL, { to: targetUserId, callId });
-      if (!isElectron()) hangUp(targetUserId, callId);
-      sendCallSummary(call, 'no_answer', 0, 'missed');
-      stopCallTimer();
-      endCallCleanup();
+      const callSession = {
+        callId,
+        callerId: currentUser.uid,
+        callerName: currentUser.name,
+        receiverId: targetUserId,
+        receiverName: targetName,
+        receiverAvatar: targetAvatar,
+        type: callType,
+        status: 'ringing' as const,
+      };
+
+      setActiveCall(callSession);
+      activeCallRef.current = callSession;
+
+      // Start playing outgoing ringtone for the caller
+      callAudioService.playOutgoingRingtone();
+
+      socket?.emit(SOCKET_EVENTS.CALL_USER, {
+        targetUserId,
+        callType,
+        callId,
+        callerName: currentUser.name,
+        callerAvatar: currentUser.avatar,
+      });
+
       if (isElectron()) {
-        window.electronAPI?.closeCallWindow?.();
-      } else if (callPopupRef.current && !callPopupRef.current.closed) {
-        // Close web popup window
-        callPopupRef.current.close();
-        callPopupRef.current = null;
+        // Electron: open the call window – it captures its own stream and handles WebRTC
+        window.electronAPI!.openCallWindow!({
+          callId,
+          callType,
+          isOutgoing: true,
+          targetUserId,
+          targetName: nicknames[targetUserId] || targetName,
+          targetAvatar,
+        });
+      } else {
+        // Web: use in-app CallScreen (popup has service worker issues)
+        console.log('[Call] Using in-app CallScreen for outgoing call');
         setIsCallInPopup(false);
       }
-      showNotification({ title: 'TeleDesk', body: 'No answer' });
-    }, 30000);
+
+      // Auto-cancel after 30 s if receiver doesn't answer
+      clearRingingTimer();
+      ringingTimerRef.current = setTimeout(() => {
+        const call = activeCallRef.current;
+        if (!call || call.callId !== callId || call.status !== 'ringing') return;
+        const socket2 = getSocket();
+
+        // Stop outgoing ringtone when call times out
+        callAudioService.stopOutgoingRingtone();
+
+        socket2?.emit(SOCKET_EVENTS.END_CALL, { to: targetUserId, callId });
+        if (!isElectron()) hangUp(targetUserId, callId);
+        sendCallSummary(call, 'no_answer', 0, 'missed');
+        stopCallTimer();
+        endCallCleanup();
+        if (isElectron()) {
+          window.electronAPI?.closeCallWindow?.();
+        } else if (callPopupRef.current && !callPopupRef.current.closed) {
+          // Close web popup window
+          callPopupRef.current.close();
+          callPopupRef.current = null;
+          setIsCallInPopup(false);
+        }
+        showNotification({ title: 'TeleDesk', body: 'No answer' });
+      }, 30000);
+    } catch (err) {
+      console.error('[Call] getLocalStream failed for outgoing call:', err);
+      callAudioService.stopOutgoingRingtone();
+      endCallCleanup();
+    }
   };
 
   // â”€â”€â”€ acceptIncomingCall (non-Electron / in-app modal fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -818,14 +950,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearRingingTimer();
     // Stop all ringtones when ending call
     callAudioService.stopAllRingtones();
-    
-    const dur = activeCall.status === 'active' ? callDuration : 0;
-    const status = activeCall.status === 'active' ? 'completed' : 'cancelled';
-    // Only caller sends the summary; if receiver ends the call here the caller
-    // will send the summary from handleCallEnded when it receives CALL_ENDED.
-    if (activeCall.callerId === currentUser?.uid) {
-      sendCallSummary(activeCall, status, dur, status);
-    }
 
     const socket = getSocket();
     socket?.emit(SOCKET_EVENTS.END_CALL, { to: targetId, callId: activeCall.callId });
@@ -839,6 +963,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     stopCallTimer();
+    signalingLock.release(activeCall.callId);
     endCallCleanup();
   };
 

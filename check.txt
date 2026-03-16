@@ -1,0 +1,320 @@
+npm run dev
+> teledesk-backend@1.0.0 dev
+> ts-node-dev --respawn --transpile-only src/server.ts
+
+[INFO] 15:28:56 ts-node-dev ver. 2.0.0 (using ts-node ver. 10.9.2, typescript ver. 5.9.3)
+2026-03-16 15:28:59 [info]: TeleDesk backend server running on port 3001
+2026-03-16 15:28:59 [info]: Environment: development
+2026-03-16 15:28:59 [info]: Registered routes: /api/users, /api/chats, /api/groups, /api/files, /api/saved-messages, /api/device-sessions
+2026-03-16 15:29:35 [debug]: Socket auth creating session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1
+2026-03-16 15:29:36 [debug]: Socket auth successful: _BkFCLmrJU-QM5g6AAAB, session: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:29:36 [info]: Socket connected: _BkFCLmrJU-QM5g6AAAB (user: QdF1FesHMARy7O3aJ0M5ZsLqcz73, session: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1)
+2026-03-16 15:29:36 [debug]: Mapped session QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1 to socket _BkFCLmrJU-QM5g6AAAB
+2026-03-16 15:29:38 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:29:37 [http]: ::1 - - [16/Mar/2026:09:59:37 +0000] "GET /api/chats HTTP/1.1" 200 7693 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+
+2026-03-16 15:35:20 [debug]: Presence heartbeat updated in DB for user QdF1FesHMARy7O3aJ0M5ZsLqcz73
+2026-03-16 15:35:27 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:35:27 [debug]: Socket auth creating session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1
+2026-03-16 15:35:28 [debug]: Socket auth successful: k0jfL7cY1AOoL1rqAAAD, session: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:35:28 [info]: Socket connected: k0jfL7cY1AOoL1rqAAAD (user: s03jaaQfvfh191sTEUdjzHPvE473, session: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1)
+2026-03-16 15:35:30 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:35:30 [http]: ::1 - - [16/Mar/2026:10:05:30 +0000] "GET /api/chats HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+
+2026-03-16 15:38:30 [debug]: User QdF1FesHMARy7O3aJ0M5ZsLqcz73 joined room chat:a21dbdab-c937-42a6-9f85-8ed03fac70b6
+2026-03-16 15:38:30 [debug]: User QdF1FesHMARy7O3aJ0M5ZsLqcz73 joined room chat:a21dbdab-c937-42a6-9f85-8ed03fac70b6
+2026-03-16 15:38:31 [debug]: User s03jaaQfvfh191sTEUdjzHPvE473 joined room chat:a21dbdab-c937-42a6-9f85-8ed03fac70b6
+2026-03-16 15:38:31 [debug]: User s03jaaQfvfh191sTEUdjzHPvE473 joined room chat:a21dbdab-c937-42a6-9f85-8ed03fac70b6
+2026-03-16 15:38:30 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:32 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:32 [debug]: HTTP auth session fingerprint: s03jaaQfvfh191sTEUdjzHPvE473_89db729cfcdc129111f017b0e7ac324a_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:31 [http]: ::1 - - [16/Mar/2026:10:08:31 +0000] "GET /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 200 28 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:31 [http]: ::1 - - [16/Mar/2026:10:08:31 +0000] "GET /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/messages?limit=30 HTTP/1.1" 200 19357 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:31 [http]: ::1 - - [16/Mar/2026:10:08:31 +0000] "GET /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:31 [http]: ::1 - - [16/Mar/2026:10:08:31 +0000] "GET /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 200 28 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "PUT /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 200 165 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "POST /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/read HTTP/1.1" 200 16 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "GET /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/messages?limit=30 HTTP/1.1" 200 19574 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "GET /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/messages?limit=30 HTTP/1.1" 200 19543 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "GET /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "POST /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/read HTTP/1.1" 200 16 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "POST /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/read HTTP/1.1" 200 16 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "POST /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/read HTTP/1.1" 200 16 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "PUT /api/drafts/a21dbdab-c937-42a6-9f85-8ed03fac70b6 HTTP/1.1" 200 165 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:32 [http]: ::1 - - [16/Mar/2026:10:08:32 +0000] "GET /api/chats/a21dbdab-c937-42a6-9f85-8ed03fac70b6/messages?limit=30 HTTP/1.1" 200 19636 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+2026-03-16 15:38:41 [info]: Call initiated from s03jaaQfvfh191sTEUdjzHPvE473 to QdF1FesHMARy7O3aJ0M5ZsLqcz73 (socket: k0jfL7cY1AOoL1rqAAAD)
+2026-03-16 15:38:43 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:43 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:43 [debug]: Socket auth creating session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1
+2026-03-16 15:38:43 [debug]: Socket auth successful: VfyuxDqxqGQQk6NYAAAF, session: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:43 [info]: Socket connected: VfyuxDqxqGQQk6NYAAAF (user: QdF1FesHMARy7O3aJ0M5ZsLqcz73, session: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1)
+2026-03-16 15:38:43 [debug]: Mapped session QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1 to socket VfyuxDqxqGQQk6NYAAAF
+2026-03-16 15:38:43 [info]: Re-delivered pending call s03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773655721506 to QdF1FesHMARy7O3aJ0M5ZsLqcz73 after reconnect
+2026-03-16 15:38:43 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:43 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:44 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:44 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:44 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:45 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:45 [debug]: HTTP auth session fingerprint: QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1, IP: ::1, UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2026-03-16 15:38:43 [http]: ::1 - - [16/Mar/2026:10:08:43 +0000] "POST /api/users/sync HTTP/1.1" 200 937 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:43 [http]: ::1 - - [16/Mar/2026:10:08:43 +0000] "GET /api/chats HTTP/1.1" 200 7693 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:44 [http]: ::1 - - [16/Mar/2026:10:08:44 +0000] "GET /api/users/s03jaaQfvfh191sTEUdjzHPvE473 HTTP/1.1" 200 504 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:44 [http]: ::1 - - [16/Mar/2026:10:08:44 +0000] "POST /api/users/sync HTTP/1.1" 200 937 "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:44 [http]: ::1 - - [16/Mar/2026:10:08:44 +0000] "GET /api/users/fQzrzOh2sOcfQE3f87hX5EhTYrj2 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:44 [http]: ::1 - - [16/Mar/2026:10:08:44 +0000] "GET /api/users/dCnQUMpms1fMOA5pjibcFnujhZu1 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:45 [http]: ::1 - - [16/Mar/2026:10:08:45 +0000] "GET /api/users/Rj7p7wa99zSASi5L9pLS5QQ8G9m2 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:45 [http]: ::1 - - [16/Mar/2026:10:08:45 +0000] "GET /api/users/LuxBz0XZlLSppXwkrGoOR0N5gd82 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:45 [http]: ::1 - - [16/Mar/2026:10:08:45 +0000] "GET /api/users/n3nAjPRW9fcEhn1D8qJm23EojEO2 HTTP/1.1" 304 - "http://localhost:5173/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) TeleDesk/1.0.0 Chrome/126.0.6478.234 Electron/31.7.7 Safari/537.36"
+2026-03-16 15:38:51 [info]: Socket disconnected: VfyuxDqxqGQQk6NYAAAF (user: QdF1FesHMARy7O3aJ0M5ZsLqcz73)
+2026-03-16 15:38:51 [debug]: Removed session QdF1FesHMARy7O3aJ0M5ZsLqcz73_5dcfaf6f79d6a6af40c0466cc6f27000_::1 from socket mapping
+2026-03-16 15:38:51 [debug]: Message sent in chat a21dbdab-c937-42a6-9f85-8ed03fac70b6 by s03jaaQfvfh191sTEUdjzHPvE473
+2026-03-16 15:38:51 [debug]: Message sent in chat a21dbdab-c937-42a6-9f85-8ed03fac70b6 by s03jaaQfvfh191sTEUdjzHPvE473
+2026-03-16 15:38:51 [debug]: Message sent in chat a21dbdab-c937-42a6-9f85-8ed03fac70b6 by s03jaaQfvfh191sTEUdjzHPvE473
+2026-03-16 15:38:51 [debug]: Message sent in chat a21dbdab-c937-42a6-9f85-8ed03fac70b6 by s03jaaQfvfh191sTEUdjzHPvE473
+
+
+
+
+browser console
+-----------------------------------
+Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+webrtc.ts:55 [WebRTC Config] ICE Servers: (6) [{…}, {…}, {…}, {…}, {…}, {…}]
+csp.ts:43 [CSP] Updated CSP for backend: {backendUrl: 'http://localhost:3001', socketUrl: 'http://localhost:3001'}
+App.tsx:88 [App] activeCall is null, CallScreen will unmount
+react-router-dom.js?v=8b563510:4446 ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+warnOnce @ react-router-dom.js?v=8b563510:4446
+logDeprecation @ react-router-dom.js?v=8b563510:4449
+logV6DeprecationWarnings @ react-router-dom.js?v=8b563510:4452
+(anonymous) @ react-router-dom.js?v=8b563510:5322
+commitHookEffectListMount @ chunk-BPGMVNCO.js?v=8b563510:23793
+commitPassiveMountOnFiber @ chunk-BPGMVNCO.js?v=8b563510:25034
+commitPassiveMountEffects_complete @ chunk-BPGMVNCO.js?v=8b563510:25007
+commitPassiveMountEffects_begin @ chunk-BPGMVNCO.js?v=8b563510:24997
+commitPassiveMountEffects @ chunk-BPGMVNCO.js?v=8b563510:24987
+flushPassiveEffectsImpl @ chunk-BPGMVNCO.js?v=8b563510:26368
+flushPassiveEffects @ chunk-BPGMVNCO.js?v=8b563510:26325
+(anonymous) @ chunk-BPGMVNCO.js?v=8b563510:26206
+workLoop @ chunk-BPGMVNCO.js?v=8b563510:462
+flushWork @ chunk-BPGMVNCO.js?v=8b563510:441
+performWorkUntilDeadline @ chunk-BPGMVNCO.js?v=8b563510:649Understand this warning
+react-router-dom.js?v=8b563510:4446 ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+warnOnce @ react-router-dom.js?v=8b563510:4446
+logDeprecation @ react-router-dom.js?v=8b563510:4449
+logV6DeprecationWarnings @ react-router-dom.js?v=8b563510:4455
+(anonymous) @ react-router-dom.js?v=8b563510:5322
+commitHookEffectListMount @ chunk-BPGMVNCO.js?v=8b563510:23793
+commitPassiveMountOnFiber @ chunk-BPGMVNCO.js?v=8b563510:25034
+commitPassiveMountEffects_complete @ chunk-BPGMVNCO.js?v=8b563510:25007
+commitPassiveMountEffects_begin @ chunk-BPGMVNCO.js?v=8b563510:24997
+commitPassiveMountEffects @ chunk-BPGMVNCO.js?v=8b563510:24987
+flushPassiveEffectsImpl @ chunk-BPGMVNCO.js?v=8b563510:26368
+flushPassiveEffects @ chunk-BPGMVNCO.js?v=8b563510:26325
+(anonymous) @ chunk-BPGMVNCO.js?v=8b563510:26206
+workLoop @ chunk-BPGMVNCO.js?v=8b563510:462
+flushWork @ chunk-BPGMVNCO.js?v=8b563510:441
+performWorkUntilDeadline @ chunk-BPGMVNCO.js?v=8b563510:649Understand this warning
+App.tsx:88 [App] activeCall is null, CallScreen will unmount
+CallContext.tsx:159 [CallProvider] No remote stream
+CallContext.tsx:159 [CallProvider] No remote stream
+socketService.ts:26 [Socket] Connected: qJOdpFBwdnGdYwc3AAAR
+ChatWindow.tsx:646 [Draft] Saving to backend: {chatId: 'a21dbdab-c937-42a6-9f85-8ed03fac70b6', content: ''}
+SocketContext.tsx:324 [Draft] Received draft deletion: {chatId: 'a21dbdab-c937-42a6-9f85-8ed03fac70b6'}
+ChatWindow.tsx:649 [Draft] Saved successfully: {success: true, data: {…}}
+CallContext.tsx:816 [Call] Using in-app CallScreen for outgoing call
+CallScreen.tsx:145 [CallScreen] No remote stream to play
+CallScreen.tsx:203 [CallScreen] Component mounted, callId: s03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640
+CallContext.tsx:159 [CallProvider] No remote stream
+App.tsx:77 [App] ActiveCall state changed: {callId: 's03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640', isCallInPopup: false, hasElectronAPI: false, willShowCallScreen: true}
+CallScreen.tsx:205 [CallScreen] Component unmounting, callId: s03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640
+CallScreen.tsx:145 [CallScreen] No remote stream to play
+CallScreen.tsx:203 [CallScreen] Component mounted, callId: s03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640
+CallContext.tsx:159 [CallProvider] No remote stream
+App.tsx:77 [App] ActiveCall state changed: {callId: 's03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640', isCallInPopup: false, hasElectronAPI: false, willShowCallScreen: true}
+callAudioService.ts:109 [CallAudio] Failed to play outgoing ringtone: AbortError: The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22
+(anonymous) @ callAudioService.ts:109
+Promise.catch
+playOutgoingRingtone @ callAudioService.ts:108
+startCall @ CallContext.tsx:794
+handleStartCall @ ChatWindow.tsx:2327
+onClick @ ChatWindow.tsx:2526
+callCallback2 @ chunk-BPGMVNCO.js?v=8b563510:10552
+invokeGuardedCallbackDev @ chunk-BPGMVNCO.js?v=8b563510:10577
+invokeGuardedCallback @ chunk-BPGMVNCO.js?v=8b563510:10611
+invokeGuardedCallbackAndCatchFirstError @ chunk-BPGMVNCO.js?v=8b563510:10614
+executeDispatch @ chunk-BPGMVNCO.js?v=8b563510:13892
+processDispatchQueueItemsInOrder @ chunk-BPGMVNCO.js?v=8b563510:13912
+processDispatchQueue @ chunk-BPGMVNCO.js?v=8b563510:13921
+dispatchEventsForPlugins @ chunk-BPGMVNCO.js?v=8b563510:13929
+(anonymous) @ chunk-BPGMVNCO.js?v=8b563510:14052
+batchedUpdates$1 @ chunk-BPGMVNCO.js?v=8b563510:25791
+batchedUpdates @ chunk-BPGMVNCO.js?v=8b563510:10457
+dispatchEventForPluginEventSystem @ chunk-BPGMVNCO.js?v=8b563510:14051
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-BPGMVNCO.js?v=8b563510:12356
+dispatchEvent @ chunk-BPGMVNCO.js?v=8b563510:12350
+dispatchDiscreteEvent @ chunk-BPGMVNCO.js?v=8b563510:12327Understand this warning
+callAudioService.ts:109 [CallAudio] Failed to play outgoing ringtone: AbortError: The play() request was interrupted by a call to pause(). https://goo.gl/LdLk22
+(anonymous) @ callAudioService.ts:109
+Promise.catch
+playOutgoingRingtone @ callAudioService.ts:108
+(anonymous) @ CallScreen.tsx:108
+commitHookEffectListMount @ chunk-BPGMVNCO.js?v=8b563510:23793
+invokePassiveEffectMountInDEV @ chunk-BPGMVNCO.js?v=8b563510:25202
+invokeEffectsInDev @ chunk-BPGMVNCO.js?v=8b563510:26579
+commitDoubleInvokeEffectsInDEV @ chunk-BPGMVNCO.js?v=8b563510:26564
+flushPassiveEffectsImpl @ chunk-BPGMVNCO.js?v=8b563510:26381
+flushPassiveEffects @ chunk-BPGMVNCO.js?v=8b563510:26325
+commitRootImpl @ chunk-BPGMVNCO.js?v=8b563510:26294
+commitRoot @ chunk-BPGMVNCO.js?v=8b563510:26155
+performSyncWorkOnRoot @ chunk-BPGMVNCO.js?v=8b563510:25773
+flushSyncCallbacks @ chunk-BPGMVNCO.js?v=8b563510:15997
+(anonymous) @ chunk-BPGMVNCO.js?v=8b563510:25505Understand this warning
+CallContext.tsx:824 [Call] Media captured for in-app outgoing call
+CallContext.tsx:159 [CallProvider] No remote stream
+App.tsx:77 [App] ActiveCall state changed: {callId: 's03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640', isCallInPopup: false, hasElectronAPI: false, willShowCallScreen: true}
+callStore.ts:62 [CallStore] Starting call timer
+CallContext.tsx:441 [Call] Creating initiator peer for accepted call, peer: QdF1FesHMARy7O3aJ0M5ZsLqcz73
+callStore.ts:59 [CallStore] Timer already running, not starting another
+startCallTimer @ callStore.ts:59
+handleCallAccepted @ CallContext.tsx:404
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+emitEvent @ socket__io-client.js?v=8b563510:3291
+onevent @ socket__io-client.js?v=8b563510:3279
+onpacket @ socket__io-client.js?v=8b563510:3250
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+(anonymous) @ socket__io-client.js?v=8b563510:3857
+Promise.then
+(anonymous) @ socket__io-client.js?v=8b563510:928
+ondecoded @ socket__io-client.js?v=8b563510:3856
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+add @ socket__io-client.js?v=8b563510:2671
+ondata @ socket__io-client.js?v=8b563510:3845
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+_onPacket @ socket__io-client.js?v=8b563510:1950
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+onPacket @ socket__io-client.js?v=8b563510:1112
+onData @ socket__io-client.js?v=8b563510:1104
+ws.onmessage @ socket__io-client.js?v=8b563510:1574Understand this warning
+CallContext.tsx:422 [Call] Peer already exists, skipping creation
+callStore.ts:59 [CallStore] Timer already running, not starting another
+startCallTimer @ callStore.ts:59
+handleCallAccepted @ CallContext.tsx:404
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+emitEvent @ socket__io-client.js?v=8b563510:3291
+onevent @ socket__io-client.js?v=8b563510:3279
+onpacket @ socket__io-client.js?v=8b563510:3250
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+(anonymous) @ socket__io-client.js?v=8b563510:3857
+Promise.then
+(anonymous) @ socket__io-client.js?v=8b563510:928
+ondecoded @ socket__io-client.js?v=8b563510:3856
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+add @ socket__io-client.js?v=8b563510:2671
+ondata @ socket__io-client.js?v=8b563510:3845
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+_onPacket @ socket__io-client.js?v=8b563510:1950
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+onPacket @ socket__io-client.js?v=8b563510:1112
+onData @ socket__io-client.js?v=8b563510:1104
+ws.onmessage @ socket__io-client.js?v=8b563510:1574Understand this warning
+CallContext.tsx:422 [Call] Peer already exists, skipping creation
+callStore.ts:59 [CallStore] Timer already running, not starting another
+startCallTimer @ callStore.ts:59
+handleCallAccepted @ CallContext.tsx:404
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+emitEvent @ socket__io-client.js?v=8b563510:3291
+onevent @ socket__io-client.js?v=8b563510:3279
+onpacket @ socket__io-client.js?v=8b563510:3250
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+(anonymous) @ socket__io-client.js?v=8b563510:3857
+Promise.then
+(anonymous) @ socket__io-client.js?v=8b563510:928
+ondecoded @ socket__io-client.js?v=8b563510:3856
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+add @ socket__io-client.js?v=8b563510:2671
+ondata @ socket__io-client.js?v=8b563510:3845
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+_onPacket @ socket__io-client.js?v=8b563510:1950
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+onPacket @ socket__io-client.js?v=8b563510:1112
+onData @ socket__io-client.js?v=8b563510:1104
+ws.onmessage @ socket__io-client.js?v=8b563510:1574Understand this warning
+CallContext.tsx:422 [Call] Peer already exists, skipping creation
+CallContext.tsx:159 [CallProvider] No remote stream
+App.tsx:77 [App] ActiveCall state changed: {callId: 's03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773656226640', isCallInPopup: false, hasElectronAPI: false, willShowCallScreen: true}
+webrtcDiagnostics.ts:52 [Initiator] ICE gathering state: gathering
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '172.24.64.1', port: 52760}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '169.254.185.76', port: 52761}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '169.254.135.228', port: 52762}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '10.5.234.63', port: 52763}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '172.24.64.1', port: 52764}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '169.254.185.76', port: 52765}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '169.254.135.228', port: 52766}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'udp', address: '10.5.234.63', port: 52767}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'srflx', protocol: 'udp', address: '103.106.200.58', port: 60557}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'srflx', protocol: 'udp', address: '103.106.200.58', port: 45706}
+CallContext.tsx:449 [Call] Remote stream received: {hasAudio: true, hasVideo: false}
+CallScreen.tsx:149 [CallScreen] Setting up remote audio playback: {hasAudio: true, hasVideo: false, audioTracks: Array(1)}
+CallScreen.tsx:167 [CallScreen] Created new Audio element
+CallContext.tsx:163 [CallProvider] Setting up remote audio: {hasAudio: true, hasVideo: false}
+CallContext.tsx:172 [CallProvider] Created audio element
+webrtcService.ts:430 [WebRTC] Handled renegotiation answer successfully
+11webrtcService.ts:432 [WebRTC] processRenegotiationAnswer failed: InvalidStateError: Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': Failed to set remote answer sdp: Called in wrong state: stable
+processRenegotiationAnswer @ webrtcService.ts:432
+await in processRenegotiationAnswer
+handleAnswer @ CallContext.tsx:474
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+emitEvent @ socket__io-client.js?v=8b563510:3291
+onevent @ socket__io-client.js?v=8b563510:3279
+onpacket @ socket__io-client.js?v=8b563510:3250
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+(anonymous) @ socket__io-client.js?v=8b563510:3857
+Promise.then
+(anonymous) @ socket__io-client.js?v=8b563510:928
+ondecoded @ socket__io-client.js?v=8b563510:3856
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+add @ socket__io-client.js?v=8b563510:2671
+ondata @ socket__io-client.js?v=8b563510:3845
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+_onPacket @ socket__io-client.js?v=8b563510:1950
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+onPacket @ socket__io-client.js?v=8b563510:1112
+onData @ socket__io-client.js?v=8b563510:1104
+ws.onmessage @ socket__io-client.js?v=8b563510:1574Understand this error
+4webrtcService.ts:424 [WebRTC] Cannot process renegotiation answer in state: stable
+processRenegotiationAnswer @ webrtcService.ts:424
+handleAnswer @ CallContext.tsx:474
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+emitEvent @ socket__io-client.js?v=8b563510:3291
+onevent @ socket__io-client.js?v=8b563510:3279
+onpacket @ socket__io-client.js?v=8b563510:3250
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+(anonymous) @ socket__io-client.js?v=8b563510:3857
+Promise.then
+(anonymous) @ socket__io-client.js?v=8b563510:928
+ondecoded @ socket__io-client.js?v=8b563510:3856
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+add @ socket__io-client.js?v=8b563510:2671
+ondata @ socket__io-client.js?v=8b563510:3845
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+_onPacket @ socket__io-client.js?v=8b563510:1950
+Emitter.emit @ socket__io-client.js?v=8b563510:902
+onPacket @ socket__io-client.js?v=8b563510:1112
+onData @ socket__io-client.js?v=8b563510:1104
+ws.onmessage @ socket__io-client.js?v=8b563510:1574Understand this warning
+CallScreen.tsx:183 [CallScreen] Remote audio playing successfully
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'tcp', address: '172.24.64.1', port: 9}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'tcp', address: '169.254.185.76', port: 9}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'tcp', address: '169.254.135.228', port: 9}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'host', protocol: 'tcp', address: '10.5.234.63', port: 9}
+CallContext.tsx:177 [CallProvider] Audio playing
+webrtcDiagnostics.ts:40 [Initiator] ICE connection state: checking
+webrtcDiagnostics.ts:27 [Initiator] Connection state changed: connecting
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'relay', protocol: 'udp', address: '64.227.188.203', port: 28106}
+webrtcDiagnostics.ts:59 [Initiator] ICE candidate: {type: 'relay', protocol: 'udp', address: '64.227.188.203', port: 52504}
+webrtcDiagnostics.ts:52 [Initiator] ICE gathering state: complete

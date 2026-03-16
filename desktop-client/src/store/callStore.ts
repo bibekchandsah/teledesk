@@ -53,6 +53,13 @@ export const useCallStore = create<CallState>((set, get) => ({
   setShowPopupBlockedNotification: (show) => set({ showPopupBlockedNotification: show }),
 
   startCallTimer: () => {
+    const { callTimer } = get();
+    // Prevent multiple timers
+    if (callTimer) {
+      console.warn('[CallStore] Timer already running, not starting another');
+      return;
+    }
+    console.log('[CallStore] Starting call timer');
     const timer = setInterval(() => {
       set((state) => ({ callDuration: state.callDuration + 1 }));
     }, 1000);
