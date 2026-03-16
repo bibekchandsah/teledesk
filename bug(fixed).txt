@@ -95,7 +95,9 @@ Last seen Invalid Date
     Try using the "Terminate All Other Sessions" option, it will delete other sessions and leave you logged in.
     Try the "Log Out of All Devices" option, all remote sessions will be killed and you will be forcefully logged out of your current session as well.
     works for online / offline sessions
+(fixed) input box of send message height adjustment
 (partially) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
+draft message is hard to write as it
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive

@@ -88,3 +88,7 @@ When VITE_ALLOW_DEVTOOLS=false → blur overlay enabled, right-click blocked, sh
     ✅ F12, Ctrl+Shift+I/J/C blocked in the app
     ✅ Blur overlay shows when window loses focus 
     ✅ DevTools won't open in Electron
+
+
+<------------------- Message input box ---------------------->
+The input box will now properly expand upward without affecting the background image, and will reset to its normal size right after you send a message

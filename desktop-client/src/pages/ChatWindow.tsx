@@ -1473,6 +1473,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     });
     setInputText('');
     setReplyingTo(null);
+    
+    // Reset textarea height after sending
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
 
     // Clear draft after sending
     if (chatId) {
@@ -2414,6 +2419,41 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           onDragOver={handleDrag}
           onDrop={handleDrop}
         >
+          {/* Fixed background layer for theme image */}
+          {displayTheme?.backgroundImage && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundImage: `url(${displayTheme.backgroundImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                zIndex: 0,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+          {/* Fixed overlay for opacity and blur */}
+          {displayTheme && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: `rgba(15, 23, 42, ${1 - displayTheme.opacity})`,
+                backdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
+                WebkitBackdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
+                zIndex: 1,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
       {dragActive && (
         <div style={{
           position: 'absolute',
@@ -2461,6 +2501,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           padding: '12px 20px',
           borderBottom: '1px solid var(--border)',
           backgroundColor: 'var(--bg-secondary)',
+          zIndex: 1,
         }}
       >
         {/* Mobile back button — always visible when embedded (onBack set) */}
@@ -2863,7 +2904,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           display: 'flex',
           flexDirection: 'column',
           userSelect: selectionMode ? 'none' : undefined,
-          position: 'relative',
+          // position: 'relative',
           ...(displayTheme?.backgroundImage && {
             backgroundImage: `url(${displayTheme.backgroundImage})`,
             backgroundSize: 'cover',
@@ -3461,6 +3502,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           padding: (isRecording || isPreviewingRecording) ? '12px 16px' : '12px 16px',
           borderTop: (replyingTo || editingMsg) ? 'none' : '1px solid var(--border)',
           backgroundColor: 'var(--bg-secondary)',
+          position: 'relative',
+          zIndex: 10,
         }}
       >
         <input
