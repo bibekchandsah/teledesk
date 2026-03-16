@@ -86,7 +86,13 @@ export const getMessagePreview = (msg: {
 }): string => {
   let preview = '';
   switch (msg.type) {
-    case 'text': preview = msg.content; break;
+    case 'text': {
+      // Hide spoiler content in previews
+      preview = msg.content.replace(/\|\|[\s\S]+?\|\|/g, (match) => {
+        return ':'.repeat(Math.max(20, match.length));
+      });
+      break;
+    }
     case 'image': preview = 'Photo'; break;
     case 'video': preview = 'Video'; break;
     case 'audio': preview = 'Audio message'; break;

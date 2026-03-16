@@ -104,11 +104,20 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (differentChat || windowHidden) {
         incrementUnread(message.chatId);
+        
+        // Helper function to hide spoiler content in notifications
+        const hideSpoilers = (text: string): string => {
+          return text.replace(/\|\|[\s\S]+?\|\|/g, (match) => {
+            // Replace spoiler content with colons (same length as the spoiler markers + content)
+            return ':'.repeat(Math.max(20, match.length));
+          });
+        };
+        
         showNotification({
           title: nicknames[message.senderId] || message.senderName || 'New Message',
           body:
             message.type === 'text'
-              ? (message.content || '').slice(0, 100)
+              ? hideSpoilers((message.content || '').slice(0, 100))
               : message.type === 'gif'
               ? 'Sent a GIF'
               : message.type === 'sticker'
