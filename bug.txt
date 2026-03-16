@@ -13,7 +13,7 @@ to be implemented:
 10. (fixed) disable browser right click only teledesk right click menu 
 13. (fixed) more reaction inside view port for grid layout too
 17. (fixed) incoming call ringtone, outgoing call ringtone 
-9. chat isn't scrolling down when reload 
+9. (fixed) chat isn't scrolling down when reload 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 14. single emoji to full row animated 
@@ -22,8 +22,3 @@ to be implemented:
 17. Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
 
 
-
-during web call to desktop and web hangup
-workbox-378048b6.js:44 workbox The navigation route /call-window?d=%7B%22callId%22%3A%22s03jaaQfvfh191sTEUdjzHPvE473_QdF1FesHMARy7O3aJ0M5ZsLqcz73_1773598581357%22%2C%22callType%22%3A%22voice%22%2C%22isOutgoing%22%3Atrue%2C%22targetUserId%22%3A%22QdF1FesHMARy7O3aJ0M5ZsLqcz73%22%2C%22targetName%22%3A%22Bibek%20Chand%20Sah%22%2C%22targetAvatar%22%3A%22https%3A%2F%2Fpub-298c867323a54f42a05d14750304272e.r2.dev%2Favatars%2FQdF1FesHMARy7O3aJ0M5ZsLqcz73.png%22%7D is not being used, since the URL being navigated to doesn't match the allowlist.
-webrtcService.ts:214 [WebRTC] processRenegotiationOffer failed: InvalidStateError: Failed to execute 'setLocalDescription' on 'RTCPeerConnection': Failed to set local answer sdp: Called in wrong state: stable
-webrtcService.ts:404 [WebRTC] processRenegotiationAnswer failed: InvalidStateError: Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': Failed to set remote answer sdp: Called in wrong state: stable

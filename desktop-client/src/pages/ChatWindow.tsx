@@ -1242,17 +1242,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const el = scrollContainerRef.current;
     if (!el || !chatId || chatMessages.length === 0) return;
 
-    if (lastScrolledChatRef.current !== chatId) {
-      // New chat opened (or first messages arrived) — instantly jump to bottom
+    const scrollToBottom = () => {
       el.scrollTop = el.scrollHeight;
-      lastScrolledChatRef.current = chatId;
+    };
+
+    if (lastScrolledChatRef.current !== chatId) {
+      // New chat opened — instantly jump to bottom
+      scrollToBottom();
+      
+      // Also schedule one in the next frame just in case
+      // (important if images/videos take a microsecond to affect height)
+      requestAnimationFrame(scrollToBottom);
+      
+      // Delay setting the ref so that if the FIRST few batches of messages arrive
+      // close together, they all trigger the "new chat" forced scroll.
+      holdTimerRef.current = setTimeout(() => {
+        lastScrolledChatRef.current = chatId;
+      }, 500) as any;
     } else {
       // Same chat, new message — only auto-scroll if user is already near the bottom
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distFromBottom < 200) {
-        el.scrollTop = el.scrollHeight;
+      if (distFromBottom < 400) {
+        scrollToBottom();
       }
     }
+
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
   }, [chatMessages.length, chatId]);
 
   // Also scroll when typing indicator appears/disappears
@@ -1260,7 +1277,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const el = scrollContainerRef.current;
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distFromBottom < 200) el.scrollTop = el.scrollHeight;
+    if (distFromBottom < 400) el.scrollTop = el.scrollHeight;
   }, [typingList.length]);
 
   // ─── Scroll-up pagination ─────────────────────────────────────────────────
@@ -1314,7 +1331,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (!isFetchingRef.current && hasMore && el.scrollTop < 120) loadOlderMessages();
     // Show/hide scroll nav arrows
     setShowScrollTop(el.scrollTop > 200);
-    setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+    setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 400);
   }, [loadOlderMessages, hasMore]);
 
   // ─── Get peer info for private chat header ────────────────────────────────

@@ -254,3 +254,33 @@ User Experience:
     Click once to reveal
     On page reload, spoiler resets to hidden state
     Clicking revealed image opens preview modal, not hide it 
+
+Backend Persistence:
+    The backend now correctly saves the is_spoiler status to the database and retrieves it when you reload or switch chats.
+    This ensures that images marked as spoilers remain spoilers until you intentionally reveal them, even after a page refresh.
+Component Improvements:
+    Video Support: Added a new isVideo prop. Video spoilers now render a <video> behind the blur effect instead of a broken image.
+    Toggle Behavior: Clicking an unrevealed spoiler reveals it; clicking a revealed spoiler hides it again.
+    Expand Icon: A small icon appears on hover when revealed, allowing you to open the full preview modal.
+Grid Layout Improvements:
+    Images/videos in the grid now have correct onClick handlers, ensuring the toggle behavior and preview icon work consistently with single-message layouts.
+
+
+<-------------------------- CHat window auto scroll improvements -------------------------->
+For New Chats:
+    When a new chat is opened (or first messages arrive), the window now instantly jumps to the bottom
+    A second scroll is scheduled in the next frame to handle any delay from images/videos loading
+    The chat is considered "new" for 500ms, ensuring all initial messages trigger the forced scroll
+For Existing Chats:
+    Auto-scroll only occurs when the user is already near the bottom (within 400px)
+    This preserves manual scrolling position when reading older messages
+Scroll Navigation:
+    Scroll-up arrow appears when 200px+ from top
+    Scroll-down arrow appears when 400px+ from bottom
+    Clicking arrows scrolls smoothly to the respective end
+Testing Checklist:
+    Open a new chat and verify instant scroll to bottom
+    Send multiple messages quickly and verify all are visible
+    Switch between chats and verify correct scroll behavior
+    Scroll up to read older messages and verify position is maintained
+    Verify scroll arrows appear and function correctly
