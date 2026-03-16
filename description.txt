@@ -161,3 +161,39 @@ Key Features:
     Support toggle functionality to remove formatting if it's already applied
     Support multi-line code blocks with triple backticks
     Horizontal formating option scrolling for smaller devices 
+
+URL option added 
+URL Button in Toolbar:
+    Added a link button (🔗) to the formatting toolbar after the quote button
+    Separated by a divider for visual clarity
+    Keyboard shortcut: Ctrl+K
+URL Link Modal:
+    Opens when user clicks the URL button or presses Ctrl+K with text selected
+    Two input fields:
+        Link Text: Pre-filled with selected text, displays as the clickable text
+        URL: Where the link should point to (e.g., https://example.com)
+    Modal features:
+        Clean, modern design matching the app theme
+        Auto-focus on first input
+        Enter key to submit
+        Escape key to cancel
+        Click outside to close
+        Disabled "Insert Link" button when fields are empty
+Markdown-Style Link Format:
+    Inserts links in markdown format: [text](url)
+    Example: [Click here](https://example.com)
+Link Rendering:
+    Updated MessageBubble component to parse markdown links
+    Markdown links are rendered with:
+        Accent color for better visibility
+        Underline decoration
+        Bold font weight (500)
+        Hover opacity effect
+        Click to open URL
+    Priority order: Markdown links → Plain URLs → Other formatting
+    Supports both Electron's openExternalUrl and browser's window.open
+User Experience:
+    Selected text is automatically used as link text
+    After inserting link, cursor is positioned after the link
+    Textarea auto-resizes to accommodate the new content
+    Modal closes automatically after insertion

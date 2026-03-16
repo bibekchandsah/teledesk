@@ -740,7 +740,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               }}
             />
             {message.content && (
-              <p className="message-caption">{renderMessageText(message.content, searchQuery)}</p>
+              <p className="message-caption">{renderMessageText(message.content, searchQuery, isOwn)}</p>
             )}
           </div>
         );
@@ -805,7 +805,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       default:
         return (
-          <p style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery)}</p>
+          <p style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery, isOwn)}</p>
         );
     }
   };
@@ -1248,7 +1248,7 @@ const highlightText = (text: string, query?: string): React.ReactNode => {
 };
 
 /** Detects URLs in text and makes them clickable, while also highlighting search queries. */
-const renderMessageText = (text: string, query?: string): React.ReactNode => {
+const renderMessageText = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
   if (!text) return null;
 
   // First, handle multi-line code blocks before splitting by lines
@@ -1264,7 +1264,7 @@ const renderMessageText = (text: string, query?: string): React.ReactNode => {
       const beforeText = text.substring(lastIndex, match.index);
       parts.push(
         <React.Fragment key={`before-${partIndex}`}>
-          {renderTextWithFormatting(beforeText, query)}
+          {renderTextWithFormatting(beforeText, query, isOwn)}
         </React.Fragment>
       );
       partIndex++;
@@ -1300,16 +1300,16 @@ const renderMessageText = (text: string, query?: string): React.ReactNode => {
     const remainingText = text.substring(lastIndex);
     parts.push(
       <React.Fragment key={`remaining-${partIndex}`}>
-        {renderTextWithFormatting(remainingText, query)}
+        {renderTextWithFormatting(remainingText, query, isOwn)}
       </React.Fragment>
     );
   }
   
-  return parts.length > 0 ? parts : renderTextWithFormatting(text, query);
+  return parts.length > 0 ? parts : renderTextWithFormatting(text, query, isOwn);
 };
 
 /** Render text with line breaks and inline formatting */
-const renderTextWithFormatting = (text: string, query?: string): React.ReactNode => {
+const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
   // First check for spoilers (can span multiple lines)
   const spoilerRegex = /\|\|([\s\S]+?)\|\|/;
   const spoilerMatch = text.match(spoilerRegex);
@@ -1321,11 +1321,11 @@ const renderTextWithFormatting = (text: string, query?: string): React.ReactNode
     
     return (
       <>
-        {renderTextWithFormatting(before, query)}
+        {renderTextWithFormatting(before, query, isOwn)}
         <SpoilerText>
-          {renderTextWithFormatting(spoilerContent, query)}
+          {renderTextWithFormatting(spoilerContent, query, isOwn)}
         </SpoilerText>
-        {renderTextWithFormatting(after, query)}
+        {renderTextWithFormatting(after, query, isOwn)}
       </>
     );
   }
@@ -1361,7 +1361,7 @@ const renderTextWithFormatting = (text: string, query?: string): React.ReactNode
               opacity: 0.8,
               fontStyle: 'italic'
             }}>
-              {parseInlineFormatting(lineContent, query)}
+              {parseInlineFormatting(lineContent, query, isOwn)}
             </div>
           );
         }
@@ -1369,7 +1369,7 @@ const renderTextWithFormatting = (text: string, query?: string): React.ReactNode
         return (
           <>
             {linePrefix}
-            {parseInlineFormatting(lineContent, query)}
+            {parseInlineFormatting(lineContent, query, isOwn)}
           </>
         );
       })()}
@@ -1378,7 +1378,7 @@ const renderTextWithFormatting = (text: string, query?: string): React.ReactNode
 };
 
 /** Parse inline formatting (bold, italic, strikethrough, underline, inline code, URLs) with support for multiple formats */
-const parseInlineFormatting = (text: string, query?: string): React.ReactNode => {
+const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
   if (!text) return null;
   
   // Priority order: Markdown Links > URLs > Code > Combined text formatting
@@ -1394,7 +1394,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     
     return (
       <>
-        {parseInlineFormatting(before, query)}
+        {parseInlineFormatting(before, query, isOwn)}
         <span
           onClick={async (e) => {
             e.stopPropagation();
@@ -1413,7 +1413,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
             }
           }}
           style={{ 
-            color: 'var(--accent)', 
+            color: isOwn ? '#fff' : 'var(--accent)', 
             textDecoration: 'underline', 
             cursor: 'pointer',
             transition: 'opacity 0.2s',
@@ -1425,7 +1425,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
         >
           {highlightText(linkText, query)}
         </span>
-        {parseInlineFormatting(after, query)}
+        {parseInlineFormatting(after, query, isOwn)}
       </>
     );
   }
@@ -1440,7 +1440,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     
     return (
       <>
-        {parseInlineFormatting(before, query)}
+        {parseInlineFormatting(before, query, isOwn)}
         <span
           onClick={async (e) => {
             e.stopPropagation();
@@ -1470,7 +1470,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
         >
           {highlightText(url, query)}
         </span>
-        {parseInlineFormatting(after, query)}
+        {parseInlineFormatting(after, query, isOwn)}
       </>
     );
   }
@@ -1485,7 +1485,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     
     return (
       <>
-        {parseInlineFormatting(before, query)}
+        {parseInlineFormatting(before, query, isOwn)}
         <code
           style={{
             backgroundColor: 'rgba(255,255,255,0.1)',
@@ -1497,7 +1497,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
         >
           {highlightText(codeText, query)}
         </code>
-        {parseInlineFormatting(after, query)}
+        {parseInlineFormatting(after, query, isOwn)}
       </>
     );
   }
@@ -1602,7 +1602,7 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     const after = text.substring(bestMatch.end);
     
     // Apply formats based on flags
-    let formattedContent: React.ReactNode = parseInlineFormatting(bestMatch.content, query);
+    let formattedContent: React.ReactNode = parseInlineFormatting(bestMatch.content, query, isOwn);
     
     // Apply in order: bold, italic, underline, strikethrough, spoiler (outermost)
     if (bestMatch.flags & 0b00001) { // bold
@@ -1623,9 +1623,9 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     
     return (
       <>
-        {parseInlineFormatting(before, query)}
+        {parseInlineFormatting(before, query, isOwn)}
         {formattedContent}
-        {parseInlineFormatting(after, query)}
+        {parseInlineFormatting(after, query, isOwn)}
       </>
     );
   }
@@ -1690,26 +1690,26 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
     
     switch (first.type) {
       case 'bold':
-        wrappedContent = <strong>{parseInlineFormatting(formattedText, query)}</strong>;
+        wrappedContent = <strong>{parseInlineFormatting(formattedText, query, isOwn)}</strong>;
         break;
       case 'italic':
-        wrappedContent = <em>{parseInlineFormatting(formattedText, query)}</em>;
+        wrappedContent = <em>{parseInlineFormatting(formattedText, query, isOwn)}</em>;
         break;
       case 'underline':
-        wrappedContent = <span style={{ textDecoration: 'underline' }}>{parseInlineFormatting(formattedText, query)}</span>;
+        wrappedContent = <span style={{ textDecoration: 'underline' }}>{parseInlineFormatting(formattedText, query, isOwn)}</span>;
         break;
       case 'strikethrough':
-        wrappedContent = <span style={{ textDecoration: 'line-through' }}>{parseInlineFormatting(formattedText, query)}</span>;
+        wrappedContent = <span style={{ textDecoration: 'line-through' }}>{parseInlineFormatting(formattedText, query, isOwn)}</span>;
         break;
       default:
-        wrappedContent = parseInlineFormatting(formattedText, query);
+        wrappedContent = parseInlineFormatting(formattedText, query, isOwn);
     }
     
     return (
       <>
-        {parseInlineFormatting(before, query)}
+        {parseInlineFormatting(before, query, isOwn)}
         {wrappedContent}
-        {parseInlineFormatting(after, query)}
+        {parseInlineFormatting(after, query, isOwn)}
       </>
     );
   }
