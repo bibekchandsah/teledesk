@@ -1399,16 +1399,17 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
           onClick={async (e) => {
             e.stopPropagation();
             e.preventDefault();
+            // Check if we're in Electron environment
             if (window.electronAPI?.openExternalUrl) {
               try {
-                const success = await window.electronAPI.openExternalUrl(linkUrl);
-                if (!success) window.open(linkUrl, '_blank');
+                await window.electronAPI.openExternalUrl(linkUrl);
               } catch (err) {
                 console.error('Error calling openExternalUrl:', err);
-                window.open(linkUrl, '_blank');
+                window.open(linkUrl, '_blank', 'noopener,noreferrer');
               }
             } else {
-              window.open(linkUrl, '_blank');
+              // Web browser - use standard window.open
+              window.open(linkUrl, '_blank', 'noopener,noreferrer');
             }
           }}
           style={{ 
@@ -1444,16 +1445,17 @@ const parseInlineFormatting = (text: string, query?: string): React.ReactNode =>
           onClick={async (e) => {
             e.stopPropagation();
             e.preventDefault();
+            // Check if we're in Electron environment
             if (window.electronAPI?.openExternalUrl) {
               try {
-                const success = await window.electronAPI.openExternalUrl(url);
-                if (!success) window.open(url, '_blank');
+                await window.electronAPI.openExternalUrl(url);
               } catch (err) {
                 console.error('Error calling openExternalUrl:', err);
-                window.open(url, '_blank');
+                window.open(url, '_blank', 'noopener,noreferrer');
               }
             } else {
-              window.open(url, '_blank');
+              // Web browser - use standard window.open
+              window.open(url, '_blank', 'noopener,noreferrer');
             }
           }}
           style={{ 
