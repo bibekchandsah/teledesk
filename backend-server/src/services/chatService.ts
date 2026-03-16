@@ -51,6 +51,7 @@ type MessageRow = {
   delivered_to: string[];
   reactions: Record<string, string[]> | null;
   group_id: string | null;
+  is_spoiler: boolean | null;
 };
 
 const rowToMessage = (r: MessageRow): Message => ({
@@ -79,6 +80,7 @@ const rowToMessage = (r: MessageRow): Message => ({
   ...(r.call_status_receiver !== null && { callStatusReceiver: r.call_status_receiver as Message['callStatusReceiver'] }),
   reactions: r.reactions ?? {},
   ...(r.group_id !== null && { groupId: r.group_id }),
+  isSpoiler: !!r.is_spoiler,
 });
 
 
@@ -193,6 +195,7 @@ export const saveMessage = async (message: Message): Promise<Message> => {
     call_status_receiver: message.callStatusReceiver ?? null,
     reactions: message.reactions ?? {},
     group_id: message.groupId ?? null,
+    is_spoiler: message.isSpoiler ?? false,
   });
   if (msgErr) throw new Error(msgErr.message);
 
@@ -385,7 +388,8 @@ export const deleteMessageForAll = async (
     file_name: null, 
     file_size: null, 
     reactions: {},
-    is_edited: false
+    is_edited: false,
+    is_spoiler: false
   };
 
   await supabase

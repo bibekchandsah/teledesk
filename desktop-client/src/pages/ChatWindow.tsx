@@ -324,7 +324,10 @@ const MediaGroupBubble = ({
                   onClick={() => {
                     if (selectionMode && onToggleSelect) {
                       onToggleSelect(m.messageId);
-                    } else {
+                    } else if (!m.isSpoiler) {
+                      // When NOT a spoiler, the outer div opens preview directly.
+                      // When it IS a spoiler, ImageSpoiler handles clicks internally
+                      // (toggle reveal) and exposes its own expand icon to open preview.
                       onPreview(msgs, ci);
                     }
                   }}
@@ -344,6 +347,7 @@ const MediaGroupBubble = ({
                       <ImageSpoiler 
                         src={m.fileUrl!} 
                         alt={m.fileName}
+                        onClick={() => onPreview(msgs, ci)}
                         style={{ width: '100%', height: '100%' }}
                       />
                     ) : (
@@ -354,6 +358,8 @@ const MediaGroupBubble = ({
                       <ImageSpoiler 
                         src={m.fileUrl!} 
                         alt={m.fileName}
+                        isVideo={true}
+                        onClick={() => onPreview(msgs, ci)}
                         style={{ width: '100%', height: '100%' }}
                       />
                     ) : (
@@ -2394,6 +2400,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setPendingUploadFiles(Array.from(e.dataTransfer.files));
       setUploadCaption('');
+      setUploadAsSpoiler(false);
     }
   };
 
@@ -2409,6 +2416,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (files.length > 0) {
       setPendingUploadFiles(files);
       setUploadCaption('');
+      setUploadAsSpoiler(false);
     }
   };
 
@@ -3158,6 +3166,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             padding: '8px 16px',
             borderBottom: '1px solid var(--border)',
             backgroundColor: 'var(--bg-secondary)',
+            zIndex: 1,  
           }}
         >
           <Search size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
@@ -3522,7 +3531,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 Send {pendingUploadFiles.length > 1 ? `${pendingUploadFiles.length} Files` : 'File'}
               </span>
               <button
-                onClick={() => { setPendingUploadFiles([]); setUploadCaption(''); }}
+                onClick={() => { setPendingUploadFiles([]); setUploadCaption(''); setUploadAsSpoiler(false); }}
                 style={{ ...iconBtnStyle, width: 32, height: 32 }}
                 title="Cancel"
               >
@@ -3753,6 +3762,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           padding: '6px 14px',
           borderTop: '1px solid var(--border)',
           backgroundColor: 'var(--bg-secondary)',
+          zIndex: 1,
         }}>
           <button onClick={exitSelectionMode} style={{ ...selActionBtnStyle, gap: 6, paddingLeft: 0 }}>
             <X size={16} />

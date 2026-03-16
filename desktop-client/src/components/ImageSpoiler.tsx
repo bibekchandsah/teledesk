@@ -1,15 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Expand } from 'lucide-react';
 
 interface ImageSpoilerProps {
   src: string;
   alt?: string;
-  onClick?: () => void;
+  onClick?: () => void;           // Called when user clicks the "open preview" icon (revealed state)
   style?: React.CSSProperties;
-  disableReveal?: boolean; // For upload preview - shows effect but doesn't allow revealing
+  disableReveal?: boolean;        // For upload preview — shows effect but doesn't allow revealing
+  isVideo?: boolean;              // Render a <video> element instead of <img>
 }
 
-const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, disableReveal = false }) => {
-  // Always start with hidden state - resets on component remount (chat switch/reload)
+const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
+  src,
+  alt,
+  onClick,
+  style,
+  disableReveal = false,
+  isVideo = false,
+}) => {
+  // Always start hidden — resets on component remount (chat switch / reload)
   const [isRevealed, setIsRevealed] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,9 +39,11 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
     speed: number;
   }
 
+  // Run particle animation whenever the spoiler overlay is visible
   useEffect(() => {
-    // Don't render particles if revealed (but DO render if disableReveal is true for preview)
-    if (isRevealed && !disableReveal) return;
+    // Show overlay when: (a) not yet revealed, or (b) disableReveal (upload preview)
+    const overlayVisible = !isRevealed || disableReveal;
+    if (!overlayVisible) return;
 
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -41,19 +52,16 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size to match container
     const updateSize = () => {
       const rect = container.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
     };
     updateSize();
-    
-    // Update size on window resize
+
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(container);
 
-    // Create particles
     const particleCount = Math.max(50, Math.floor((canvas.width * canvas.height) / 1000));
     particlesRef.current = Array.from({ length: particleCount }, () => {
       const angle = Math.random() * Math.PI * 2;
@@ -66,12 +74,11 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
         size: Math.random() * 3 + 1,
         opacity: Math.random() * 0.7 + 0.3,
         baseOpacity: Math.random() * 0.7 + 0.3,
-        angle: angle,
-        speed: speed
+        angle,
+        speed,
       };
     });
 
-    // Animation loop
     const animate = () => {
       timeRef.current += 0.016;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -88,7 +95,6 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
         const pulse = Math.sin(timeRef.current * 2 + index * 0.5) * 0.2;
         particle.opacity = particle.baseOpacity + pulse;
 
-        // Glow effect
         const gradient = ctx.createRadialGradient(
           particle.x, particle.y, 0,
           particle.x, particle.y, particle.size * 4
@@ -96,13 +102,12 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
         gradient.addColorStop(0, `rgba(255, 255, 255, ${particle.opacity})`);
         gradient.addColorStop(0.5, `rgba(255, 255, 255, ${particle.opacity * 0.3})`);
         gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        
+
         ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size * 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core particle
         ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, particle.opacity * 1.5)})`;
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
@@ -116,38 +121,31 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
 
     return () => {
       resizeObserver.disconnect();
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [isRevealed, disableReveal]);
 
-  const handleClick = (e: React.MouseEvent) => {
+  // ── Click on the spoiler container ───────────────────────────────────────
+  const handleContainerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // If disableReveal is true (upload preview), do nothing
-    if (disableReveal) {
-      return;
-    }
-    
-    // If not revealed, reveal it
-    if (!isRevealed) {
-      setIsRevealed(true);
-    } else if (onClick) {
-      // If already revealed and onClick provided, open preview
-      onClick();
-    }
+    if (disableReveal) return;
+
+    // Toggle visibility
+    setIsRevealed(prev => !prev);
   };
 
-  const handleImageClick = (e: React.MouseEvent) => {
-    // Prevent double handling
+  // ── Click on the "open preview" expand icon (only when revealed) ─────────
+  const handleExpandClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    onClick?.();
   };
+
+  const showOverlay = !isRevealed || disableReveal;
 
   return (
     <div
       ref={containerRef}
-      onClick={handleClick}
+      onClick={handleContainerClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
@@ -159,24 +157,42 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
         ...style,
       }}
     >
-      <img
-        src={src}
-        alt={alt}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          filter: (isRevealed && !disableReveal) ? 'none' : 'blur(20px)',
-          transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-          transform: (isRevealed && !disableReveal) ? 'scale(1)' : 'scale(1.1)',
-          cursor: disableReveal ? 'default' : ((isRevealed && onClick) ? 'pointer' : 'pointer'),
-        }}
-      />
-      
-      {/* Show overlay when not revealed OR when in preview mode */}
-      {(!isRevealed || disableReveal) && (
+      {/* ── Media element (image or video) ── */}
+      {isVideo ? (
+        <video
+          src={src}
+          muted
+          playsInline
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: showOverlay ? 'blur(20px)' : 'none',
+            transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: showOverlay ? 'blur(20px)' : 'none',
+            transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* ── Spoiler overlay (shown when hidden) ── */}
+      {showOverlay && (
         <>
-          {/* Dark overlay */}
+          {/* Dark tint */}
           <div
             style={{
               position: 'absolute',
@@ -185,8 +201,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
               transition: 'background-color 0.3s',
             }}
           />
-          
-          {/* Particle canvas - always show when spoiler is active */}
+
+          {/* Particle canvas */}
           <canvas
             ref={canvasRef}
             style={{
@@ -196,8 +212,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
               mixBlendMode: 'screen',
             }}
           />
-          
-          {/* Shimmer effect - only show if NOT in preview mode */}
+
+          {/* Shimmer sweep — only for real messages (not upload preview) */}
           {!disableReveal && (
             <div
               style={{
@@ -212,8 +228,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
               }}
             />
           )}
-          
-          {/* Spoiler label - only show if NOT in preview mode */}
+
+          {/* SPOILER label — only for real messages */}
           {!disableReveal && (
             <div
               style={{
@@ -226,8 +242,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
                 padding: '12px 24px',
                 borderRadius: 12,
                 border: '2px solid rgba(255, 255, 255, 0.3)',
-                boxShadow: isHovered 
-                  ? '0 0 20px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.1)' 
+                boxShadow: isHovered
+                  ? '0 0 20px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.1)'
                   : '0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.05)',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 pointerEvents: 'none',
@@ -256,7 +272,56 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({ src, alt, onClick, style, d
           )}
         </>
       )}
-      
+
+      {/* ── "Open preview" expand icon — shown on hover when revealed ── */}
+      {isRevealed && !disableReveal && onClick && isHovered && (
+        <button
+          onClick={handleExpandClick}
+          title="Open preview"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            cursor: 'pointer',
+            transition: 'transform 0.15s, background-color 0.15s',
+            zIndex: 10,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,0,0,0.8)'; (e.currentTarget as HTMLElement).style.transform = 'scale(1.1)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(0,0,0,0.6)'; (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+        >
+          <Expand size={16} />
+        </button>
+      )}
+
+      {/* Re-hide hint — shown below image when revealed (non-preview mode) */}
+      {isRevealed && !disableReveal && isHovered && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '6px 10px',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)',
+          color: 'rgba(255,255,255,0.8)',
+          fontSize: 11,
+          textAlign: 'center',
+          pointerEvents: 'none',
+          transition: 'opacity 0.2s',
+        }}>
+          Click to hide again
+        </div>
+      )}
+
       <style>{`
         @keyframes shimmer {
           0% { left: -100%; }

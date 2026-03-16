@@ -767,11 +767,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       case 'video':
         return (
-          <div className="message-video" onClick={() => onPreview?.(message)} style={{ cursor: onPreview ? 'pointer' : 'default', position: 'relative' }}>
+          <div
+            className="message-video"
+            onClick={message.isSpoiler ? undefined : () => onPreview?.(message)}
+            style={{ cursor: (onPreview && !message.isSpoiler) ? 'pointer' : 'default', position: 'relative' }}
+          >
             {message.isSpoiler ? (
               <ImageSpoiler
                 src={message.fileUrl!}
                 alt={message.fileName || 'video'}
+                isVideo={true}
                 onClick={() => {
                   if (onPreview) {
                     onPreview(message);
