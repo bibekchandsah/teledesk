@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, VideoOff } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
@@ -637,32 +637,39 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
 
     if (message.type === 'call') {
-      const viewerStatus = isOwn
-        ? message.callStatus
-        : (message.callStatusReceiver ?? message.callStatus);
+      const direction = isOwn ? 'outgoing' : 'incoming';
+      const status = direction === 'outgoing' ? message.callStatus : (message.callStatusReceiver ?? message.callStatus);
+      const isVideo = message.callType === 'video';
 
-      const iconEl = message.callType === 'video' ? <Video size={20} /> : <Phone size={20} />;
-      const typeName = message.callType === 'video' ? 'Video' : 'Voice';
+      let iconEl: React.ReactNode;
+      let label: string;
+      let callColor = 'var(--accent)';
+      let isFailed = false;
+
+      if (status === 'missed' || status === 'no_answer') {
+        isFailed = true;
+        callColor = '#f87171';
+        iconEl = isVideo ? <VideoOff size={20} /> : <PhoneMissed size={20} />;
+        label = status === 'missed' ? `Missed ${isVideo ? 'video' : 'voice'} call` : `${isVideo ? 'Video' : 'Voice'} call — no answer`;
+      } else if (status === 'declined' || status === 'cancelled') {
+        isFailed = true;
+        callColor = '#f87171';
+        iconEl = isVideo ? <VideoOff size={20} /> : <PhoneOff size={20} />;
+        label = status === 'declined' ? `${isVideo ? 'Video' : 'Voice'} call declined` : `${isVideo ? 'Video' : 'Voice'} call cancelled`;
+      } else if (direction === 'incoming') {
+        callColor = '#34d399';
+        iconEl = isVideo ? <Video size={20} /> : <PhoneIncoming size={20} />;
+        label = `Incoming ${isVideo ? 'video' : 'voice'} call`;
+      } else {
+        callColor = 'var(--accent)';
+        iconEl = isVideo ? <Video size={20} /> : <PhoneOutgoing size={20} />;
+        label = `Outgoing ${isVideo ? 'video' : 'voice'} call`;
+      }
+
       const dur = message.callDuration ?? 0;
       const m = Math.floor(dur / 60);
       const s = dur % 60;
       const dStr = m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s}s`;
-
-      let label: string;
-      if (viewerStatus === 'completed') {
-        label = `${typeName} call`;
-      } else if (viewerStatus === 'missed') {
-        label = `Missed ${message.callType} call`;
-      } else if (viewerStatus === 'no_answer') {
-        label = `${typeName} call — no answer`;
-      } else if (viewerStatus === 'declined') {
-        label = `${typeName} call declined`;
-      } else {
-        label = `${typeName} call cancelled`;
-      }
-
-      const isFailed = viewerStatus === 'missed' || viewerStatus === 'cancelled' || viewerStatus === 'declined' || viewerStatus === 'no_answer';
-      const callColor = isFailed ? '#f87171' : 'var(--accent)';
 
       return (
         <div
@@ -703,7 +710,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             }}>
               {label}
             </div>
-            {viewerStatus === 'completed' && dur > 0 && (
+            {status === 'completed' && dur > 0 && (
               <div style={{ 
                 fontSize: 12, 
                 opacity: 0.7,
