@@ -304,3 +304,19 @@ Chats without any messages will now be hidden from the sidebar by default.
 Exception: If you have an empty chat actively open (e.g., you just searched for someone and clicked to start a chat), it will still show in your sidebar so you can see who you're about to message.
 Privacy: The recipient will not see the chat in their list at all until you actually send a message.
 Cleanup: If you navigate away from an empty chat without sending anything, it will disappear from your sidebar as well.
+
+
+<-------------------------- call icons in chat window improvements -------------------------->
+incoming-inward, outgoing-outward, cancelled/declined-slash, missed/no answer-cross
+Specific Icons: Call bubbles now show different icons based on the type (voice/video) and status (Incoming, Outgoing, Missed, Declined).
+Color Coding:
+    Green for successful incoming calls.
+    Red for missed, declined, or cancelled calls.
+    Accent color for outgoing calls.
+Descriptive Labels: Instead of just "Video call", you'll now see "Missed video call", "Incoming voice call", etc., matching the styling of your call logs page.
+Incoming Video: Video icon with a down-left arrow (Green).
+Outgoing Video: Video icon with an up-right arrow (Accent color).
+Incoming Voice: Phone icon with a down-left arrow (Green).
+Outgoing Voice: Phone icon with an up-right arrow (Accent color).
+Missed/ No answer: Red phone/video icon with a cross.
+Declined/ Cancelled: Red phone/video icon with a slash.

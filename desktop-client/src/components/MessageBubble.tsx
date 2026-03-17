@@ -3,13 +3,54 @@ import { createPortal } from 'react-dom';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, VideoOff } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, VideoOff, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
 import SpoilerText from './SpoilerText';
 import ImageSpoiler from './ImageSpoiler';
+
+const VideoCallIcon = ({ type, size = 20 }: { type: 'incoming' | 'outgoing' | 'missed'; size?: number }) => {
+  return (
+    <div style={{ position: 'relative', width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Video size={size} />
+      {type === 'incoming' && (
+        <ArrowDownLeft 
+          size={size * 0.6} 
+          style={{ 
+            position: 'absolute', 
+            bottom: size * 0.7, 
+            right: -size * 0.2,
+            strokeWidth: 2
+          }} 
+        />
+      )}
+      {type === 'outgoing' && (
+        <ArrowUpRight 
+          size={size * 0.6} 
+          style={{ 
+            position: 'absolute', 
+            top: -size * 0.3, 
+            right: -size * 0.2,
+            strokeWidth: 2
+          }} 
+        />
+      )}
+      {type === 'missed' && (
+        <X 
+          size={size * 0.6} 
+          style={{ 
+            position: 'absolute', 
+            top: -size * 0.3, 
+            right: -size * 0.2,
+            strokeWidth: 2
+          }} 
+        />
+      )}
+    </div>
+  );
+};
 
 // Simple deterministic hash to generate stable waveforms
 const getHash = (str: string) => {
@@ -649,7 +690,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       if (status === 'missed' || status === 'no_answer') {
         isFailed = true;
         callColor = '#f87171';
-        iconEl = isVideo ? <VideoOff size={20} /> : <PhoneMissed size={20} />;
+        iconEl = isVideo ? <VideoCallIcon type="missed" size={20} /> : <PhoneMissed size={20} />;
         label = status === 'missed' ? `Missed ${isVideo ? 'video' : 'voice'} call` : `${isVideo ? 'Video' : 'Voice'} call — no answer`;
       } else if (status === 'declined' || status === 'cancelled') {
         isFailed = true;
@@ -658,11 +699,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         label = status === 'declined' ? `${isVideo ? 'Video' : 'Voice'} call declined` : `${isVideo ? 'Video' : 'Voice'} call cancelled`;
       } else if (direction === 'incoming') {
         callColor = '#34d399';
-        iconEl = isVideo ? <Video size={20} /> : <PhoneIncoming size={20} />;
+        iconEl = isVideo ? <VideoCallIcon type="incoming" size={20} /> : <PhoneIncoming size={20} />;
         label = `Incoming ${isVideo ? 'video' : 'voice'} call`;
       } else {
         callColor = 'var(--accent)';
-        iconEl = isVideo ? <Video size={20} /> : <PhoneOutgoing size={20} />;
+        iconEl = isVideo ? <VideoCallIcon type="outgoing" size={20} /> : <PhoneOutgoing size={20} />;
         label = `Outgoing ${isVideo ? 'video' : 'voice'} call`;
       }
 
