@@ -264,6 +264,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       list = chats.filter(c => !archivedChatIds.includes(c.chatId) && !lockedChatIds.includes(c.chatId));
     }
 
+    // Filter out empty chats (no messages) unless it's the actively open chat.
+    // This prevents "ghost" chats created by clicking a profile or searching
+    // from cluttering the sidebar for either the initiator or the recipient.
+    list = list.filter(c => c.lastMessage || c.chatId === activeChat?.chatId);
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((chat) => {

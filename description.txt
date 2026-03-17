@@ -297,3 +297,10 @@ User Experience:
 <-------------------------- user profile picture improvements -------------------------->
 The issue was caused by the crossOrigin="anonymous" attribute I added to the UserAvatar component. While it helps with some external sources, it triggers mandatory CORS checks that failed for your R2-hosted images because those images don't have the required headers configured.
 I've removed that attribute so R2 images will load normally again, while still keeping the fallback logic that switches to user initials if an image truly fails to load.
+
+
+<-------------------------- chat filter improvements -------------------------->
+Chats without any messages will now be hidden from the sidebar by default.
+Exception: If you have an empty chat actively open (e.g., you just searched for someone and clicked to start a chat), it will still show in your sidebar so you can see who you're about to message.
+Privacy: The recipient will not see the chat in their list at all until you actually send a message.
+Cleanup: If you navigate away from an empty chat without sending anything, it will disappear from your sidebar as well.
