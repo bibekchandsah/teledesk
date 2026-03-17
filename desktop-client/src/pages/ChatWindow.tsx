@@ -1251,13 +1251,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     [savedEntries]
   );
 
-  // Detect if device is primarily touch-based (mobile/tablet, not touchscreen laptop)
-  // We check if it's a touch device AND has a small screen (mobile/tablet)
+  // Track the last pointer type used (mouse, touch, pen) to adapt UI dynamically
+  const [lastPointerType, setLastPointerType] = useState<'mouse' | 'touch' | 'pen' | null>(null);
+
+  useEffect(() => {
+    const handlePointerDown = (e: PointerEvent) => {
+      setLastPointerType(e.pointerType as any);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, []);
+
+  // Detect if device is primarily touch-based or the last interaction was touch
   const isTouchDevice = useMemo(() => {
+    // If we have a definitive last pointer type, trust it
+    if (lastPointerType === 'touch') return true;
+    if (lastPointerType === 'mouse' || lastPointerType === 'pen') return false;
+
+    // Fallback to static detection
     const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const isMobileScreen = window.innerWidth <= 768; // Mobile/tablet breakpoint
     return hasTouch && isMobileScreen;
-  }, []);
+  }, [lastPointerType]);
 
   // When opened directly via URL (e.g. "open in new window"), activeChat won't be
   // set from a sidebar click.  Resolve it from the chats list as soon as it loads.
@@ -1272,6 +1287,111 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   
+  // ─── Mobile context menu (copy/cut/paste/select all) ─────────────────────
+  const [mobileCtxMenu, setMobileCtxMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleMobileContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    setMobileCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const closeMobileCtxMenu = () => setMobileCtxMenu(null);
+
+  // Clipboard helper: tries modern API first, falls back to execCommand
+  const clipboardWrite = (text: string) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).catch(() => {
+        // fallback: put text in a temp textarea and execCommand
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        tmp.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+      });
+    } else {
+      const tmp = document.createElement('textarea');
+      tmp.value = text;
+      tmp.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand('copy');
+      document.body.removeChild(tmp);
+    }
+  };
+
+  const mobileCtxCopy = () => {
+    const el = inputRef.current;
+    if (!el) return closeMobileCtxMenu();
+    el.focus();
+    const selected = el.value.substring(el.selectionStart, el.selectionEnd);
+    if (selected) {
+      // Keep selection active so execCommand works directly on the textarea
+      document.execCommand('copy');
+    }
+    closeMobileCtxMenu();
+  };
+
+  const mobileCtxCut = () => {
+    const el = inputRef.current;
+    if (!el) return closeMobileCtxMenu();
+    el.focus();
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = el.value.substring(start, end);
+    if (selected) {
+      document.execCommand('copy');
+      const newVal = el.value.substring(0, start) + el.value.substring(end);
+      setInputText(newVal);
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.selectionStart = start;
+          inputRef.current.selectionEnd = start;
+        }
+      }, 0);
+    }
+    closeMobileCtxMenu();
+  };
+
+  const mobileCtxPaste = async () => {
+    const el = inputRef.current;
+    if (!el) return closeMobileCtxMenu();
+    el.focus();
+    // Try modern clipboard API first
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        const text = await navigator.clipboard.readText();
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const newVal = el.value.substring(0, start) + text + el.value.substring(end);
+        setInputText(newVal);
+        const newCursor = start + text.length;
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.selectionStart = newCursor;
+            inputRef.current.selectionEnd = newCursor;
+          }
+        }, 0);
+        closeMobileCtxMenu();
+        return;
+      } catch {
+        // permission denied — fall through to execCommand
+      }
+    }
+    // Fallback: execCommand paste (works in WebView / Electron contexts)
+    document.execCommand('paste');
+    closeMobileCtxMenu();
+  };
+
+  const mobileCtxSelectAll = () => {
+    const el = inputRef.current;
+    if (!el) return closeMobileCtxMenu();
+    el.focus();
+    el.select();
+    closeMobileCtxMenu();
+  };
+
   // ─── Text formatting toolbar ─────────────────────────────────────────────
   const [showFormatToolbar, setShowFormatToolbar] = useState(false);
   const [formatToolbarPos, setFormatToolbarPos] = useState({ top: 0, left: 0 });
@@ -1350,7 +1470,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     draftSaveTimeoutRef.current = setTimeout(() => {
       saveDraftToBackend(chatId, inputText);
-    }, 2000); // Save after 2 seconds of inactivity
+    }, 5000); // Save after 5 seconds of inactivity
 
     return () => {
       if (draftSaveTimeoutRef.current) {
@@ -2505,12 +2625,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
   // ─── Send text message ────────────────────────────────────────────────────
   const handleSend = () => {
-    if (!inputText.trim() || !chatId || !currentUser) return;
+    // Note: We don't trim here anymore to respect the user's deliberate whitespace
+    if (!inputText || !chatId || !currentUser) return;
+    if (inputText.trim().length === 0) return; // Still guard against purely whitespace/empty messages if needed
 
     // ── Edit mode: save the edit instead of sending a new message ────────
     if (editingMsg) {
-      if (inputText.trim() !== editingMsg.content) {
-        handleEditMessage(editingMsg.messageId, inputText.trim());
+      if (inputText !== editingMsg.content) {
+        handleEditMessage(editingMsg.messageId, inputText);
       }
       setEditingMsg(null);
       setInputText('');
@@ -2525,7 +2647,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       senderId: currentUser.uid,
       senderName: currentUser.name,
       senderAvatar: currentUser.avatar,
-      content: inputText.trim(),
+      content: inputText,
       type: 'text',
       timestamp: new Date().toISOString(),
       readBy: [currentUser.uid],
@@ -2549,7 +2671,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     sendMessage({
       messageId,
       chatId,
-      content: inputText.trim(),
+      content: inputText,
       type: 'text',
       senderName: currentUser.name,
       senderAvatar: currentUser.avatar,
@@ -5192,6 +5314,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   setTimeout(() => setShowFormatToolbar(false), 200);
                 }}
                 onPaste={handlePaste}
+                onContextMenu={handleMobileContextMenu}
 
                 placeholder="Write a message..."
                 rows={1}
@@ -5214,6 +5337,70 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   boxSizing: 'border-box',
                 }}
               />
+              {/* Context menu: copy / cut / paste / select all */}
+              {mobileCtxMenu && (() => {
+                const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+                const mod = isMac ? '⌘' : 'Ctrl+';
+                const menuH = 4 * 44; // 4 items × ~44px each
+                const menuW = 160;
+                const spaceBelow = window.innerHeight - mobileCtxMenu.y;
+                const top = spaceBelow < menuH + 8
+                  ? mobileCtxMenu.y - menuH - 8
+                  : mobileCtxMenu.y;
+                const left = Math.min(mobileCtxMenu.x, window.innerWidth - menuW - 8);
+                return (
+                  <>
+                    <div
+                      onClick={closeMobileCtxMenu}
+                      style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+                    />
+                    <div
+                      style={{
+                        position: 'fixed',
+                        top: Math.max(8, top),
+                        left: Math.max(8, left),
+                        zIndex: 9999,
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                        overflow: 'hidden',
+                        minWidth: menuW,
+                      }}
+                    >
+                      {[
+                        { label: 'Copy', action: mobileCtxCopy, key: 'C' },
+                        { label: 'Cut', action: mobileCtxCut, key: 'X' },
+                        { label: 'Paste', action: mobileCtxPaste, key: 'V' },
+                        { label: 'Select All', action: mobileCtxSelectAll, key: 'A' },
+                      ].map(({ label, action, key }) => (
+                        <button
+                          key={label}
+                          onPointerDown={(e) => { e.preventDefault(); action(); }}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            width: '100%',
+                            padding: '11px 16px',
+                            background: 'none',
+                            border: 'none',
+                            borderBottom: '1px solid var(--border)',
+                            color: 'var(--text-primary)',
+                            fontSize: 14,
+                            cursor: 'pointer',
+                            gap: 16,
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span>{label}</span>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{mod}{key}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </>
           )}
 

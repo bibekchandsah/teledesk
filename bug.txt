@@ -18,6 +18,7 @@ to be implemented:
 19. (fixed) show chat them preview in both user chat window
 18. (fixed) load the older chat faster
 20. (fixed) If both user disable read or online then only both don't see each other online and read status but if anyone enable then opposite user should see enabled status of enabled user (like if A disable and B enable then B should see A is disabled and A should see B is enabled)
+21. (fixed) add copy(ctrl + c), cut(ctrl + x), select all(ctrl + a) and paste(ctrl + v) support for mobile devices
 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera

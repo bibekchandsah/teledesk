@@ -376,3 +376,26 @@ Remove the ellipsis truncation.
 Enable word-wrapping (pre-wrap) so long sentences will wrap to new lines instead of being cut off.
 You should now be able to see the entire text as the peer types it. ✅
 
+
+<-------------------------- draft message improvements -------------------------->
+set the timer to 2 seconds instead of 1 second
+respect the whitespace and adding text between the texts
+
+<-------------------------- touch devices logic -------------------------->
+document.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "touch") {
+    console.log("User touched screen");
+  } else if (e.pointerType === "mouse") {
+    console.log("User used mouse");
+  } else if (e.pointerType === "pen") {
+    console.log("User used stylus");
+  }
+});
+
+
+<--------------------------- copy, cut, paste, select all in message box ------------------------------->
+A mobileCtxMenu state that tracks where to show the popup (triggered by long-press/right-click via onContextMenu)
+The menu only renders when isTouchDevice is true (touch + screen ≤ 768px), so desktop users are unaffected
+Four actions: Copy, Cut, Paste (uses navigator.clipboard), and Select All — each with its keyboard shortcut hint
+A transparent backdrop dismisses the menu on outside tap
+onPointerDown with preventDefault() is used on buttons so the textarea doesn't lose focus/selection before the action fires
