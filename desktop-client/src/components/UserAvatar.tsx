@@ -16,6 +16,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
   online,
   onClick,
 }) => {
+  const [imageError, setImageError] = React.useState(false);
   const initials = getInitials(name || '?');
   const color = getAvatarColor(name || '');
 
@@ -26,7 +27,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
       onClick={onClick}
       title={name}
     >
-      {avatar ? (
+      {avatar && !imageError ? (
         <img
           src={avatar}
           alt={name}
@@ -37,9 +38,8 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
             objectFit: 'cover',
             display: 'block',
           }}
-          onError={(e) => {
-            // Fallback to initials on broken image
-            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          onError={() => {
+            setImageError(true);
           }}
         />
       ) : (

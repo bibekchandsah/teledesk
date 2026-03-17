@@ -25,11 +25,16 @@ export const syncUser = async (req: Request, res: Response): Promise<void> => {
     // For existing users, only sync email (name & avatar may have been customised
     // by the user and must not be overwritten with Firebase Auth values on every refresh).
     // However, if the existing user has a default name ('User' or 'Unknown'), update it.
-    // Also, if the user has no avatar, update it from Firebase Auth.
+    // Also, if the user has no avatar, or has a default placeholder, update it from OAuth.
     const existing = await getUserById(uid);
-    const updateData = existing && existing.name !== 'User' && existing.name !== 'Unknown'
-      ? { email, ...((!existing.avatar || existing.avatar === '') && avatar ? { avatar } : {}) }
-      : { name, email, avatar };
+    const hasDefaultName = !existing || existing.name === 'User' || existing.name === 'Unknown';
+    const hasNoAvatar = !existing || !existing.avatar || existing.avatar === '' || existing.avatar.includes('default');
+    
+    const updateData: Partial<SharedUser> = {
+      email,
+      ...(hasDefaultName ? { name } : {}),
+      ...(hasNoAvatar && avatar ? { avatar } : {})
+    };
 
     const user = await upsertUser(uid, updateData);
     res.json({ success: true, data: user });

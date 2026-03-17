@@ -292,3 +292,8 @@ User Experience:
     Add regex to detect @username: /@([a-zA-Z0-9._]+)/.
     Add regex to detect emails: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/.
     the clickable mentions and emails redirect feature. Clicking on any @username or email address in a message (including captions and media groups) will now automatically search for that user, create/open a private chat, and redirect you to it.
+
+
+<-------------------------- user profile picture improvements -------------------------->
+The issue was caused by the crossOrigin="anonymous" attribute I added to the UserAvatar component. While it helps with some external sources, it triggers mandatory CORS checks that failed for your R2-hosted images because those images don't have the required headers configured.
+I've removed that attribute so R2 images will load normally again, while still keeping the fallback logic that switches to user initials if an image truly fails to load.
