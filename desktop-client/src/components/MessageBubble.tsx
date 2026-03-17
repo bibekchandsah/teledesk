@@ -573,25 +573,59 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     const target = msg || message;
     const isImage = target.type === 'image' || target.type === 'gif' || target.type === 'sticker';
     if (isImage && target.fileUrl) {
-      try {
-        if (window.electronAPI?.copyImageToClipboard) {
+      // 1. Electron native copy
+      if (window.electronAPI?.copyImageToClipboard) {
+        try {
           const ok = await window.electronAPI.copyImageToClipboard(target.fileUrl);
           if (ok) { showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`); return; }
-        }
+        } catch {}
+      }
+      // 2. Modern Clipboard API (desktop browsers / secure contexts with permission)
+      try {
         const res = await fetch(target.fileUrl);
         const blob = await res.blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
-      } catch {
-        if (target.fileUrl) {
-          if (window.electronAPI?.copyTextToClipboard) {
-            window.electronAPI.copyTextToClipboard(target.fileUrl);
-          } else {
-            navigator.clipboard.writeText(target.fileUrl).catch(() => {});
-          }
+        // Normalise to image/png which ClipboardItem requires on most browsers
+        let pngBlob = blob;
+        if (blob.type !== 'image/png') {
+          pngBlob = await new Promise<Blob>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              canvas.getContext('2d')!.drawImage(img, 0, 0);
+              canvas.toBlob(b => b ? resolve(b) : reject(), 'image/png');
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+          });
         }
-        showToast('Link copied');
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+        showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
+        return;
+      } catch {}
+      // 3. Mobile fallback: trigger native share/save instead of silently copying URL
+      if (navigator.share) {
+        try {
+          const res = await fetch(target.fileUrl);
+          const blob = await res.blob();
+          const ext = blob.type.split('/')[1] || 'png';
+          const file = new File([blob], `image.${ext}`, { type: blob.type });
+          await navigator.share({ files: [file] });
+          return;
+        } catch {}
       }
+      // 4. Last resort: download the image
+      try {
+        const a = document.createElement('a');
+        a.href = target.fileUrl;
+        a.download = 'image';
+        a.click();
+        showToast('Image saved');
+        return;
+      } catch {}
+      showToast('Unable to copy image on this device');
     } else if (target.content) {
       if (window.electronAPI?.copyTextToClipboard) {
         window.electronAPI.copyTextToClipboard(target.content);
