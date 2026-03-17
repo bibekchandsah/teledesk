@@ -1183,7 +1183,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               {message.isEdited && !message.deleted && (
                 <span style={{ fontSize: 10, opacity: 0.65, fontStyle: 'italic' }}>edited</span>
               )}
-              {isOwn && !message.deleted && currentUserShowMessageStatus && (
+              {isOwn && !message.deleted && otherUserShowMessageStatus && (
                 <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
                   {message.readBy.length > 1
                     ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />

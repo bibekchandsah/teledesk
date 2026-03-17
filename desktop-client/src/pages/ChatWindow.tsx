@@ -1350,7 +1350,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     draftSaveTimeoutRef.current = setTimeout(() => {
       saveDraftToBackend(chatId, inputText);
-    }, 1000); // Save after 1 second of inactivity
+    }, 2000); // Save after 2 seconds of inactivity
 
     return () => {
       if (draftSaveTimeoutRef.current) {

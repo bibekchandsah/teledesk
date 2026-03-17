@@ -107,7 +107,7 @@ Last seen Invalid Date
 (fixed) reverse scrolling optimization for chat window
 
 (partially) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
-draft message is hard to write as it
+draft message is currently hard to write as it instead of everysecond update it should update after user stop typing for 2 second also respect the whitespace and adding text between the texts
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
 add flip camera in pip camera and hide icon after 3 second of mouse inactive

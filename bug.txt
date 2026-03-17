@@ -17,12 +17,12 @@ to be implemented:
 17. (fixed) Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
 19. (fixed) show chat them preview in both user chat window
 18. (fixed) load the older chat faster
+20. (fixed) If both user disable read or online then only both don't see each other online and read status but if anyone enable then opposite user should see enabled status of enabled user (like if A disable and B enable then B should see A is disabled and A should see B is enabled)
 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
+15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 
 14. single emoji to full row animated 
-15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 16. in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
 19. Store deleted account in separate table
-20. If both user disable read or online then only both don't see each other online and read status but if anyone enable then opposite user should see enabled status of enabled user (like if A disable and B enable then B should see A is disabled and A should see B is enabled)

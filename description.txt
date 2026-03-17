@@ -362,3 +362,11 @@ A ❌ disabled, B ❌ disabled  →  ❌ No  →  ❌ No  →  ❌ No  →  ❌ 
 
 Online dot (ChatWindow.tsx): Now only checks if the peer has showActiveStatus enabled. Your own setting no longer affects whether you can see others.
 Read ticks (MessageBubble.tsx): Now only checks if the message sender has showMessageStatus enabled. The receiver's setting no longer blocks the sender from seeing ticks.
+
+
+
+Scenario  → A sees B's ticks?  →  B sees A's ticks?
+A ✅ enabled, B ✅ enabled  →  ✅ Yes  →  ✅ Yes
+A ❌ disabled, B ✅ enabled  →  ✅ Yes  →  ❌ No
+A ✅ enabled, B ❌ disabled  →  ❌ No  →  ✅ Yes
+A ❌ disabled, B ❌ disabled  →  ❌ No  →  ❌ No
