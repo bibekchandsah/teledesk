@@ -2062,8 +2062,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (!activeChat) return null;
     const myTheme = currentUser?.chatThemes?.[activeChat.chatId];
     
-    // 1. Check for real-time preview (live customization from peer)
-    if (peer && previewThemes[peer.uid]?.[activeChat.chatId]) {
+    // A concrete theme usually has a backgroundImage or specific backgroundColor.
+    // If it only has basic properties (opacity, blur) or metadata (peerThemeIgnored), it's a fallback state.
+    const hasMyOwnTheme = myTheme && (myTheme.backgroundImage || myTheme.backgroundColor);
+
+    // 1. Check if I have my own theme setup first — My Theme > Peer Theme
+    if (hasMyOwnTheme) {
+      return myTheme;
+    }
+
+    // 2. Check for real-time preview (live customization from peer), but only if I don't have my own theme and haven't ignored theirs.
+    if (peer && previewThemes[peer.uid]?.[activeChat.chatId] && !myTheme?.peerThemeIgnored) {
       const pTheme = previewThemes[peer.uid][activeChat.chatId];
       // Object.keys(pTheme).length === 0 means peer explicitly disabled "Show to Others" or cleared theme
       if (Object.keys(pTheme).length > 0) {
@@ -2071,13 +2080,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       }
     }
 
-    // 2. Check if peer shared their theme (persisted)
-    if (peer && peer.profile?.chatThemes?.[activeChat.chatId]?.showToOthers) {
+    // 3. Fall back to peer's theme if they shared it AND I haven't ignored it
+    if (peer && peer.profile?.chatThemes?.[activeChat.chatId]?.showToOthers && !myTheme?.peerThemeIgnored) {
       const pTheme = peer.profile.chatThemes[activeChat.chatId];
       return { ...pTheme, peerOverrides: myTheme?.peerOverrides };
     }
     
-    // 3. Use own theme
+    // 4. Default back to basic theme object (or null) if nothing is active
     return myTheme || null;
   }, [activeChat, currentUser?.chatThemes, peer, previewThemes]);
 
