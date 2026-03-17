@@ -452,6 +452,7 @@ interface MessageBubbleProps {
   onPreview?: (message: Message) => void;
   currentUserId?: string;
   getUserName?: (uid: string) => string;
+  onMentionClick?: (text: string, type: 'username' | 'email') => void;
 }
 
 
@@ -482,6 +483,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onPreview,
   currentUserId,
   getUserName,
+  onMentionClick,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -760,7 +762,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               />
             )}
             {message.content && (
-              <div className="message-caption" style={{ margin: 0 }}>{renderMessageText(message.content, searchQuery, isOwn)}</div>
+              <div className="message-caption" style={{ margin: 0 }}>{renderMessageText(message.content, searchQuery, isOwn, onMentionClick)}</div>
             )}
           </div>
         );
@@ -851,7 +853,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       default:
         return (
-          <div style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery, isOwn)}</div>
+          <div style={{ margin: 0, wordBreak: 'break-word' }}>{renderMessageText(message.content ?? '', searchQuery, isOwn, onMentionClick)}</div>
         );
     }
   };
@@ -1294,7 +1296,7 @@ const highlightText = (text: string, query?: string): React.ReactNode => {
 };
 
 /** Detects URLs in text and makes them clickable, while also highlighting search queries. */
-const renderMessageText = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
+export const renderMessageText = (text: string, query?: string, isOwn?: boolean, onMentionClick?: (text: string, type: 'username' | 'email') => void): React.ReactNode => {
   if (!text) return null;
 
   // First, handle multi-line code blocks before splitting by lines
@@ -1310,7 +1312,7 @@ const renderMessageText = (text: string, query?: string, isOwn?: boolean): React
       const beforeText = text.substring(lastIndex, match.index);
       parts.push(
         <React.Fragment key={`before-${partIndex}`}>
-          {renderTextWithFormatting(beforeText, query, isOwn)}
+          {renderTextWithFormatting(beforeText, query, isOwn, onMentionClick)}
         </React.Fragment>
       );
       partIndex++;
@@ -1346,16 +1348,16 @@ const renderMessageText = (text: string, query?: string, isOwn?: boolean): React
     const remainingText = text.substring(lastIndex);
     parts.push(
       <React.Fragment key={`remaining-${partIndex}`}>
-        {renderTextWithFormatting(remainingText, query, isOwn)}
+        {renderTextWithFormatting(remainingText, query, isOwn, onMentionClick)}
       </React.Fragment>
     );
   }
   
-  return parts.length > 0 ? parts : renderTextWithFormatting(text, query, isOwn);
+  return parts.length > 0 ? parts : renderTextWithFormatting(text, query, isOwn, onMentionClick);
 };
 
 /** Render text with line breaks and inline formatting */
-const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
+const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean, onMentionClick?: (text: string, type: 'username' | 'email') => void): React.ReactNode => {
   // First check for spoilers (can span multiple lines)
   const spoilerRegex = /\|\|([\s\S]+?)\|\|/;
   const spoilerMatch = text.match(spoilerRegex);
@@ -1367,11 +1369,11 @@ const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean)
     
     return (
       <>
-        {renderTextWithFormatting(before, query, isOwn)}
+        {renderTextWithFormatting(before, query, isOwn, onMentionClick)}
         <SpoilerText>
-          {renderTextWithFormatting(spoilerContent, query, isOwn)}
+          {renderTextWithFormatting(spoilerContent, query, isOwn, onMentionClick)}
         </SpoilerText>
-        {renderTextWithFormatting(after, query, isOwn)}
+        {renderTextWithFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }
@@ -1407,7 +1409,7 @@ const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean)
               opacity: 0.8,
               fontStyle: 'italic'
             }}>
-              {parseInlineFormatting(lineContent, query, isOwn)}
+              {parseInlineFormatting(lineContent, query, isOwn, onMentionClick)}
             </div>
           );
         }
@@ -1415,7 +1417,7 @@ const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean)
         return (
           <>
             {linePrefix}
-            {parseInlineFormatting(lineContent, query, isOwn)}
+            {parseInlineFormatting(lineContent, query, isOwn, onMentionClick)}
           </>
         );
       })()}
@@ -1424,10 +1426,10 @@ const renderTextWithFormatting = (text: string, query?: string, isOwn?: boolean)
 };
 
 /** Parse inline formatting (bold, italic, strikethrough, underline, inline code, URLs) with support for multiple formats */
-const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): React.ReactNode => {
+const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean, onMentionClick?: (text: string, type: 'username' | 'email') => void): React.ReactNode => {
   if (!text) return null;
   
-  // Priority order: Markdown Links > URLs > Code > Combined text formatting
+  // Priority order: Markdown Links > URLs > Emails > Mentions > Code > Combined text formatting
   
   // 0. First, handle markdown-style links [text](url)
   const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/;
@@ -1440,7 +1442,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     
     return (
       <>
-        {parseInlineFormatting(before, query, isOwn)}
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
         <span
           onClick={async (e) => {
             e.stopPropagation();
@@ -1471,7 +1473,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
         >
           {highlightText(linkText, query)}
         </span>
-        {parseInlineFormatting(after, query, isOwn)}
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }
@@ -1486,7 +1488,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     
     return (
       <>
-        {parseInlineFormatting(before, query, isOwn)}
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
         <span
           onClick={async (e) => {
             e.stopPropagation();
@@ -1516,7 +1518,76 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
         >
           {highlightText(url, query)}
         </span>
-        {parseInlineFormatting(after, query, isOwn)}
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
+      </>
+    );
+  }
+  
+  // 1.1 Handle emails
+  const emailRegex = /\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b/;
+  const emailMatch = text.match(emailRegex);
+  if (emailMatch && emailMatch.index !== undefined) {
+    const before = text.substring(0, emailMatch.index);
+    const email = emailMatch[0];
+    const after = text.substring(emailMatch.index + email.length);
+    return (
+      <>
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onMentionClick) {
+              onMentionClick(email, 'email');
+            }
+          }}
+          style={{ 
+            color: isOwn ? '#fff' : 'var(--accent)', 
+            textDecoration: 'underline', 
+            cursor: 'pointer',
+            transition: 'opacity 0.2s',
+            fontWeight: 500
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {highlightText(email, query)}
+        </span>
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
+      </>
+    );
+  }
+
+  // 1.2 Handle mentions (@username)
+  const mentionRegex = /@([a-zA-Z0-9._]+)/;
+  const mentionMatch = text.match(mentionRegex);
+  if (mentionMatch && mentionMatch.index !== undefined) {
+    const before = text.substring(0, mentionMatch.index);
+    const mention = mentionMatch[0];
+    const username = mentionMatch[1];
+    const after = text.substring(mentionMatch.index + mention.length);
+    return (
+      <>
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onMentionClick) {
+              onMentionClick(username, 'username');
+            }
+          }}
+          style={{ 
+            color: isOwn ? '#fff' : 'var(--accent)', 
+            textDecoration: 'underline', 
+            cursor: 'pointer',
+            transition: 'opacity 0.2s',
+            fontWeight: 600
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          {highlightText(mention, query)}
+        </span>
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }
@@ -1531,7 +1602,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     
     return (
       <>
-        {parseInlineFormatting(before, query, isOwn)}
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
         <code
           style={{
             backgroundColor: 'rgba(255,255,255,0.1)',
@@ -1543,7 +1614,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
         >
           {highlightText(codeText, query)}
         </code>
-        {parseInlineFormatting(after, query, isOwn)}
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }
@@ -1648,7 +1719,7 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     const after = text.substring(bestMatch.end);
     
     // Apply formats based on flags
-    let formattedContent: React.ReactNode = parseInlineFormatting(bestMatch.content, query, isOwn);
+    let formattedContent: React.ReactNode = parseInlineFormatting(bestMatch.content, query, isOwn, onMentionClick);
     
     // Apply in order: bold, italic, underline, strikethrough, spoiler (outermost)
     if (bestMatch.flags & 0b00001) { // bold
@@ -1669,9 +1740,9 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     
     return (
       <>
-        {parseInlineFormatting(before, query, isOwn)}
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
         {formattedContent}
-        {parseInlineFormatting(after, query, isOwn)}
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }
@@ -1736,26 +1807,26 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean): R
     
     switch (first.type) {
       case 'bold':
-        wrappedContent = <strong>{parseInlineFormatting(formattedText, query, isOwn)}</strong>;
+        wrappedContent = <strong>{parseInlineFormatting(formattedText, query, isOwn, onMentionClick)}</strong>;
         break;
       case 'italic':
-        wrappedContent = <em>{parseInlineFormatting(formattedText, query, isOwn)}</em>;
+        wrappedContent = <em>{parseInlineFormatting(formattedText, query, isOwn, onMentionClick)}</em>;
         break;
       case 'underline':
-        wrappedContent = <span style={{ textDecoration: 'underline' }}>{parseInlineFormatting(formattedText, query, isOwn)}</span>;
+        wrappedContent = <span style={{ textDecoration: 'underline' }}>{parseInlineFormatting(formattedText, query, isOwn, onMentionClick)}</span>;
         break;
       case 'strikethrough':
-        wrappedContent = <span style={{ textDecoration: 'line-through' }}>{parseInlineFormatting(formattedText, query, isOwn)}</span>;
+        wrappedContent = <span style={{ textDecoration: 'line-through' }}>{parseInlineFormatting(formattedText, query, isOwn, onMentionClick)}</span>;
         break;
       default:
-        wrappedContent = parseInlineFormatting(formattedText, query, isOwn);
+        wrappedContent = parseInlineFormatting(formattedText, query, isOwn, onMentionClick);
     }
     
     return (
       <>
-        {parseInlineFormatting(before, query, isOwn)}
+        {parseInlineFormatting(before, query, isOwn, onMentionClick)}
         {wrappedContent}
-        {parseInlineFormatting(after, query, isOwn)}
+        {parseInlineFormatting(after, query, isOwn, onMentionClick)}
       </>
     );
   }

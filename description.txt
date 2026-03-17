@@ -284,3 +284,11 @@ Testing Checklist:
     Switch between chats and verify correct scroll behavior
     Scroll up to read older messages and verify position is maintained
     Verify scroll arrows appear and function correctly
+
+
+<-------------------------- username/email click to chat -------------------------->
+User Experience:
+    Clicking on username/email will redirect it to their chat
+    Add regex to detect @username: /@([a-zA-Z0-9._]+)/.
+    Add regex to detect emails: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/.
+    the clickable mentions and emails redirect feature. Clicking on any @username or email address in a message (including captions and media groups) will now automatically search for that user, create/open a private chat, and redirect you to it.

@@ -1,4 +1,0 @@
-src/pages/ChatWindow.tsx(199,56): error TS2554: Expected 2 arguments, but got 3.
-src/pages/ChatWindow.tsx(205,56): error TS2554: Expected 2 arguments, but got 3.
-src/pages/ChatWindow.tsx(213,56): error TS2554: Expected 2 arguments, but got 3.
-src/pages/ChatWindow.tsx(817,49): error TS2554: Expected 2 arguments, but got 3.

@@ -7,7 +7,7 @@ const genId = () =>
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
-import MessageBubble from '../components/MessageBubble';
+import MessageBubble, { renderMessageText } from '../components/MessageBubble';
 import TypingIndicator from '../components/TypingIndicator';
 import UserAvatar from '../components/UserAvatar';
 import { listenToMessages } from '../services/firebaseService';
@@ -68,6 +68,7 @@ const MediaGroupBubble = ({
   selectedIds,
   onToggleSelect,
   highlightedMsgId,
+  onMentionClick,
 }: {
   msgs: Message[];
   firstMsg: Message;
@@ -90,6 +91,7 @@ const MediaGroupBubble = ({
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   highlightedMsgId?: string | null;
+  onMentionClick?: (text: string, type: 'username' | 'email') => void;
 }) => {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number, msg: Message } | null>(null);
   const [isGroupHovered, setIsGroupHovered] = useState(false);
@@ -208,7 +210,7 @@ const MediaGroupBubble = ({
                 maxWidth: '100%',
                 background: isOwn ? 'var(--accent)' : 'var(--bg-secondary)',
                 borderRadius: '12px 12px 0px 0px',
-              }}>{cap}</div>
+              }}>{lastMsg.content && renderMessageText(cap, '', isOwn, onMentionClick)}</div>
             );
           })()}
           <div style={{
@@ -582,7 +584,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const navigateRouter = useNavigate();
   // When embedded as a sidebar panel (chatIdProp provided), navigation is a no-op
   const navigate = chatIdProp ? () => {} : navigateRouter;
-  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat, setUserProfile } =
+  const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, setChats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat, setUserProfile } =
     useChatStore();
   const { currentUser, setCurrentUser } = useAuthStore();
   const { startCall } = useCallContext();
@@ -748,6 +750,43 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   );
   const [giphyKeyInput, setGiphyKeyInput] = useState('');
   const [giphyError, setGiphyError] = useState(false);
+  
+  const handleMentionClick = useCallback(async (text: string, type: 'username' | 'email') => {
+    if (!currentUser) return;
+    
+    // Clean up the text (remove @ if it's a username)
+    const query = type === 'username' ? text.replace(/^@/, '') : text;
+    
+    try {
+      const { searchUsers, createPrivateChat, getChats } = await import('../services/apiService');
+      const res = await searchUsers(query);
+      if (res.success && res.data && res.data.length > 0) {
+        // Find exact match
+        const user = res.data.find(u => 
+          type === 'username' 
+            ? u.username?.toLowerCase() === query.toLowerCase()
+            : u.email?.toLowerCase() === query.toLowerCase()
+        );
+        
+        if (user) {
+          const chatRes = await createPrivateChat(user.uid);
+          if (chatRes.success && chatRes.data) {
+            const newChatId = chatRes.data.chatId;
+            // Pre-populate profile
+            setUserProfile(user);
+            // Refresh chats list to ensure it's visible in sidebar
+            const refreshed = await getChats();
+            if (refreshed.success && refreshed.data) setChats(refreshed.data);
+            // Navigate to the chat
+            navigate(`/chats/${newChatId}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to resolve mention:', err);
+    }
+  }, [currentUser, navigate, setUserProfile, setChats]);
+
   const mediaPickerRef = useRef<HTMLDivElement>(null);
 
   
@@ -3362,6 +3401,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelectMessage}
                   highlightedMsgId={highlightedMsgId}
+                  onMentionClick={handleMentionClick}
                 />
               );
             }
@@ -3463,6 +3503,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     onMessageReaction={selectionMode ? undefined : handleReact}
                     currentUserId={currentUser?.uid}
                     getUserName={(uid: string) => uid === currentUser?.uid ? 'You' : (userProfiles[uid]?.name || 'Unknown')}
+                    onMentionClick={handleMentionClick}
                   />
                   </div>
                 </div>
@@ -3868,6 +3909,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             padding: '8px 16px',
             borderTop: '1px solid var(--border)',
             backgroundColor: 'var(--bg-tertiary)',
+            zIndex: 1,
           }}
         >
           <CornerUpLeft size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
