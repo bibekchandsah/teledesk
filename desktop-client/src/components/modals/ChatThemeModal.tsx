@@ -108,16 +108,40 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, p
   const confirmRemoveTheme = async () => {
     setSaving(true);
     try {
-      const res = await removeChatTheme(chatId);
-      if (res.success) {
-        // Update local user state
-        if (currentUser) {
-          const updatedThemes = { ...currentUser.chatThemes };
-          delete updatedThemes[chatId];
-          setCurrentUser({ ...currentUser, chatThemes: updatedThemes });
+      if (activeSource === 'me') {
+        // Removing own theme
+        const res = await removeChatTheme(chatId);
+        if (res.success) {
+          if (currentUser) {
+            const updatedThemes = { ...currentUser.chatThemes };
+            delete updatedThemes[chatId];
+            setCurrentUser({ ...currentUser, chatThemes: updatedThemes });
+          }
+          onSave({} as ChatTheme);
+          onClose();
         }
-        onSave({} as ChatTheme);
-        onClose();
+      } else {
+        // Removing peer's shared theme (ignoring it and clearing overrides)
+        const myTheme = currentUser?.chatThemes?.[chatId] || { opacity: 0.8, blur: 5, showToOthers: false };
+        const updatedTheme: ChatTheme = {
+          ...myTheme,
+          opacity: myTheme.opacity ?? 0.8,
+          blur: myTheme.blur ?? 5,
+          showToOthers: myTheme.showToOthers ?? false,
+          peerThemeIgnored: true, // New flag to indicate we don't want to see their theme
+          peerOverrides: undefined // Clear any custom overrides
+        };
+        
+        const res = await setChatTheme(chatId, updatedTheme);
+        if (res.success) {
+          if (currentUser) {
+            const updatedThemes = { ...currentUser.chatThemes, [chatId]: updatedTheme };
+            setCurrentUser({ ...currentUser, chatThemes: updatedThemes });
+          }
+          // The ChatWindow displayTheme memo will now see peerThemeIgnored and fallback to 'me' or default
+          onSave(updatedTheme);
+          onClose();
+        }
       }
     } catch (error) {
       console.error('Failed to remove theme:', error);
@@ -460,7 +484,7 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, p
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 12 }}>
-          {currentTheme && (
+          {((activeSource === 'me' && currentTheme) || (activeSource === 'peer' && peerTheme && !theme.peerThemeIgnored)) && (
             <button
               onClick={handleRemoveTheme}
               disabled={saving}
@@ -508,8 +532,11 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, p
         isOpen={showConfirm}
         onClose={() => setShowConfirm(false)}
         onConfirm={confirmRemoveTheme}
-        title="Remove Theme?"
-        message="Are you sure you want to remove the custom theme for this chat? This will restore the default background for you."
+        title={activeSource === 'me' ? "Remove My Theme?" : "Remove Peer's Theme?"}
+        message={activeSource === 'me' 
+          ? "Are you sure you want to remove your custom theme? This will restore the default background (or the peer's shared theme if available)."
+          : "Are you sure you want to disable the peer's shared theme? This will restore your own theme (or the default background)."
+        }
         confirmText="Remove"
         type="danger"
       />

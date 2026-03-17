@@ -36,6 +36,7 @@ export interface ChatTheme {
     opacity?: number;
     blur?: number;
   };
+  peerThemeIgnored?: boolean; // Used locally to flag that the user explicitly removed the peer's shared theme
 }
 
 export interface DeviceSession {

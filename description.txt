@@ -329,3 +329,11 @@ Real-time Socket Logic: Added new socket events to handle preview states, ensuri
 Peer Theme in Modal: When you open your Chat Theme modal, if your peer is sharing a theme, you'll see it in the preview window.
 Manual Overrides: You'll be able to manually adjust the Opacity and Blur levels for how you see their shared theme, without affecting how they see it.
 Tie-breaking: These settings will automatically apply whenever you're using a peer's shared theme.
+When a user removes "My Theme", it will clear their own theme and fallback to the peer's shared theme (if one exists). If the user removes "Peer's Shared Theme" (which is essentially disabling the peer's theme for themselves), it will fall back to their own theme.
+
+1. Removing "My Theme":
+    When you are on the "My Theme" tab and click "Remove Theme", it entirely deletes your personal custom theme from your account for that chat.
+    Fallback: The chat window will immediately recalculate the active theme. Since your theme is gone, it will look to see if the peer has shared a theme. If they have, it will fall back to their shared theme. If they haven't (or if they turned off "Show to Others"), it will fall back to the default app background.
+2. Removing "Peer's Shared Theme":
+    When you are on the "Peer's Shared Theme" tab and click "Remove Theme", it doesn't try to delete their theme (since you can't control their account). Instead, it clears any local overrides you made and sets a special peerThemeIgnored flag on your end.
+    Fallback: The chat window sees this ignore flag and completely skips rendering the peer's theme for you. It will immediately fall back to your own "My Theme" if you have one set. If you don't have your own theme set, it will safely drop down to the default app background.
