@@ -2826,6 +2826,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       e.preventDefault();
       handleSend();
     }
+
+    // ArrowUp with empty input → edit last own message
+    if (e.key === 'ArrowUp' && !inputText && !editingMsg) {
+      const lastOwn = [...chatMessages]
+        .reverse()
+        .find((m) => m.senderId === currentUser?.uid && m.type === 'text' && !m.deleted);
+      if (lastOwn) {
+        e.preventDefault();
+        setEditingMsg(lastOwn);
+        setReplyingTo(null);
+        setInputText(lastOwn.content ?? '');
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.style.height = 'auto';
+            inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+            const len = inputRef.current.value.length;
+            inputRef.current.setSelectionRange(len, len);
+          }
+        }, 0);
+      }
+    }
   };
 
   // ─── Recording Handlers ───────────────────────────────────────────────────
