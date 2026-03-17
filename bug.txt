@@ -22,9 +22,9 @@ to be implemented:
 16. (fixed) in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
 19. (fixed) Store deleted account in separate table
 14. (fixed)single emoji to full row animated 
+22. (fixed) pressing up arrow will trigger last message edit mode
 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
-22. pressing up arrow will trigger last message edit mode
 

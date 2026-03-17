@@ -547,7 +547,33 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [toast, setToast] = useState<string | null>(null);
   const emojiBarRef = useRef<HTMLDivElement>(null);
   const smilePlusBtnRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Global click-away listener for extended emoji picker
+  useEffect(() => {
+    if (!showExtended) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking the + button (it handles its own toggle)
+      if (smilePlusBtnRef.current?.contains(target)) return;
+      // Don't close if clicking inside the picker
+      if (pickerRef.current?.contains(target)) return;
+      // Don't close if clicking inside the emoji bar
+      if (emojiBarRef.current?.contains(target)) return;
+
+      setShowExtended(false);
+      setPickerPos(null);
+      // Also close the small bar if we're clicking completely away
+      if (!emojiBarRef.current?.contains(target)) {
+        setShowEmojiBar(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExtended]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -694,7 +720,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     // Small delay so user can move mouse from bubble to emoji bar
     setTimeout(() => {
-      if (!emojiBarRef.current?.matches(':hover')) {
+      if (!emojiBarRef.current?.matches(':hover') && !showExtended) {
         setShowEmojiBar(false);
         setIsEmojiBarHovered(false);
         setShowExtended(false);
@@ -999,7 +1025,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         {showEmojiBar && !message.deleted && onMessageReaction && (
           <div
             ref={emojiBarRef}
-            onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); setPickerPos(null); }}
+            onMouseLeave={() => { 
+              if (!showExtended) {
+                setShowEmojiBar(false); 
+                setShowExtended(false); 
+                setPickerPos(null); 
+              }
+            }}
             style={{
               position: 'absolute',
               [isOwn ? 'right' : 'left']: isTouchDevice ? 0 : 'calc(100% - 48px)',
@@ -1142,6 +1174,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         {/* ─── Emoji Picker Portal (renders inside chat window, never overlaps sidebar) ── */}
         {showExtended && pickerPos && createPortal(
           <div
+            ref={pickerRef}
             onMouseDown={e => e.stopPropagation()}
             style={{
               position: 'absolute',
@@ -1149,6 +1182,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               bottom: pickerPos.bottom,
               left: pickerPos.left,
               zIndex: 10000,
+              pointerEvents: 'auto',
               backgroundColor: 'var(--bg-secondary)',
               borderRadius: 12,
               boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
