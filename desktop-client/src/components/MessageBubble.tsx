@@ -1002,7 +1002,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); setPickerPos(null); }}
             style={{
               position: 'absolute',
-              [isOwn ? 'right' : 'left']: 0,
+              // [isOwn ? 'right' : 'left']: 0,
+              [isOwn ? 'right' : 'left']: 'calc(100% - 48px)',
+              [isOwn ? (isTouchDevice ? 'right' : 'left') : (isTouchDevice ? 'left' : 'right')]: 0,
               bottom: '100%',
               marginBottom: 6,
               zIndex: 200,
@@ -1022,6 +1024,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                flexDirection: isOwn ? 'row-reverse' : 'row',
                 gap: (isEmojiBarHovered || isTouchDevice) ? 2 : 0,
                 padding: '4px 8px',
                 backgroundColor: 'var(--bg-secondary)',
@@ -1033,6 +1036,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 width: (isEmojiBarHovered || isTouchDevice) ? 265 : 48,
                 maxWidth: (isEmojiBarHovered || isTouchDevice) ? 510 : 48,
                 height: 36,
+                // justifyContent: 'flex-start',
                 justifyContent: 'center',
                 overflow: 'hidden',
                 whiteSpace: 'nowrap',
