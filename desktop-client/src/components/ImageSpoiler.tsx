@@ -39,9 +39,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
     speed: number;
   }
 
-  // Run particle animation whenever the spoiler overlay is visible
+  // Run particle animation whenever the spoiler overlay is visible AND in viewport
   useEffect(() => {
-    // Show overlay when: (a) not yet revealed, or (b) disableReveal (upload preview)
     const overlayVisible = !isRevealed || disableReveal;
     if (!overlayVisible) return;
 
@@ -49,11 +48,18 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
+
+    let isVisible = true;
+    const intersectionObserver = new IntersectionObserver((entries) => {
+      isVisible = entries[0].isIntersecting;
+    }, { threshold: 0.1 });
+    intersectionObserver.observe(container);
 
     const updateSize = () => {
       const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
       canvas.width = rect.width;
       canvas.height = rect.height;
     };
@@ -62,24 +68,30 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(container);
 
-    const particleCount = Math.max(50, Math.floor((canvas.width * canvas.height) / 1000));
+    // Reduced particle count for performance (cap at 80)
+    const particleCount = Math.min(80, Math.max(30, Math.floor((canvas.width * canvas.height) / 1500)));
     particlesRef.current = Array.from({ length: particleCount }, () => {
       const angle = Math.random() * Math.PI * 2;
-      const speed = Math.random() * 0.4 + 0.3;
+      const speed = Math.random() * 0.4 + 0.2;
       return {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        size: Math.random() * 3 + 1,
-        opacity: Math.random() * 0.7 + 0.3,
-        baseOpacity: Math.random() * 0.7 + 0.3,
+        size: Math.random() * 2 + 0.5,
+        opacity: Math.random() * 0.5 + 0.2,
+        baseOpacity: Math.random() * 0.5 + 0.2,
         angle,
         speed,
       };
     });
 
     const animate = () => {
+      if (!isVisible) {
+        animationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
       timeRef.current += 0.016;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -92,23 +104,17 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
         if (particle.y < -10) particle.y = canvas.height + 10;
         if (particle.y > canvas.height + 10) particle.y = -10;
 
-        const pulse = Math.sin(timeRef.current * 2 + index * 0.5) * 0.2;
-        particle.opacity = particle.baseOpacity + pulse;
+        const pulse = Math.sin(timeRef.current * 1.5 + index * 0.5) * 0.15;
+        const currentOpacity = Math.max(0, Math.min(1, particle.opacity + pulse));
 
-        const gradient = ctx.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, particle.size * 4
-        );
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${particle.opacity})`);
-        gradient.addColorStop(0.5, `rgba(255, 255, 255, ${particle.opacity * 0.3})`);
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-        ctx.fillStyle = gradient;
+        // Simplified drawing: Solid white circles with varying opacity
+        // Radial gradients at 60fps are expensive when multiple spoilers are active
+        ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity * 0.5})`;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size * 4, 0, Math.PI * 2);
+        ctx.arc(particle.x, particle.y, particle.size * 2, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, particle.opacity * 1.5)})`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
         ctx.fill();
@@ -120,6 +126,7 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
     animate();
 
     return () => {
+      intersectionObserver.disconnect();
       resizeObserver.disconnect();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
@@ -171,6 +178,7 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
             pointerEvents: 'none',
+            willChange: 'transform, filter',
           }}
         />
       ) : (
@@ -185,6 +193,7 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
             pointerEvents: 'none',
+            willChange: 'transform, filter',
           }}
         />
       )}
