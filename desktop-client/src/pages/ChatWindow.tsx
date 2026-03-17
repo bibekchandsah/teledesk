@@ -146,7 +146,10 @@ const MediaGroupBubble = ({
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         showToast('Image copied to clipboard');
       }
-    } catch { showToast('Failed to copy image'); }
+    } catch (err) { 
+      console.error('[CopyImage] Failed:', err);
+      showToast('Failed to copy image'); 
+    }
   };
 
   const handleEmojiClick = (msgId: string, emoji: string) => {
@@ -545,22 +548,8 @@ const MediaGroupBubble = ({
                 navigator.clipboard.writeText(m.content).catch(() => {});
               }
               showToast('Message copied to clipboard');
-            } else if (m.type === 'image') {
+            } else if (m.type === 'image' || m.type === 'gif' || m.type === 'sticker') {
               handleCopyImage(m);
-            } else if (m.type === 'gif' && m.fileUrl) {
-              if (window.electronAPI?.copyTextToClipboard) {
-                window.electronAPI.copyTextToClipboard(m.fileUrl);
-              } else {
-                navigator.clipboard.writeText(m.fileUrl).catch(() => {});
-              }
-              showToast('GIF copied to clipboard');
-            } else if (m.type === 'sticker' && m.fileUrl) {
-              if (window.electronAPI?.copyTextToClipboard) {
-                window.electronAPI.copyTextToClipboard(m.fileUrl);
-              } else {
-                navigator.clipboard.writeText(m.fileUrl).catch(() => {});
-              }
-              showToast('Sticker copied to clipboard');
             }
           }}
           onDownload={onDownload}
@@ -1435,8 +1424,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       const currentDraft = state.drafts[chatId];
       const prevDraft = prevState.drafts[chatId];
       
-      // Only update if the draft changed and we're on the same chat
-      if (currentDraft !== prevDraft && currentDraft !== undefined) {
+      // Only update if the draft changed and it's DIFFERENT from what we currently have in the input
+      // This prevents cursor jumps when the local draft-save cycle finishes.
+      if (currentDraft !== prevDraft && currentDraft !== undefined && currentDraft !== inputText) {
         setInputText(currentDraft);
       }
     });

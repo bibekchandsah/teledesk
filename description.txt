@@ -399,3 +399,11 @@ The menu only renders when isTouchDevice is true (touch + screen ≤ 768px), so 
 Four actions: Copy, Cut, Paste (uses navigator.clipboard), and Select All — each with its keyboard shortcut hint
 A transparent backdrop dismisses the menu on outside tap
 onPointerDown with preventDefault() is used on buttons so the textarea doesn't lose focus/selection before the action fires
+Right-clicking the textarea now always shows the menu — on both desktop and mobile. The isTouchDevice check was the culprit blocking it on non-touch devices.
+
+
+
+Single Emoji Animation: Messages with 1-3 emojis now appear larger (up to 48px) and have a smooth "pop-in" animation.
+Mobile Image Copy Fix: I corrected the logic in ChatWindow.tsx so that GIFs and stickers are copied as image data (PNG blobs) instead of URLs.
+Account Deletion Tracking: The backend now logs the metadata (email, name, etc.) of deleted accounts into a separate deleted_users table before anonymizing their main profile
+

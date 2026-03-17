@@ -237,7 +237,32 @@ export const toggleLockChat = async (uid: string, chatId: string, lock: boolean)
 export const deleteUserAccount = async (uid: string): Promise<void> => {
   logger.info(`Deleting user account: ${uid}`);
   
-  // Instead of deleting the user record, mark them as deleted
+  // 1. Fetch current user data for archiving before it's anonymized
+  const { data: userData } = await supabase
+    .from('users')
+    .select('email, name, username, created_at')
+    .eq('uid', uid)
+    .single();
+
+  if (userData) {
+    // 2. Store in deleted_users table for auditing
+    try {
+      const { error } = await supabase.from('deleted_users').insert({
+        uid,
+        email: userData.email,
+        name: userData.name,
+        username: userData.username,
+        original_created_at: userData.created_at,
+        deleted_at: now(),
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      logger.error(`Failed to log deletion to deleted_users: ${err.message}`);
+      // Continue anyway to ensure the account is deleted/anonymized
+    }
+  }
+
+  // 3. Instead of deleting the user record, mark them as deleted
   // This preserves chat history while showing "Deleted User"
   await supabase.from('users').update({
     name: 'Deleted User',
@@ -249,10 +274,10 @@ export const deleteUserAccount = async (uid: string): Promise<void> => {
     online_status: 'offline',
   }).eq('uid', uid);
   
-  // Delete user's device sessions
+  // 4. Delete user's device sessions
   await supabase.from('device_sessions').delete().eq('user_id', uid);
   
-  // Remove user from all chats (we don't delete chats, just remove the user from members)
+  // 5. Remove user from all chats (we don't delete chats, just remove the user from members)
   const { data: userChats } = await supabase
     .from('chats')
     .select('chat_id, members')

@@ -1382,8 +1382,51 @@ const highlightText = (text: string, query?: string): React.ReactNode => {
 };
 
 /** Detects URLs in text and makes them clickable, while also highlighting search queries. */
+/** Detects if a string consists ONLY of 1-3 emojis */
+const isOnlyEmoji = (text: string): { only: boolean; count: number } => {
+  if (!text) return { only: false, count: 0 };
+  const trimmed = text.trim();
+  // Robust emoji regex that handles variation selectors, skin tones, and ZWJ sequences
+  // Updated to be more comprehensive for modern emojis
+  const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+  const matches = trimmed.match(emojiRegex);
+  
+  if (!matches) return { only: false, count: 0 };
+  
+  // Remove all emojis and whitespace to see if anything else remains
+  const remaining = trimmed.replace(emojiRegex, '').replace(/\s/g, '');
+  const only = remaining.length === 0 && matches.length >= 1 && matches.length <= 3;
+  
+  return { only, count: matches.length };
+};
+
 export const renderMessageText = (text: string, query?: string, isOwn?: boolean, onMentionClick?: (text: string, type: 'username' | 'email') => void): React.ReactNode => {
   if (!text) return null;
+
+  const { only, count } = isOnlyEmoji(text);
+  if (only) {
+    const fontSize = count === 1 ? 48 : count === 2 ? 40 : 32;
+    return (
+      <div style={{ 
+        fontSize, 
+        lineHeight: 1.1, 
+        padding: '12px 0 8px',
+        animation: 'emojiPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) both',
+        display: 'block',
+        textAlign: isOwn ? 'right' : 'left',
+        userSelect: 'none',
+      }}>
+        {text}
+        <style>{`
+          @keyframes emojiPop {
+            0% { transform: scale(0.4) rotate(-5deg); opacity: 0; }
+            70% { transform: scale(1.1) rotate(2deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   // First, handle multi-line code blocks before splitting by lines
   const codeBlockRegex = /```\n?([\s\S]*?)\n?```/g;
