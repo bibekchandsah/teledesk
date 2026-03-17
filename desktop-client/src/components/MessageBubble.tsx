@@ -494,6 +494,7 @@ interface MessageBubbleProps {
   currentUserId?: string;
   getUserName?: (uid: string) => string;
   onMentionClick?: (text: string, type: 'username' | 'email') => void;
+  isTouchDevice?: boolean;
 }
 
 
@@ -525,6 +526,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   currentUserId,
   getUserName,
   onMentionClick,
+  isTouchDevice = false,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -537,6 +539,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const bookmarked = isBookmarked(message.messageId);
   // ─── Reaction bar state ───────────────────────────────────────────────────
   const [showEmojiBar, setShowEmojiBar] = useState(false);
+  const [isEmojiBarHovered, setIsEmojiBarHovered] = useState(false);
   const [showExtended, setShowExtended] = useState(false);
   const [pickerDirection, setPickerDirection] = useState<'up' | 'down'>('up');
   const [pickerPos, setPickerPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
@@ -693,6 +696,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setTimeout(() => {
       if (!emojiBarRef.current?.matches(':hover')) {
         setShowEmojiBar(false);
+        setIsEmojiBarHovered(false);
         setShowExtended(false);
         setPickerPos(null);
       }
@@ -1009,20 +1013,35 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               animation: 'reactionBarSlideUp 0.15s ease-out',
             }}
           >
-            {/* Quick preset bar */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              padding: '4px 8px',
-              backgroundColor: 'var(--bg-secondary)',
-              border: '1px solid var(--border)',
-              borderRadius: 24,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-              backdropFilter: 'blur(12px)',
-            }}>
-              {PRESET_EMOJIS.map(em => {
+            <div 
+              onMouseEnter={() => setIsEmojiBarHovered(true)}
+              onMouseLeave={() => { 
+                setIsEmojiBarHovered(false);
+                if (!showExtended) setShowEmojiBar(false); // Optional: close entirely if not extended? or just collapse
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: (isEmojiBarHovered || isTouchDevice) ? 2 : 0,
+                padding: '4px 8px',
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: 24,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+                backdropFilter: 'blur(12px)',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                width: (isEmojiBarHovered || isTouchDevice) ? 265 : 48,
+                maxWidth: (isEmojiBarHovered || isTouchDevice) ? 510 : 48,
+                height: 36,
+                justifyContent: 'center',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+              }}
+            >
+              {PRESET_EMOJIS.map((em, idx) => {
                 const alreadyReacted = (reactions[em] ?? []).includes(currentUserId ?? '');
+                const isFirst = idx === 0;
                 return (
                   <button
                     key={em}
@@ -1033,13 +1052,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                       border: 'none',
                       borderRadius: '50%',
                       cursor: 'pointer',
-                      padding: '4px',
+                      padding: (isFirst || isEmojiBarHovered || isTouchDevice) ? '4px' : 0,
                       fontSize: 20,
                       lineHeight: 1,
-                      transition: 'transform 0.12s',
+                      transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s, width 0.2s, padding 0.2s',
+                      opacity: (isFirst || isEmojiBarHovered || isTouchDevice) ? 1 : 0,
+                      transform: (isFirst || isEmojiBarHovered || isTouchDevice) ? 'scale(1)' : 'scale(0.5)',
+                      display: 'flex',
+                      width: (isFirst || isEmojiBarHovered || isTouchDevice) ? 'auto' : 0,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      overflow: 'hidden',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.4)')}
-                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = isEmojiBarHovered ? 'scale(1)' : 'scale(1)')}
                   >
                     {em}
                   </button>
@@ -1077,11 +1104,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   border: 'none',
                   borderRadius: '50%',
                   cursor: 'pointer',
-                  padding: '4px 6px',
+                  padding: (isEmojiBarHovered || isTouchDevice) ? '4px 6px' : 0,
                   display: 'flex',
                   alignItems: 'center',
                   color: 'var(--text-secondary, #aaa)',
-                  transition: 'transform 0.12s, color 0.12s',
+                  transition: 'transform 0.12s, color 0.12s, opacity 0.3s, width 0.3s, padding 0.3s',
+                  opacity: (isEmojiBarHovered || isTouchDevice) ? 1 : 0,
+                  transform: (isEmojiBarHovered || isTouchDevice) ? 'scale(1)' : 'scale(0.3)',
+                  flexShrink: 0,
+                  width: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 0,
+                  overflow: 'hidden',
+                  pointerEvents: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 'none',
                 }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary, #aaa)'; }}

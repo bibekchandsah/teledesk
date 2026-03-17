@@ -402,8 +402,19 @@ onPointerDown with preventDefault() is used on buttons so the textarea doesn't l
 Right-clicking the textarea now always shows the menu — on both desktop and mobile. The isTouchDevice check was the culprit blocking it on non-touch devices.
 
 
-
+<-------------------------- emoji animation and copy/paste gifs and sticker and account deletion improvements --------------------------> 
 Single Emoji Animation: Messages with 1-3 emojis now appear larger (up to 48px) and have a smooth "pop-in" animation.
 Mobile Image Copy Fix: I corrected the logic in ChatWindow.tsx so that GIFs and stickers are copied as image data (PNG blobs) instead of URLs.
 Account Deletion Tracking: The backend now logs the metadata (email, name, etc.) of deleted accounts into a separate deleted_users table before anonymizing their main profile
 
+Bubble Hover: When you hover over a message, a single emoji (the default ❤️) will appear.
+Emoji Hover: When you move your mouse over that emoji, the bar will smoothly expand to show all reaction options (👍, 😂, 😮, etc.) and the "SmilePlus" button.
+Visuals: I'll add smooth CSS transitions for width and opacity, with a subtle "pop" effect for each emoji as they appear.
+
+
+<-------------------------- emoji animation improvements -------------------------->
+For your messages (Sender): The emoji pill now appears on the left side of your purple bubble and expands to the left (toward the center).
+For received messages (Receiver): The emoji pill appears on the right side of the dark bubble and expands to the right (toward the center).
+
+Sender (You): The heart starts on the left of your bubble and slides left toward the center.
+Receiver (Others): The heart starts on the right of their bubble and slides right toward the center. 

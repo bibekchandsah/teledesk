@@ -4309,6 +4309,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   <MessageBubble
                     message={msg}
                     isOwn={msg.senderId === currentUser?.uid}
+                    isTouchDevice={isTouchDevice}
                     senderName={msg.senderId === currentUser?.uid ? currentUser?.name : userProfiles[msg.senderId]?.name}
                     senderAvatar={msg.senderId === currentUser?.uid ? currentUser?.avatar : userProfiles[msg.senderId]?.avatar}
                     showSender={activeChat?.type === 'group'}
