@@ -163,4 +163,8 @@ export const emitActiveStatusChange = (showActiveStatus: boolean): void => {
   socket?.emit(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, { showActiveStatus });
 };
 
+export const sendThemePreview = (chatId: string, theme: any): void => {
+  socket?.emit(SOCKET_EVENTS.THEME_PREVIEW, { chatId, theme });
+};
+
 export { SOCKET_EVENTS };

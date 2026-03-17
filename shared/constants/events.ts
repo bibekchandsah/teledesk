@@ -58,6 +58,10 @@ export const SOCKET_EVENTS = {
   LIVE_TYPING: 'live_typing',
   LIVE_TYPING_UPDATE: 'live_typing_update',
 
+  // Live theme preview
+  THEME_PREVIEW: 'theme_preview',
+  PEER_THEME_PREVIEW: 'peer_theme_preview',
+
   // Saved Messages / Bookmarks sync (per-user)
   SAVED_MESSAGE_UPDATED: 'saved_message_updated',
 

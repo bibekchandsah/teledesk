@@ -320,3 +320,12 @@ Incoming Voice: Phone icon with a down-left arrow (Green).
 Outgoing Voice: Phone icon with an up-right arrow (Accent color).
 Missed/ No answer: Red phone/video icon with a cross.
 Declined/ Cancelled: Red phone/video icon with a slash.
+
+
+<-------------------------- chat theme improvements -------------------------->
+Live Theme Preview: When you (or your peer) customize a chat theme in the modal, the changes (colors, background images, etc.) are now visible to both users instantly in real-time, even before saving.
+Robust Image Syncing: Fixed the bugs preventing background images from correctly propagating to peers. Images now sync reliably and immediately.
+Real-time Socket Logic: Added new socket events to handle preview states, ensuring the experience feels premium and responsive.
+Peer Theme in Modal: When you open your Chat Theme modal, if your peer is sharing a theme, you'll see it in the preview window.
+Manual Overrides: You'll be able to manually adjust the Opacity and Blur levels for how you see their shared theme, without affecting how they see it.
+Tie-breaking: These settings will automatically apply whenever you're using a peer's shared theme.

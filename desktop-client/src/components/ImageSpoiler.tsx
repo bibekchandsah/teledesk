@@ -68,8 +68,8 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
     const resizeObserver = new ResizeObserver(updateSize);
     resizeObserver.observe(container);
 
-    // Reduced particle count for performance (cap at 80)
-    const particleCount = Math.min(80, Math.max(30, Math.floor((canvas.width * canvas.height) / 1500)));
+    // Reduced particle count for performance (cap at 25)
+    const particleCount = Math.min(25, Math.max(15, Math.floor((canvas.width * canvas.height) / 3000)));
     particlesRef.current = Array.from({ length: particleCount }, () => {
       const angle = Math.random() * Math.PI * 2;
       const speed = Math.random() * 0.4 + 0.2;
@@ -107,16 +107,10 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
         const pulse = Math.sin(timeRef.current * 1.5 + index * 0.5) * 0.15;
         const currentOpacity = Math.max(0, Math.min(1, particle.opacity + pulse));
 
-        // Simplified drawing: Solid white circles with varying opacity
-        // Radial gradients at 60fps are expensive when multiple spoilers are active
-        ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size * 2, 0, Math.PI * 2);
-        ctx.fill();
-
+        // Simplified drawing: single circle per particle for performance
         ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.arc(particle.x, particle.y, particle.size * 1.5, 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -174,9 +168,9 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            filter: showOverlay ? 'blur(20px)' : 'none',
+            filter: showOverlay ? 'blur(12px)' : 'none',
             transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
+            transform: showOverlay ? 'scale(1.05)' : 'scale(1)',
             pointerEvents: 'none',
             willChange: 'transform, filter',
           }}
@@ -189,9 +183,9 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            filter: showOverlay ? 'blur(20px)' : 'none',
+            filter: showOverlay ? 'blur(12px)' : 'none',
             transition: 'filter 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            transform: showOverlay ? 'scale(1.1)' : 'scale(1)',
+            transform: showOverlay ? 'scale(1.05)' : 'scale(1)',
             pointerEvents: 'none',
             willChange: 'transform, filter',
           }}
@@ -206,7 +200,7 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
               transition: 'background-color 0.3s',
             }}
           />

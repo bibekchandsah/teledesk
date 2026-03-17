@@ -573,6 +573,657 @@ const MediaGroupBubble = ({
 };
 // ------------------------------------
 
+const headerBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 6,
+  borderRadius: 8,
+  color: 'var(--text-secondary)',
+  transition: 'background-color 0.15s',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const headerCtxItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  padding: '10px 16px',
+  background: 'none',
+  border: 'none',
+  textAlign: 'left',
+  cursor: 'pointer',
+  fontSize: 14,
+  color: 'var(--text-primary)',
+};
+
+const iconBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 6,
+  borderRadius: 8,
+  color: 'var(--text-secondary)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const searchNavBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 4,
+  borderRadius: 6,
+  color: 'var(--text-secondary)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const scrollNavBtnStyle: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  border: '1px solid var(--border)',
+  backgroundColor: 'var(--bg-secondary)',
+  color: 'var(--text-primary)',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+  transition: 'background-color 0.15s',
+};
+
+const selActionBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: '6px 8px',
+  borderRadius: 8,
+  color: 'var(--text-primary)',
+  display: 'flex',
+  alignItems: 'center',
+  fontSize: 13,
+};
+
+const selListItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  padding: '10px 16px',
+  background: 'none',
+  border: 'none',
+  textAlign: 'left',
+  fontSize: 14,
+  color: 'var(--text-primary)',
+};
+
+const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClose: () => void }> = ({ messages, initialIndex, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const message = messages[currentIndex];
+  const isImage = message.type === 'image' || message.type === 'gif' || message.type === 'sticker';
+  const isVideo = message.type === 'video' || message.type === 'video_note';
+  const isPdf = message.fileName?.toLowerCase().endsWith('.pdf');
+  const textExtensions = ['.txt', '.md', '.log', '.json', '.js', '.ts', '.py', '.html', '.css', '.xml', '.c', '.cpp', '.h', '.sql', '.yaml', '.yml'];
+  const isText = textExtensions.some(ext => message.fileName?.toLowerCase().endsWith(ext));
+  const isCsv = message.fileName?.toLowerCase().endsWith('.csv');
+  const isVoice = message.type === 'audio' || message.type === 'voice_note';
+
+  // Image zoom/pan state
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // Text/CSV content state
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if ((isText || isCsv) && message.fileUrl) {
+      setIsLoadingContent(true);
+      fetch(message.fileUrl)
+        .then(res => res.text())
+        .then(text => {
+          // Limit to 1MB for safety
+          setTextContent(text.slice(0, 1024 * 1024));
+          setIsLoadingContent(false);
+        })
+        .catch(err => {
+          console.error('Failed to fetch text content:', err);
+          setIsLoadingContent(false);
+        });
+    }
+  }, [isText, isCsv, message.fileUrl]);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!isImage) return;
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoom(prev => Math.min(Math.max(prev * delta, 0.5), 10));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isImage || zoom <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const resetZoom = () => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  };
+
+  const copyImage = async () => {
+    if (!isImage || !message.fileUrl) return;
+    try {
+      let success = false;
+      // Use native Electron API if available to bypass CORS
+      if (window.electronAPI?.copyImageToClipboard) {
+        success = await window.electronAPI.copyImageToClipboard(message.fileUrl);
+      } else {
+        // Fallback to renderer fetch (subject to CORS)
+        const response = await fetch(message.fileUrl);
+        const blob = await response.blob();
+        const item = new ClipboardItem({ [blob.type]: blob });
+        await navigator.clipboard.write([item]);
+        success = true;
+      }
+
+      if (success) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+    }
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!message.fileUrl) return;
+    if (window.electronAPI?.downloadFile) {
+      window.electronAPI.downloadFile(message.fileUrl, message.fileName);
+    } else {
+      // Fallback for web/older desktop versions
+      const link = document.createElement('a');
+      link.href = message.fileUrl;
+      link.download = message.fileName || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const renderCsv = (csv: string) => {
+    const rows = csv.split('\n').filter(r => r.trim()).map(r => r.split(','));
+    if (rows.length === 0) return <div style={{ color: '#fff' }}>Empty CSV</div>;
+    return (
+      <div style={{ overflow: 'auto', maxHeight: '100%', width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              {rows[0].map((cell, i) => (
+                <th key={i} style={{ border: '1px solid rgba(255,255,255,0.1)', padding: 12, backgroundColor: 'rgba(255,255,255,0.1)', textAlign: 'left', fontWeight: 600 }}>{cell}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(1).map((row, i) => (
+              <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+                {row.map((cell, j) => (
+                  <td key={j} style={{ border: '1px solid rgba(255,255,255,0.1)', padding: 12, opacity: 0.9 }}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const hasNext = currentIndex < messages.length - 1;
+  const hasPrev = currentIndex > 0;
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (hasNext) {
+      setCurrentIndex(c => c + 1);
+      resetZoom();
+      setTextContent(null);
+    }
+  };
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (hasPrev) {
+      setCurrentIndex(c => c - 1);
+      resetZoom();
+      setTextContent(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, messages.length, onClose]);
+
+  return (
+    <div 
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        backdropFilter: 'blur(20px)',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 3000,
+        animation: 'fadeIn 0.3s ease-out',
+        userSelect: 'none'
+      }}
+    >
+      <style>{`
+        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translate(-50%, -10px); }
+          15% { opacity: 1; transform: translate(-50%, 0); }
+          85% { opacity: 1; transform: translate(-50%, 0); }
+          100% { opacity: 0; transform: translate(-50%, -10px); }
+        }
+        .preview-header { padding: 16px 24px; }
+        .preview-content { padding: 40px; }
+        .hide-mobile { display: inline; }
+        @media (max-width: 600px) {
+          .preview-header { padding: 8px 12px !important; }
+          .preview-content { padding: 10px !important; }
+          .hide-mobile { display: none !important; }
+          .filename-text { font-size: 14px !important; }
+          .header-btn { padding: 6px 10px !important; }
+        }
+      `}</style>
+      {/* Header */}
+      <div className="preview-header" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        zIndex: 10
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ color: '#fff', minWidth: 0 }}>
+            <div className="filename-text" style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.fileName || (isImage ? 'Image' : isVideo ? 'Video' : isVoice ? 'Voice Note' : 'File')}</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>{message.senderName} • {formatTime(message.timestamp)}</div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isImage && (
+            <>
+               <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '4px 8px', gap: 12 }}>
+                <button onClick={() => setZoom(z => Math.max(z * 0.8, 0.5))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronDown size={18}/></button>
+                <span style={{ color: '#fff', fontSize: 13, minWidth: 40, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(z => Math.min(z * 1.2, 10))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronUp size={18}/></button>
+                <button onClick={resetZoom} style={{ ...iconBtnStyle, color: '#fff', padding: 4, opacity: zoom === 1 ? 0.5 : 1 }}><RefreshCw size={14}/></button>
+              </div>
+              <button 
+                className="header-btn"
+                onClick={copyImage}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <Copy size={16} /> <span className="hide-mobile">Copy</span>
+              </button>
+            </>
+          )}
+          <button 
+            className="header-btn"
+            onClick={handleDownload}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              color: '#fff',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <Download size={16} /> <span className="hide-mobile">Download</span>
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <X size={24} />
+          </button>
+        </div>
+      </div>
+
+      {/* Copied Feedback Badge */}
+      {copied && (
+        <div style={{
+          position: 'absolute',
+          top: 100,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          color: '#000',
+          padding: '8px 16px',
+          borderRadius: 20,
+          fontSize: 13,
+          fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 1000,
+          animation: 'fadeInOut 2s ease-in-out forwards'
+        }}>
+          Copied to clipboard
+        </div>
+      )}
+
+      {/* Content */}
+      <div 
+        onWheel={handleWheel}
+        className="preview-content"
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          position: 'relative'
+        }}
+      >
+        {hasPrev && (
+          <button 
+            onClick={handlePrev}
+            style={{ position: 'absolute', left: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <ChevronLeft size={32} />
+          </button>
+        )}
+        {hasNext && (
+          <button 
+            onClick={handleNext}
+            style={{ position: 'absolute', right: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+          >
+            <ChevronLeft size={32} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        
+        {isImage ? (
+          <img
+            src={message.fileUrl}
+            alt={message.fileName}
+            onMouseDown={handleMouseDown}
+            style={{
+              maxWidth: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
+              maxHeight: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
+              transform: `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`,
+              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+              transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+              objectFit: 'contain',
+              borderRadius: zoom > 1 ? 0 : 8,
+              boxShadow: zoom > 1 ? 'none' : '0 20px 50px rgba(0,0,0,0.5)',
+              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            draggable={false}
+          />
+        ) : isVoice ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 32,
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            padding: '60px 80px',
+            borderRadius: 40,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            maxWidth: 'min(90vw, 500px)',
+            width: '100%'
+          }}>
+            <div style={{
+              width: 120,
+              height: 120,
+              borderRadius: '50%',
+              backgroundColor: 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 10px 30px var(--accent-alpha)'
+            }}>
+              <Mic size={48} color="#fff" />
+            </div>
+            <audio
+              src={message.fileUrl}
+              controls
+              autoPlay
+              style={{ width: '100%', height: 40 }}
+            />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Voice Message</div>
+              <div style={{ fontSize: 14, opacity: 0.6, color: '#fff' }}>{message.senderName} • {formatTime(message.timestamp)}</div>
+            </div>
+          </div>
+        ) : isVideo ? (
+          <video
+            src={message.fileUrl}
+            controls
+            autoPlay
+            style={{
+              maxWidth: 'min(90vw, 90vh)',
+              maxHeight: 'min(90vw, 90vh)',
+              borderRadius: message.type === 'video_note' ? '50%' : 8,
+              aspectRatio: message.type === 'video_note' ? '1/1' : 'auto',
+              objectFit: 'cover',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          />
+        ) : isPdf ? (
+          <iframe
+            src={message.fileUrl}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              borderRadius: 8,
+              backgroundColor: '#fff',
+              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            title="PDF Preview"
+          />
+        ) : (isText || isCsv) ? (
+          <div style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: isCsv ? 'transparent' : 'rgba(255, 255, 255, 0.05)',
+            border: isCsv ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 12,
+            padding: isCsv ? 0 : 24,
+            color: '#fff',
+            overflow: 'auto',
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap',
+            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {isLoadingContent ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <RefreshCw className="animate-spin" size={32} style={{ opacity: 0.5 }} />
+              </div>
+            ) : isCsv && textContent ? (
+              renderCsv(textContent)
+            ) : (
+              textContent || 'Loading content...'
+            )}
+          </div>
+        ) : (
+          <div style={{
+            textAlign: 'center',
+            color: '#fff',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            padding: '40px 60px',
+            borderRadius: 24,
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <Paperclip size={64} style={{ marginBottom: 20, opacity: 0.5 }} />
+            <h2 style={{ color: '#fff' }}>No Preview Available</h2>
+            <p style={{ opacity: 0.6, maxWidth: 300, margin: '8px auto 24px', color: '#fff' }}>
+              We can't preview this file type in the browser. You can download it to view locally.
+            </p>
+            <button
+              onClick={handleDownload}
+              style={{
+                display: 'inline-block',
+                padding: '12px 32px',
+                borderRadius: 12,
+                backgroundColor: 'var(--accent)',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Download File
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FileErrorModal: React.FC<{ error: string; onClose: () => void }> = ({ error, onClose }) => {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 2000,
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* Hide scrollbar for formatting toolbar */
+        .formatting-toolbar-scroll::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+      <div style={{
+        width: '100%',
+        maxWidth: 340,
+        backgroundColor: 'rgba(30, 30, 30, 0.85)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        borderRadius: 20,
+        padding: '24px',
+        textAlign: 'center',
+        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+        animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        margin: '20px'
+      }}>
+        <div style={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 16px',
+          color: '#ef4444'
+        }}>
+          <AlertCircle size={32} />
+        </div>
+        <h3 style={{ margin: '0 0 8px', fontSize: 18, color: '#fff' }}>Upload Failed</h3>
+        <p style={{ margin: '0 0 24px', fontSize: 14, color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+          {error}
+        </p>
+        <button
+          onClick={onClose}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: 12,
+            backgroundColor: '#ef4444',
+            color: '#fff',
+            border: 'none',
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'filter 0.2s',
+          }}
+          onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
+          onMouseOut={(e) => e.currentTarget.style.filter = 'none'}
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ------------------------------------
+
 interface ChatWindowProps {
   chatId?: string;
   /** Called when the mobile back button is pressed while embedded (e.g. in-call chat panel). */
@@ -749,6 +1400,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     localStorage.getItem('giphy_api_key') || 
     '3eP9s8HjP4pht89FvV4Aka0fFfIdF2D5'
   );
+
+  // --- Real-time Theme Previews from peers ---
+  const [previewThemes, setPreviewThemes] = useState<Record<string, Record<string, any>>>({}); // peerId -> { chatId: theme }
   const [giphyKeyInput, setGiphyKeyInput] = useState('');
   const [giphyError, setGiphyError] = useState(false);
   
@@ -1406,15 +2060,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // ─── Chat Theme Logic ─────────────────────────────────────────────────────
   const displayTheme = useMemo(() => {
     if (!activeChat) return null;
+    const myTheme = currentUser?.chatThemes?.[activeChat.chatId];
     
-    // Check if peer shared their theme
+    // 1. Check for real-time preview (live customization from peer)
+    if (peer && previewThemes[peer.uid]?.[activeChat.chatId]) {
+      const pTheme = previewThemes[peer.uid][activeChat.chatId];
+      // Object.keys(pTheme).length === 0 means peer explicitly disabled "Show to Others" or cleared theme
+      if (Object.keys(pTheme).length > 0) {
+        return { ...pTheme, peerOverrides: myTheme?.peerOverrides };
+      }
+    }
+
+    // 2. Check if peer shared their theme (persisted)
     if (peer && peer.profile?.chatThemes?.[activeChat.chatId]?.showToOthers) {
-      return peer.profile.chatThemes[activeChat.chatId];
+      const pTheme = peer.profile.chatThemes[activeChat.chatId];
+      return { ...pTheme, peerOverrides: myTheme?.peerOverrides };
     }
     
-    // Use own theme
-    return currentUser?.chatThemes?.[activeChat.chatId] || null;
-  }, [activeChat, currentUser?.chatThemes, peer]);
+    // 3. Use own theme
+    return myTheme || null;
+  }, [activeChat, currentUser?.chatThemes, peer, previewThemes]);
+
+  const peerTheme = useMemo(() => {
+    if (!activeChat || !peer) return undefined;
+    const theme = peer.profile?.chatThemes?.[activeChat.chatId];
+    if (theme?.showToOthers) return theme;
+    return undefined;
+  }, [activeChat, peer]);
 
   // Socket listener for theme sync
   useEffect(() => {
@@ -1443,6 +2115,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         const updatedThemes = { ...peerProfile.chatThemes, [chatId]: theme };
         setUserProfile({ ...peerProfile, chatThemes: updatedThemes });
       }
+      // Clear preview theme since it's now saved
+      setPreviewThemes((prev) => {
+        const updated = { ...prev };
+        if (updated[peerId]) {
+          const chatUpdates = { ...updated[peerId] };
+          delete chatUpdates[chatId];
+          updated[peerId] = chatUpdates;
+        }
+        return updated;
+      });
     };
 
     const handlePeerThemeRemove = ({ chatId, peerId }: any) => {
@@ -1453,18 +2135,40 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         delete updatedThemes[chatId];
         setUserProfile({ ...peerProfile, chatThemes: updatedThemes });
       }
+      // Clear preview
+      setPreviewThemes((prev) => {
+        const updated = { ...prev };
+        if (updated[peerId]) {
+          const chatUpdates = { ...updated[peerId] };
+          delete chatUpdates[chatId];
+          updated[peerId] = chatUpdates;
+        }
+        return updated;
+      });
+    };
+
+    const handlePeerThemePreview = ({ chatId, peerId, theme }: any) => {
+      setPreviewThemes((prev) => ({
+        ...prev,
+        [peerId]: {
+          ...(prev[peerId] || {}),
+          [chatId]: theme
+        }
+      }));
     };
 
     socket.on('CHAT_THEME_UPDATED', handleThemeUpdate);
     socket.on('CHAT_THEME_REMOVED', handleThemeRemove);
     socket.on('PEER_CHAT_THEME_UPDATED', handlePeerThemeUpdate);
     socket.on('PEER_CHAT_THEME_REMOVED', handlePeerThemeRemove);
+    socket.on('PEER_THEME_PREVIEW', handlePeerThemePreview);
 
     return () => {
       socket.off('CHAT_THEME_UPDATED', handleThemeUpdate);
       socket.off('CHAT_THEME_REMOVED', handleThemeRemove);
       socket.off('PEER_CHAT_THEME_UPDATED', handlePeerThemeUpdate);
       socket.off('PEER_CHAT_THEME_REMOVED', handlePeerThemeRemove);
+      socket.off('PEER_THEME_PREVIEW', handlePeerThemePreview);
     };
   }, [currentUser, setCurrentUser, userProfiles, setUserProfile]);
 
@@ -2816,9 +3520,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: `rgba(15, 23, 42, ${1 - displayTheme.opacity})`,
-                backdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
-                WebkitBackdropFilter: displayTheme.blur > 0 ? `blur(${displayTheme.blur}px)` : undefined,
+                backgroundColor: `rgba(15, 23, 42, ${1 - (displayTheme.peerOverrides?.opacity !== undefined ? displayTheme.peerOverrides.opacity : (displayTheme.opacity ?? 1))})`,
+                backdropFilter: (displayTheme.peerOverrides?.blur !== undefined ? displayTheme.peerOverrides.blur : (displayTheme.blur ?? 0)) > 0 
+                  ? `blur(${displayTheme.peerOverrides?.blur !== undefined ? displayTheme.peerOverrides.blur : displayTheme.blur}px)` 
+                  : undefined,
+                WebkitBackdropFilter: (displayTheme.peerOverrides?.blur !== undefined ? displayTheme.peerOverrides.blur : (displayTheme.blur ?? 0)) > 0 
+                  ? `blur(${displayTheme.peerOverrides?.blur !== undefined ? displayTheme.peerOverrides.blur : displayTheme.blur}px)` 
+                  : undefined,
                 zIndex: 1,
                 pointerEvents: 'none',
               }}
@@ -5495,11 +6203,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
       {previewFile && <FilePreviewer messages={previewFile.messages} initialIndex={previewFile.initialIndex} onClose={() => setPreviewFile(null)} />}
       
-      {/* Chat Theme Modal */}
       {showThemeModal && activeChat && (
         <ChatThemeModal
           chatId={activeChat.chatId}
           currentTheme={currentUser?.chatThemes?.[activeChat.chatId]}
+          peerTheme={peerTheme}
           onClose={() => setShowThemeModal(false)}
           onSave={() => {
             // Theme is already updated via socket/API
@@ -5657,659 +6365,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
         </div>
       )}
-    </div>
-  );
-};
-
-
-
-const headerBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  padding: 6,
-  borderRadius: 8,
-  color: 'var(--text-secondary)',
-  transition: 'background-color 0.15s',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const headerCtxItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  width: '100%',
-  padding: '10px 16px',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  cursor: 'pointer',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-};
-
-const iconBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  padding: 6,
-  borderRadius: 8,
-  color: 'var(--text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const searchNavBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  padding: 4,
-  borderRadius: 6,
-  color: 'var(--text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const scrollNavBtnStyle: React.CSSProperties = {
-  width: 36,
-  height: 36,
-  borderRadius: '50%',
-  border: '1px solid var(--border)',
-  backgroundColor: 'var(--bg-secondary)',
-  color: 'var(--text-primary)',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-  transition: 'background-color 0.15s',
-};
-
-const selActionBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  padding: '6px 8px',
-  borderRadius: 8,
-  color: 'var(--text-primary)',
-  display: 'flex',
-  alignItems: 'center',
-  fontSize: 13,
-};
-
-const selListItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  width: '100%',
-  padding: '10px 16px',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-};
-
-const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClose: () => void }> = ({ messages, initialIndex, onClose }) => {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const message = messages[currentIndex];
-  const isImage = message.type === 'image' || message.type === 'gif' || message.type === 'sticker';
-  const isVideo = message.type === 'video' || message.type === 'video_note';
-  const isPdf = message.fileName?.toLowerCase().endsWith('.pdf');
-  const textExtensions = ['.txt', '.md', '.log', '.json', '.js', '.ts', '.py', '.html', '.css', '.xml', '.c', '.cpp', '.h', '.sql', '.yaml', '.yml'];
-  const isText = textExtensions.some(ext => message.fileName?.toLowerCase().endsWith(ext));
-  const isCsv = message.fileName?.toLowerCase().endsWith('.csv');
-  const isVoice = message.type === 'audio' || message.type === 'voice_note';
-
-  // Image zoom/pan state
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  
-  // Text/CSV content state
-  const [textContent, setTextContent] = useState<string | null>(null);
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if ((isText || isCsv) && message.fileUrl) {
-      setIsLoadingContent(true);
-      fetch(message.fileUrl)
-        .then(res => res.text())
-        .then(text => {
-          // Limit to 1MB for safety
-          setTextContent(text.slice(0, 1024 * 1024));
-          setIsLoadingContent(false);
-        })
-        .catch(err => {
-          console.error('Failed to fetch text content:', err);
-          setIsLoadingContent(false);
-        });
-    }
-  }, [isText, isCsv, message.fileUrl]);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!isImage) return;
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.min(Math.max(prev * delta, 0.5), 10));
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isImage || zoom <= 1) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setOffset({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  const resetZoom = () => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  };
-
-  const copyImage = async () => {
-    if (!isImage || !message.fileUrl) return;
-    try {
-      let success = false;
-      // Use native Electron API if available to bypass CORS
-      if (window.electronAPI?.copyImageToClipboard) {
-        success = await window.electronAPI.copyImageToClipboard(message.fileUrl);
-      } else {
-        // Fallback to renderer fetch (subject to CORS)
-        const response = await fetch(message.fileUrl);
-        const blob = await response.blob();
-        const item = new ClipboardItem({ [blob.type]: blob });
-        await navigator.clipboard.write([item]);
-        success = true;
-      }
-
-      if (success) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch (err) {
-      console.error('Failed to copy image:', err);
-    }
-  };
-
-  const handleDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!message.fileUrl) return;
-    if (window.electronAPI?.downloadFile) {
-      window.electronAPI.downloadFile(message.fileUrl, message.fileName);
-    } else {
-      // Fallback for web/older desktop versions
-      const link = document.createElement('a');
-      link.href = message.fileUrl;
-      link.download = message.fileName || 'download';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
-  const renderCsv = (csv: string) => {
-    const rows = csv.split('\n').filter(r => r.trim()).map(r => r.split(','));
-    if (rows.length === 0) return <div style={{ color: '#fff' }}>Empty CSV</div>;
-    return (
-      <div style={{ overflow: 'auto', maxHeight: '100%', width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr>
-              {rows[0].map((cell, i) => (
-                <th key={i} style={{ border: '1px solid rgba(255,255,255,0.1)', padding: 12, backgroundColor: 'rgba(255,255,255,0.1)', textAlign: 'left', fontWeight: 600 }}>{cell}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(1).map((row, i) => (
-              <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                {row.map((cell, j) => (
-                  <td key={j} style={{ border: '1px solid rgba(255,255,255,0.1)', padding: 12, opacity: 0.9 }}>{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  const hasNext = currentIndex < messages.length - 1;
-  const hasPrev = currentIndex > 0;
-
-  const handleNext = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (hasNext) {
-      setCurrentIndex(c => c + 1);
-      resetZoom();
-      setTextContent(null);
-    }
-  };
-
-  const handlePrev = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (hasPrev) {
-      setCurrentIndex(c => c - 1);
-      resetZoom();
-      setTextContent(null);
-    }
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') handleNext();
-      if (e.key === 'ArrowLeft') handlePrev();
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, messages.length, onClose]);
-
-  return (
-    <div 
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        backdropFilter: 'blur(20px)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 3000,
-        animation: 'fadeIn 0.3s ease-out',
-        userSelect: 'none'
-      }}
-    >
-      <style>{`
-        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes fadeInOut {
-          0% { opacity: 0; transform: translate(-50%, -10px); }
-          15% { opacity: 1; transform: translate(-50%, 0); }
-          85% { opacity: 1; transform: translate(-50%, 0); }
-          100% { opacity: 0; transform: translate(-50%, -10px); }
-        }
-        .preview-header { padding: 16px 24px; }
-        .preview-content { padding: 40px; }
-        .hide-mobile { display: inline; }
-        @media (max-width: 600px) {
-          .preview-header { padding: 8px 12px !important; }
-          .preview-content { padding: 10px !important; }
-          .hide-mobile { display: none !important; }
-          .filename-text { font-size: 14px !important; }
-          .header-btn { padding: 6px 10px !important; }
-        }
-      `}</style>
-      {/* Header */}
-      <div className="preview-header" style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
-        zIndex: 10
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ color: '#fff', minWidth: 0 }}>
-            <div className="filename-text" style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.fileName || (isImage ? 'Image' : isVideo ? 'Video' : isVoice ? 'Voice Note' : 'File')}</div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>{message.senderName} • {formatTime(message.timestamp)}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isImage && (
-            <>
-              <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '4px 8px', gap: 12 }}>
-                <button onClick={() => setZoom(z => Math.max(z * 0.8, 0.5))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronDown size={18}/></button>
-                <span style={{ color: '#fff', fontSize: 13, minWidth: 40, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom(z => Math.min(z * 1.2, 10))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronUp size={18}/></button>
-                <button onClick={resetZoom} style={{ ...iconBtnStyle, color: '#fff', padding: 4, opacity: zoom === 1 ? 0.5 : 1 }}><RefreshCw size={14}/></button>
-              </div>
-              <button 
-                className="header-btn"
-                onClick={copyImage}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  color: '#fff',
-                  border: 'none',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-              >
-                <Copy size={16} /> <span className="hide-mobile">Copy</span>
-              </button>
-            </>
-          )}
-          <button 
-            className="header-btn"
-            onClick={handleDownload}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 8,
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              border: 'none',
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            <Download size={16} /> <span className="hide-mobile">Download</span>
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#fff',
-              cursor: 'pointer',
-              padding: 4,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <X size={24} />
-          </button>
-        </div>
-      </div>
-
-      {/* Copied Feedback Badge */}
-      {copied && (
-        <div style={{
-          position: 'absolute',
-          top: 100,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          color: '#000',
-          padding: '8px 16px',
-          borderRadius: 20,
-          fontSize: 13,
-          fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-          zIndex: 1000,
-          animation: 'fadeInOut 2s ease-in-out forwards'
-        }}>
-          Copied to clipboard
-        </div>
-      )}
-
-      {/* Content */}
-      <div 
-        onWheel={handleWheel}
-        className="preview-content"
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          position: 'relative'
-        }}
-      >
-        {hasPrev && (
-          <button 
-            onClick={handlePrev}
-            style={{ position: 'absolute', left: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-          >
-            <ChevronLeft size={32} />
-          </button>
-        )}
-        {hasNext && (
-          <button 
-            onClick={handleNext}
-            style={{ position: 'absolute', right: 24, zIndex: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-          >
-            <ChevronLeft size={32} style={{ transform: 'rotate(180deg)' }} />
-          </button>
-        )}
-        
-        {isImage ? (
-          <img
-            src={message.fileUrl}
-            alt={message.fileName}
-            onMouseDown={handleMouseDown}
-            style={{
-              maxWidth: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
-              maxHeight: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
-              transform: `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`,
-              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-              transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-              objectFit: 'contain',
-              borderRadius: zoom > 1 ? 0 : 8,
-              boxShadow: zoom > 1 ? 'none' : '0 20px 50px rgba(0,0,0,0.5)',
-              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-            }}
-            draggable={false}
-          />
-        ) : isVoice ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 32,
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            padding: '60px 80px',
-            borderRadius: 40,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            maxWidth: 'min(90vw, 500px)',
-            width: '100%'
-          }}>
-            <div style={{
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              backgroundColor: 'var(--accent)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 10px 30px var(--accent-alpha)'
-            }}>
-              <Mic size={48} color="#fff" />
-            </div>
-            <audio
-              src={message.fileUrl}
-              controls
-              autoPlay
-              style={{ width: '100%', height: 40 }}
-            />
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Voice Message</div>
-              <div style={{ fontSize: 14, opacity: 0.6, color: '#fff' }}>{message.senderName} • {formatTime(message.timestamp)}</div>
-            </div>
-          </div>
-        ) : isVideo ? (
-          <video
-            src={message.fileUrl}
-            controls
-            autoPlay
-            style={{
-              maxWidth: 'min(90vw, 90vh)',
-              maxHeight: 'min(90vw, 90vh)',
-              borderRadius: message.type === 'video_note' ? '50%' : 8,
-              aspectRatio: message.type === 'video_note' ? '1/1' : 'auto',
-              objectFit: 'cover',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-            }}
-          />
-        ) : isPdf ? (
-          <iframe
-            src={message.fileUrl}
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              borderRadius: 8,
-              backgroundColor: '#fff',
-              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-            }}
-            title="PDF Preview"
-          />
-        ) : (isText || isCsv) ? (
-          <div style={{
-            width: '100%',
-            height: '100%',
-            backgroundColor: isCsv ? 'transparent' : 'rgba(255, 255, 255, 0.05)',
-            border: isCsv ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 12,
-            padding: isCsv ? 0 : 24,
-            color: '#fff',
-            overflow: 'auto',
-            fontFamily: 'monospace',
-            whiteSpace: 'pre-wrap',
-            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-          }}>
-            {isLoadingContent ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <RefreshCw className="animate-spin" size={32} style={{ opacity: 0.5 }} />
-              </div>
-            ) : isCsv && textContent ? (
-              renderCsv(textContent)
-            ) : (
-              textContent || 'Loading content...'
-            )}
-          </div>
-        ) : (
-          <div style={{
-            textAlign: 'center',
-            color: '#fff',
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            padding: '40px 60px',
-            borderRadius: 24,
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-          }}>
-            <Paperclip size={64} style={{ marginBottom: 20, opacity: 0.5 }} />
-            <h2 style={{ color: '#fff' }}>No Preview Available</h2>
-            <p style={{ opacity: 0.6, maxWidth: 300, margin: '8px auto 24px', color: '#fff' }}>
-              We can't preview this file type in the browser. You can download it to view locally.
-            </p>
-            <button
-              onClick={handleDownload}
-              style={{
-                display: 'inline-block',
-                padding: '12px 32px',
-                borderRadius: 12,
-                backgroundColor: 'var(--accent)',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              Download File
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ─── Premium UI Components ───
-
-const FileErrorModal: React.FC<{ error: string; onClose: () => void }> = ({ error, onClose }) => {
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.4)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 2000,
-      animation: 'fadeIn 0.2s ease-out'
-    }}>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        
-        /* Hide scrollbar for formatting toolbar */
-        .formatting-toolbar-scroll::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
-      <div style={{
-        width: '100%',
-        maxWidth: 340,
-        backgroundColor: 'rgba(30, 30, 30, 0.85)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        borderRadius: 20,
-        padding: '24px',
-        textAlign: 'center',
-        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
-        animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        margin: '20px'
-      }}>
-        <div style={{
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 16px',
-          color: '#ef4444'
-        }}>
-          <AlertCircle size={32} />
-        </div>
-        <h3 style={{ margin: '0 0 8px', fontSize: 18, color: '#fff' }}>Upload Failed</h3>
-        <p style={{ margin: '0 0 24px', fontSize: 14, color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
-          {error}
-        </p>
-        <button
-          onClick={onClose}
-          style={{
-            width: '100%',
-            padding: '12px',
-            borderRadius: 12,
-            backgroundColor: '#ef4444',
-            color: '#fff',
-            border: 'none',
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'filter 0.2s',
-          }}
-          onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
-          onMouseOut={(e) => e.currentTarget.style.filter = 'none'}
-        >
-          Got it
-        </button>
-      </div>
     </div>
   );
 };

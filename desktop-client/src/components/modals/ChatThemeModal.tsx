@@ -4,28 +4,44 @@ import { ChatTheme } from '@shared/types';
 import { setChatTheme, removeChatTheme } from '../../services/apiService';
 import { uploadChatFile } from '../../services/fileService';
 import { useAuthStore } from '../../store/authStore';
+import { sendThemePreview } from '../../services/socketService';
 import ConfirmModal from './ConfirmModal';
 import PremiumToggle from '../PremiumToggle';
 
 interface ChatThemeModalProps {
   chatId: string;
   currentTheme?: ChatTheme;
+  peerTheme?: ChatTheme;
   onClose: () => void;
   onSave: (theme: ChatTheme) => void;
 }
 
-const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, onClose, onSave }) => {
+const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, peerTheme, onClose, onSave }) => {
   const { currentUser, setCurrentUser } = useAuthStore();
+  const [activeSource, setActiveSource] = useState<'me' | 'peer'>(
+    currentTheme?.backgroundImage || !peerTheme ? 'me' : 'peer'
+  );
   const [theme, setTheme] = useState<ChatTheme>(currentTheme || {
     opacity: 0.8,
     blur: 10,
     showToOthers: false,
+    peerOverrides: {},
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(currentTheme?.backgroundImage || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Emit live preview to peer if showToOthers is enabled
+  useEffect(() => {
+    if (theme.showToOthers) {
+      sendThemePreview(chatId, theme);
+    } else {
+      // If disabled, send empty theme so peer hides their preview
+      sendThemePreview(chatId, {});
+    }
+  }, [theme, chatId]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,15 +158,64 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Theme Source Selection (Tabs) */}
+        {peerTheme && (
+          <div style={{ 
+            display: 'flex', 
+            backgroundColor: 'var(--bg-tertiary)', 
+            padding: 4, 
+            borderRadius: 12, 
+            marginBottom: 24,
+            gap: 4
+          }}>
+            <button
+              onClick={() => setActiveSource('me')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 9,
+                border: 'none',
+                backgroundColor: activeSource === 'me' ? 'var(--bg-secondary)' : 'transparent',
+                color: activeSource === 'me' ? 'var(--accent)' : 'var(--text-secondary)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: activeSource === 'me' ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+              }}
+            >
+              My Theme
+            </button>
+            <button
+              onClick={() => setActiveSource('peer')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 9,
+                border: 'none',
+                backgroundColor: activeSource === 'peer' ? 'var(--bg-secondary)' : 'transparent',
+                color: activeSource === 'peer' ? 'var(--accent)' : 'var(--text-secondary)',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: activeSource === 'peer' ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+              }}
+            >
+              Peer's Shared Theme
+            </button>
+          </div>
+        )}
+
         {/* Live Preview */}
-        {imagePreview && (
+        {((activeSource === 'me' && imagePreview) || (activeSource === 'peer' && peerTheme?.backgroundImage)) && (
           <div style={{ 
             marginBottom: 24, 
             borderRadius: 12, 
             overflow: 'hidden', 
             position: 'relative', 
             height: 120,
-            backgroundImage: `url(${imagePreview})`,
+            backgroundImage: `url(${activeSource === 'me' ? imagePreview : peerTheme?.backgroundImage})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
@@ -161,9 +226,13 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  backgroundColor: `rgba(15, 23, 42, ${1 - theme.opacity})`,
-                  backdropFilter: theme.blur > 0 ? `blur(${theme.blur}px)` : undefined,
-                  WebkitBackdropFilter: theme.blur > 0 ? `blur(${theme.blur}px)` : undefined,
+                  backgroundColor: `rgba(15, 23, 42, ${1 - (activeSource === 'me' ? theme.opacity : (theme.peerOverrides?.opacity ?? peerTheme!.opacity))})`,
+                  backdropFilter: (activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)) > 0 
+                    ? `blur(${activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)}px)` 
+                    : undefined,
+                  WebkitBackdropFilter: (activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)) > 0 
+                    ? `blur(${activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)}px)` 
+                    : undefined,
                   pointerEvents: 'none',
                 }}
               />
@@ -179,9 +248,10 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
                   color: 'var(--text-primary)',
                   fontSize: 14,
                   fontWeight: 500,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.8)'
                 }}
               >
-                Preview
+                {activeSource === 'peer' ? "Peer's Theme Preview" : "My Theme Preview"}
               </div>
             </div>
           </div>
@@ -212,11 +282,12 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
           </button>
         </div>
 
-        {/* Background Image */}
-        <div style={{ marginBottom: 24 }}>
-          <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            Background Image
-          </label>
+        {/* Background Image - Only for 'me' source */}
+        {activeSource === 'me' && (
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: 'block', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+              Background Image
+            </label>
           
           {imagePreview ? (
             <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
@@ -303,28 +374,38 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
             accept="image/*"
             style={{ display: 'none' }}
             onChange={handleImageUpload}
-          />
-        </div>
+            />
+          </div>
+        )}
 
         {/* Opacity Slider */}
         <div style={{ marginBottom: 24 }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            <span>Opacity</span>
-            <span style={{ color: 'var(--accent)' }}>{Math.round(theme.opacity * 100)}%</span>
+            <span>{activeSource === 'me' ? 'Opacity' : 'Local Opacity Overwrite'}</span>
+            <span style={{ color: 'var(--accent)' }}>
+              {Math.round((activeSource === 'me' ? theme.opacity : (theme.peerOverrides?.opacity ?? peerTheme!.opacity)) * 100)}%
+            </span>
           </label>
           <input
             type="range"
             min="0"
             max="1"
             step="0.01"
-            value={theme.opacity}
-            onChange={(e) => setTheme({ ...theme, opacity: parseFloat(e.target.value) })}
+            value={activeSource === 'me' ? theme.opacity : (theme.peerOverrides?.opacity ?? peerTheme!.opacity)}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (activeSource === 'me') {
+                setTheme({ ...theme, opacity: val });
+              } else {
+                setTheme({ ...theme, peerOverrides: { ...theme.peerOverrides, opacity: val } });
+              }
+            }}
             style={{
               width: '100%',
               height: 6,
               borderRadius: 3,
               outline: 'none',
-              background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${theme.opacity * 100}%, var(--bg-tertiary) ${theme.opacity * 100}%, var(--bg-tertiary) 100%)`,
+              background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${(activeSource === 'me' ? theme.opacity : (theme.peerOverrides?.opacity ?? peerTheme!.opacity)) * 100}%, var(--bg-tertiary) ${(activeSource === 'me' ? theme.opacity : (theme.peerOverrides?.opacity ?? peerTheme!.opacity)) * 100}%, var(--bg-tertiary) 100%)`,
               cursor: 'pointer',
             }}
           />
@@ -333,38 +414,49 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
         {/* Blur Slider */}
         <div style={{ marginBottom: 24 }}>
           <label style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            <span>Blur</span>
-            <span style={{ color: 'var(--accent)' }}>{theme.blur}px</span>
+            <span>{activeSource === 'me' ? 'Blur' : 'Local Blur Overwrite'}</span>
+            <span style={{ color: 'var(--accent)' }}>
+              {activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)}px
+            </span>
           </label>
           <input
             type="range"
             min="0"
             max="50"
             step="1"
-            value={theme.blur}
-            onChange={(e) => setTheme({ ...theme, blur: parseInt(e.target.value) })}
+            value={activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              if (activeSource === 'me') {
+                setTheme({ ...theme, blur: val });
+              } else {
+                setTheme({ ...theme, peerOverrides: { ...theme.peerOverrides, blur: val } });
+              }
+            }}
             style={{
               width: '100%',
               height: 6,
               borderRadius: 3,
               outline: 'none',
-              background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${(theme.blur / 50) * 100}%, var(--bg-tertiary) ${(theme.blur / 50) * 100}%, var(--bg-tertiary) 100%)`,
+              background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${((activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)) / 50) * 100}%, var(--bg-tertiary) ${((activeSource === 'me' ? theme.blur : (theme.peerOverrides?.blur ?? peerTheme!.blur)) / 50) * 100}%, var(--bg-tertiary) 100%)`,
               cursor: 'pointer',
             }}
           />
         </div>
 
-        {/* Show to Others Toggle */}
-        <div style={{ marginBottom: 28 }}>
-          <PremiumToggle
-            label="Show to Others"
-            description="Let the other person see your custom theme"
-            checked={theme.showToOthers}
-            onChange={(val) => setTheme({ ...theme, showToOthers: val })}
-            iconOn={<Eye size={12} color="var(--accent)" />}
-            iconOff={<EyeOff size={12} color="var(--text-secondary)" />}
-          />
-        </div>
+        {/* Show to Others Toggle - Only for 'me' source */}
+        {activeSource === 'me' && (
+          <div style={{ marginBottom: 28 }}>
+            <PremiumToggle
+              label="Show to Others"
+              description="Let the other person see your custom theme"
+              checked={theme.showToOthers}
+              onChange={(val) => setTheme({ ...theme, showToOthers: val })}
+              iconOn={<Eye size={12} color="var(--accent)" />}
+              iconOff={<EyeOff size={12} color="var(--text-secondary)" />}
+            />
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 12 }}>

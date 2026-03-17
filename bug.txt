@@ -14,12 +14,12 @@ to be implemented:
 13. (fixed) more reaction inside view port for grid layout too
 17. (fixed) incoming call ringtone, outgoing call ringtone 
 9. (fixed) chat isn't scrolling down when reload 
+17. (fixed) Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 14. single emoji to full row animated 
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 16. in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
-17. Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
 18. load the older chat faster
 19. show chat them preview in both user chat window
 

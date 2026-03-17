@@ -103,7 +103,7 @@ Last seen Invalid Date
     This preserves the original formatting while still maintaining all the existing functionality like clickable URLs and search highlighting.
 (fixed) bold (ctrl +b), italic(ctrl + i), strike through (ctrl + shift + x), inline code (ctrl + shift + i), number list (ctrl + shift + 7) , bullet list (ctrl + shift + 8), quote (ctrl + shift + .)
 (fixed) clicking on username/email will redirect it to their chat 
-Missed, declined, incomming, outgoing icon for audio and video calls
+(fixed) Missed, declined, incomming, outgoing icon for audio and video calls
 
 (partially) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
 draft message is hard to write as it

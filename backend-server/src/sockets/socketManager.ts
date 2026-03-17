@@ -346,6 +346,21 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         }
       }
     });
+    // ─── Chat Theme Preview ───────────────────────────────────────────────
+    socket.on(SOCKET_EVENTS.THEME_PREVIEW, async (payload: { chatId: string; theme: any }) => {
+      const chat = await getChatById(payload.chatId, uid).catch(() => null);
+      if (chat) {
+        for (const memberId of chat.members) {
+          if (memberId !== uid) {
+            io.to(`user:${memberId}`).emit(SOCKET_EVENTS.PEER_THEME_PREVIEW, {
+              chatId: payload.chatId,
+              peerId: uid,
+              theme: payload.theme,
+            });
+          }
+        }
+      }
+    });
     // ─── Read Receipts ────────────────────────────────────────────────────
     socket.on(SOCKET_EVENTS.MESSAGE_READ, async (payload: { chatId: string; messageId: string }) => {
       const receipt = { chatId: payload.chatId, userId: uid };

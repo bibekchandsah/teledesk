@@ -32,6 +32,10 @@ export interface ChatTheme {
   opacity: number; // 0-1, background opacity
   blur: number; // 0-50, background blur in pixels
   showToOthers: boolean; // if true, other user sees this theme
+  peerOverrides?: { // local overrides for the peer's shared theme
+    opacity?: number;
+    blur?: number;
+  };
 }
 
 export interface DeviceSession {
