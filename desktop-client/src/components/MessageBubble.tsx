@@ -721,6 +721,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             gap: 12, 
             cursor: onCall ? 'pointer' : 'default',
             minWidth: 220,
+            filter: 'drop-shadow(2px 4px 6px black)',
           }}
           onClick={() => onCall?.(message.callType ?? 'voice')}
           title={onCall ? `Call back (${message.callType ?? 'voice'})` : undefined}
@@ -738,6 +739,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             color: callColor,
             flexShrink: 0,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            // border: '1.5px solid rgba(255, 255, 255, 0.2)',
           }}>
             {iconEl}
           </div>
@@ -748,15 +750,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               color: callColor,
               marginBottom: 2,
               letterSpacing: '0.01em',
+              textShadow: '0 1px 2px rgba(0,0,0,0.4)',
             }}>
               {label}
             </div>
             {status === 'completed' && dur > 0 && (
               <div style={{ 
                 fontSize: 12, 
-                opacity: 0.7,
+                opacity: 0.9,
                 color: 'var(--text-secondary)',
-                fontWeight: 500,
+                fontWeight: 600,
+                textShadow: '0 1px 2px rgba(0,0,0,0.4)',
               }}>
                 Duration: {dStr}
               </div>
