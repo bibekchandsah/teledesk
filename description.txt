@@ -418,3 +418,5 @@ For received messages (Receiver): The emoji pill appears on the right side of th
 
 Sender (You): The heart starts on the left of your bubble and slides left toward the center.
 Receiver (Others): The heart starts on the right of their bubble and slides right toward the center. 
+Sidebar Protection: Because it's now "trapped" inside the chat area, the picker will never overlap your sidebar or other UI elements outside the chat.
+Smart Positioning: I updated the coordinate logic to calculate the picker's position relative to the chat window, ensuring it still pops up exactly next to the message you're reacting to.

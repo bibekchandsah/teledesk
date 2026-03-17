@@ -1002,9 +1002,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             onMouseLeave={() => { setShowEmojiBar(false); setShowExtended(false); setPickerPos(null); }}
             style={{
               position: 'absolute',
-              // [isOwn ? 'right' : 'left']: 0,
-              [isOwn ? 'right' : 'left']: 'calc(100% - 48px)',
-              [isOwn ? (isTouchDevice ? 'right' : 'left') : (isTouchDevice ? 'left' : 'right')]: 0,
+              [isOwn ? 'right' : 'left']: isTouchDevice ? 0 : 'calc(100% - 48px)',
               bottom: '100%',
               marginBottom: 6,
               zIndex: 200,
@@ -1019,7 +1017,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               onMouseEnter={() => setIsEmojiBarHovered(true)}
               onMouseLeave={() => { 
                 setIsEmojiBarHovered(false);
-                if (!showExtended) setShowEmojiBar(false); // Optional: close entirely if not extended? or just collapse
+                if (!showExtended) setShowEmojiBar(false); 
               }}
               style={{
                 display: 'flex',
@@ -1043,6 +1041,67 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 cursor: 'pointer',
               }}
             >
+              {/* More emojis button (now at the start) */}
+              <button
+                ref={smilePlusBtnRef}
+                onClick={() => {
+                  if (!showExtended) {
+                    const btn = smilePlusBtnRef.current;
+                    if (btn) {
+                      const rect = btn.getBoundingClientRect();
+                      const chatContainer = document.getElementById('chat-emoji-picker-container');
+                      const chatRect = chatContainer?.getBoundingClientRect() || { top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth, width: window.innerWidth, height: window.innerHeight };
+                      
+                      const pickerHeight = 435;
+                      const pickerWidth = 352;
+                      
+                      // Calculate positions relative to chat container
+                      const relativeBtnBottom = rect.bottom - chatRect.top;
+                      const relativeBtnTop = rect.top - chatRect.top;
+                      const relativeBtnRight = rect.right - chatRect.left;
+                      
+                      const spaceBelow = chatRect.bottom - rect.bottom - 8;
+                      const dir = spaceBelow >= pickerHeight ? 'down' : 'up';
+                      setPickerDirection(dir);
+
+                      const left = Math.min(relativeBtnRight - pickerWidth, chatRect.width - pickerWidth - 8);
+                      const safeLeft = Math.max(8, left);
+
+                      if (dir === 'down') {
+                        setPickerPos({ top: relativeBtnBottom + 6, left: safeLeft });
+                      } else {
+                        setPickerPos({ bottom: (chatRect.height - relativeBtnTop) + 6, left: safeLeft });
+                      }
+                    }
+                  } else {
+                    setPickerPos(null);
+                  }
+                  setShowExtended(v => !v);
+                }}
+                title="More reactions"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  padding: (isEmojiBarHovered || isTouchDevice) ? '4px 6px' : 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--text-secondary, #aaa)',
+                  transition: 'transform 0.12s, color 0.12s, opacity 0.3s, width 0.3s, padding 0.3s',
+                  opacity: (isEmojiBarHovered || isTouchDevice) ? 1 : 0,
+                  transform: (isEmojiBarHovered || isTouchDevice) ? 'scale(1)' : 'scale(0.3)',
+                  flexShrink: 0,
+                  width: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 0,
+                  overflow: 'hidden',
+                  pointerEvents: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 'none',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary, #aaa)'; }}
+              >
+                <SmilePlus size={18} />
+              </button>
+
               {PRESET_EMOJIS.map((em, idx) => {
                 const alreadyReacted = (reactions[em] ?? []).includes(currentUserId ?? '');
                 const isFirst = idx === 0;
@@ -1076,69 +1135,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                   </button>
                 );
               })}
-              {/* More emojis button */}
-              <button
-                ref={smilePlusBtnRef}
-                onClick={() => {
-                  if (!showExtended) {
-                    const btn = smilePlusBtnRef.current;
-                    if (btn) {
-                      const rect = btn.getBoundingClientRect();
-                      const pickerHeight = 435;
-                      const pickerWidth = 352;
-                      const spaceBelow = window.innerHeight - rect.bottom - 8;
-                      const dir = spaceBelow >= pickerHeight ? 'down' : 'up';
-                      setPickerDirection(dir);
-                      const left = Math.min(rect.right - pickerWidth, window.innerWidth - pickerWidth - 8);
-                      const safeLeft = Math.max(8, left);
-                      if (dir === 'down') {
-                        setPickerPos({ top: rect.bottom + 6, left: safeLeft });
-                      } else {
-                        setPickerPos({ bottom: window.innerHeight - rect.top + 6, left: safeLeft });
-                      }
-                    }
-                  } else {
-                    setPickerPos(null);
-                  }
-                  setShowExtended(v => !v);
-                }}
-                title="More reactions"
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  borderRadius: '50%',
-                  cursor: 'pointer',
-                  padding: (isEmojiBarHovered || isTouchDevice) ? '4px 6px' : 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: 'var(--text-secondary, #aaa)',
-                  transition: 'transform 0.12s, color 0.12s, opacity 0.3s, width 0.3s, padding 0.3s',
-                  opacity: (isEmojiBarHovered || isTouchDevice) ? 1 : 0,
-                  transform: (isEmojiBarHovered || isTouchDevice) ? 'scale(1)' : 'scale(0.3)',
-                  flexShrink: 0,
-                  width: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 0,
-                  overflow: 'hidden',
-                  pointerEvents: (isEmojiBarHovered || isTouchDevice) ? 'auto' : 'none',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary, #aaa)'; }}
-              >
-                <SmilePlus size={18} />
-              </button>
             </div>
           </div>
         )}
 
-        {/* ─── Emoji Picker Portal (renders at document.body, never clipped) ── */}
+        {/* ─── Emoji Picker Portal (renders inside chat window, never overlaps sidebar) ── */}
         {showExtended && pickerPos && createPortal(
           <div
             onMouseDown={e => e.stopPropagation()}
             style={{
-              position: 'fixed',
+              position: 'absolute',
               top: pickerPos.top,
               bottom: pickerPos.bottom,
               left: pickerPos.left,
-              zIndex: 99999,
+              zIndex: 10000,
               backgroundColor: 'var(--bg-secondary)',
               borderRadius: 12,
               boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
@@ -1148,7 +1158,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           >
             <Picker data={data} onEmojiSelect={handleEmojiMartSelect} theme="auto" previewPosition="none" skinTonePosition="none" navPosition="bottom" />
           </div>,
-          document.body
+          document.getElementById('chat-emoji-picker-container') || document.body
         )}
 
         <div

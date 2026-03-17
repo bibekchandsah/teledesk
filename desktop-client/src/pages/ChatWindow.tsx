@@ -3671,6 +3671,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               }}
             />
           )}
+
+          {/* Localized portal container for emoji pickers and reactions */}
+          <div 
+            id="chat-emoji-picker-container" 
+            style={{ 
+              position: 'absolute', 
+              inset: 0, 
+              pointerEvents: 'none', 
+              zIndex: 9999, // Ensure it's above most elements but inside the chat window
+            }} 
+          />
       {dragActive && (
         <div style={{
           position: 'absolute',
