@@ -4,6 +4,8 @@ import { ChatTheme } from '@shared/types';
 import { setChatTheme, removeChatTheme } from '../../services/apiService';
 import { uploadChatFile } from '../../services/fileService';
 import { useAuthStore } from '../../store/authStore';
+import ConfirmModal from './ConfirmModal';
+import PremiumToggle from '../PremiumToggle';
 
 interface ChatThemeModalProps {
   chatId: string;
@@ -21,6 +23,7 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(currentTheme?.backgroundImage || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,8 +86,10 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
   };
 
   const handleRemoveTheme = async () => {
-    if (!confirm('Remove custom theme for this chat?')) return;
-    
+    setShowConfirm(true);
+  };
+
+  const confirmRemoveTheme = async () => {
     setSaving(true);
     try {
       const res = await removeChatTheme(chatId);
@@ -351,48 +356,14 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
 
         {/* Show to Others Toggle */}
         <div style={{ marginBottom: 28 }}>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-            <div>
-              <div style={{ color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-                Show to Others
-              </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-                Let the other person see your custom theme
-              </div>
-            </div>
-            <button
-              onClick={() => setTheme({ ...theme, showToOthers: !theme.showToOthers })}
-              style={{
-                width: 46,
-                height: 26,
-                borderRadius: 13,
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: theme.showToOthers ? 'var(--accent)' : 'var(--bg-tertiary)',
-                position: 'relative',
-                transition: 'background-color 0.2s',
-                flexShrink: 0,
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: theme.showToOthers ? 23 : 3,
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  backgroundColor: '#fff',
-                  transition: 'left 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {theme.showToOthers ? <Eye size={12} color="var(--accent)" /> : <EyeOff size={12} color="var(--text-secondary)" />}
-              </span>
-            </button>
-          </label>
+          <PremiumToggle
+            label="Show to Others"
+            description="Let the other person see your custom theme"
+            checked={theme.showToOthers}
+            onChange={(val) => setTheme({ ...theme, showToOthers: val })}
+            iconOn={<Eye size={12} color="var(--accent)" />}
+            iconOff={<EyeOff size={12} color="var(--text-secondary)" />}
+          />
         </div>
 
         {/* Actions */}
@@ -440,6 +411,16 @@ const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ chatId, currentTheme, o
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={confirmRemoveTheme}
+        title="Remove Theme?"
+        message="Are you sure you want to remove the custom theme for this chat? This will restore the default background for you."
+        confirmText="Remove"
+        type="danger"
+      />
     </div>
   );
 };

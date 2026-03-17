@@ -22,7 +22,7 @@ import ErrorModal from '../components/modals/ErrorModal';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -30,6 +30,7 @@ import Picker from '@emoji-mart/react';
 import MessageContextMenu from '../components/MessageContextMenu';
 import ChatThemeModal from '../components/modals/ChatThemeModal';
 import ImageSpoiler from '../components/ImageSpoiler';
+import PremiumToggle from '../components/PremiumToggle';
 
 export const downloadMessageFile = (m: Message) => {
   if (!m.fileUrl) return;
@@ -3734,42 +3735,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
             {/* Caption + Send */}
             <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
-              {/* Spoiler checkbox for images/videos */}
+              {/* Spoiler toggle for images/videos */}
               {pendingUploadFiles.some(f => f.type.startsWith('image/') || f.type.startsWith('video/')) && (
-                <label style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12,
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                }}>
-                  <input
-                    type="checkbox"
+                <div style={{ marginBottom: 16 }}>
+                  <PremiumToggle
+                    label="Mark as spoiler"
+                    description="Hidden with blur effect"
                     checked={uploadAsSpoiler}
-                    onChange={(e) => setUploadAsSpoiler(e.target.checked)}
-                    style={{
-                      width: 18,
-                      height: 18,
-                      cursor: 'pointer',
-                      accentColor: 'var(--accent)',
-                    }}
+                    onChange={(val) => setUploadAsSpoiler(val)}
+                    iconOn={<Eye size={12} color="var(--accent)" />}
+                    iconOff={<EyeOff size={12} color="var(--text-secondary)" />}
                   />
-                  <span style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: 'var(--text-primary)',
-                  }}>
-                    Mark as spoiler
-                  </span>
-                  <span style={{
-                    fontSize: 11,
-                    color: 'var(--text-secondary)',
-                    fontStyle: 'italic',
-                  }}>
-                    (Hidden with blur effect)
-                  </span>
-                </label>
+                </div>
               )}
               
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
