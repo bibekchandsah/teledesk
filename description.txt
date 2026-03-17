@@ -349,3 +349,16 @@ Loading spinner  →  	Shown during fetch  →  	Silently hidden — background 
 
 Before the fetch, we snapshot { scrollHeight, scrollTop } into a ref (scrollAnchorRef)
 After setOlderMessages triggers a re-render, a useLayoutEffect fires synchronously after React commits the DOM but before the browser paints, reads the new scrollHeight, computes the difference, and corrects scrollTop — all before the user sees anything
+
+
+<-------------------------- online/read status visibility -------------------------->
+Independent visibility: the peer's online status is visible to me based only on THEIR setting.
+My own showActiveStatus setting only affects what OTHERS see about ME — not whether I can see the peer.
+Scenario  →  A sees B's online?  →  B sees A's online?  →  A sees B's ticks?  →  B sees A's ticks?
+A ✅ enabled, B ✅ enabled  →  ✅ Yes  →  ✅ Yes  →  ✅ Yes  →  ✅ Yes
+A ❌ disabled, B ✅ enabled  →  ✅ Yes (B is enabled!)  →  ❌ No (A is disabled)  →  ✅ Yes  →  ❌ No
+A ✅ enabled, B ❌ disabled  →  ❌ No (B is disabled)  →  ✅ Yes (A is enabled!)  →  ❌ No  →  ✅ Yes
+A ❌ disabled, B ❌ disabled  →  ❌ No  →  ❌ No  →  ❌ No  →  ❌ No
+
+Online dot (ChatWindow.tsx): Now only checks if the peer has showActiveStatus enabled. Your own setting no longer affects whether you can see others.
+Read ticks (MessageBubble.tsx): Now only checks if the message sender has showMessageStatus enabled. The receiver's setting no longer blocks the sender from seeing ticks.

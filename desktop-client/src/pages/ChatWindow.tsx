@@ -2061,15 +2061,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? currentUser 
       : userProfiles[peerId];
     
-    // Check if both users have showActiveStatus enabled (mutual visibility)
-    const isSelfVisible = currentUser?.showActiveStatus !== false;
+    // Independent visibility: the peer's online status is visible to me based only on THEIR setting.
+    // My own showActiveStatus setting only affects what OTHERS see about ME — not whether I can see the peer.
     const isPeerVisible = peerProfile?.showActiveStatus !== false;
       
     return {
       uid: peerId,
       isSelf: isSelfChat,
       profile: peerProfile,
-      online: !isSelfChat && onlineUsers.has(peerId) && isPeerVisible && isSelfVisible,
+      online: !isSelfChat && onlineUsers.has(peerId) && isPeerVisible,
     };
   }, [activeChat, currentUser, userProfiles, onlineUsers]);
 
