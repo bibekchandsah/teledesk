@@ -18,7 +18,7 @@
   - Mark task complete when test is written, run, and failure is documented
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
 
-- [~] 2. Write preservation property tests (BEFORE implementing fix)
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
   - **Property 2: Preservation** - Spoiler Reveal Interaction and Backend Integration
   - **IMPORTANT**: Follow observation-first methodology
   - Observe behavior on UNFIXED code for non-buggy inputs (normal spoiler interactions)
@@ -33,9 +33,9 @@
   - Mark task complete when tests are written, run, and passing on unfixed code
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
 
-- [~] 3. Fix for image spoiler state reset and upload preview UI
+- [ ] 3. Fix for image spoiler state reset and upload preview UI
 
-  - [~] 3.1 Fix conditional rendering in ImageSpoiler.tsx
+  - [ ] 3.1 Fix conditional rendering in ImageSpoiler.tsx
     - Change shimmer effect condition from `!disableReveal` to `!disableReveal && !isRevealed`
     - Change label condition from `!disableReveal` to `!disableReveal && !isRevealed`
     - This ensures shimmer and label only show in message mode when hidden, not in upload preview mode
@@ -44,7 +44,7 @@
     - _Preservation: Existing spoiler reveal/hide functionality must remain unchanged_
     - _Requirements: 2.4, 2.5, 2.6, 3.1, 3.2_
 
-  - [~] 3.2 Add component key in MessageBubble.tsx
+  - [ ] 3.2 Add component key in MessageBubble.tsx
     - Add `key={message.messageId}` prop to all ImageSpoiler components in MessageBubble
     - This forces React to create new component instances when message IDs change, resetting local state
     - _Bug_Condition: isBugCondition(input) where input.scenario='state_persistence' AND input.isRevealed=true AND input.isRemounting=true_
@@ -52,7 +52,7 @@
     - _Preservation: Spoiler rendering in MessageBubble must continue to work correctly_
     - _Requirements: 2.1, 2.2, 2.3, 3.5_
 
-  - [~] 3.3 Add component key in ChatWindow.tsx (MediaGroupBubble)
+  - [ ] 3.3 Add component key in ChatWindow.tsx (MediaGroupBubble)
     - Add `key={m.messageId}` prop to all ImageSpoiler components in MediaGroupBubble rendering
     - This forces React to create new component instances when message IDs change in grid layouts
     - _Bug_Condition: isBugCondition(input) where input.scenario='state_persistence' AND input.isRevealed=true AND input.isRemounting=true_
@@ -60,7 +60,7 @@
     - _Preservation: Spoiler rendering in MediaGroupBubble must continue to work correctly_
     - _Requirements: 2.1, 2.2, 2.3, 3.4_
 
-  - [~] 3.4 Verify bug condition exploration test now passes
+  - [ ] 3.4 Verify bug condition exploration test now passes
     - **Property 1: Expected Behavior** - Spoiler State Reset and Upload Preview Visual-Only
     - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
     - The test from task 1 encodes the expected behavior
@@ -71,7 +71,7 @@
     - Verify Scenario 2: Upload preview shows only blur + particles (no shimmer, no label)
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
 
-  - [~] 3.5 Verify preservation tests still pass
+  - [ ] 3.5 Verify preservation tests still pass
     - **Property 2: Preservation** - Spoiler Reveal Interaction and Backend Integration
     - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
     - Run preservation property tests from step 2
@@ -83,5 +83,5 @@
       - Backend spoiler flag transmission works
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
 
-- [~] 4. Checkpoint - Ensure all tests pass
+- [ ] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

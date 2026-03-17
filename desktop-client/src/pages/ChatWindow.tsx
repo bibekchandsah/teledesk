@@ -1568,6 +1568,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // Tracks which chatId we've already instant-scrolled to bottom for
   const lastScrolledChatRef = useRef<string>('');
   const isFetchingRef = useRef(false);
+  // Stores pre-fetch scroll metrics so useLayoutEffect can restore position after DOM commit
+  const scrollAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
 
   const currentUid = currentUser?.uid ?? '';
   // Live messages from the real-time Firestore listener (latest ~30)
@@ -1986,13 +1988,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     const oldestTs = allMsgs[0].timestamp;
     const el = scrollContainerRef.current;
-    const prevScrollHeight = el?.scrollHeight ?? 0;
-    const prevScrollTop = el?.scrollTop ?? 0;
+    // Snapshot scroll metrics into a ref BEFORE the async fetch.
+    // The useLayoutEffect below reads this ref after React commits the new messages to the DOM,
+    // guaranteeing the position is restored synchronously (before browser paint) with no jump.
+    if (el) {
+      scrollAnchorRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
+    }
 
     isFetchingRef.current = true;
-    setIsLoadingMore(true);
     try {
-      const res = await getChatMessages(chatId, 30, oldestTs);
+      // Fetch 50 messages at a time for larger buffers and fewer fetches
+      const res = await getChatMessages(chatId, 50, oldestTs);
       if (res.success && res.data && res.data.length > 0) {
         const uid = currentUser?.uid ?? '';
         const fetched = res.data.filter((m) => !(m.deletedFor ?? []).includes(uid));
@@ -2002,27 +2008,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           const newOnes = fetched.filter((m) => !existing.has(m.messageId));
           return [...newOnes, ...prev];
         });
-        // Restore scroll position so the view doesn't jump
-        requestAnimationFrame(() => {
-          if (el) el.scrollTop = prevScrollTop + (el.scrollHeight - prevScrollHeight);
-        });
-        if (fetched.length < 30) setHasMore(false);
+        if (fetched.length < 50) setHasMore(false);
       } else {
         setHasMore(false);
       }
     } catch (err) {
       console.error('[Pagination] Failed to load older messages:', err);
     } finally {
-      setIsLoadingMore(false);
       isFetchingRef.current = false;
     }
   }, [chatId, hasMore, olderMessages, messages, currentUid, currentUser]);
 
+  // Synchronously restore scroll after React commits prepended messages.
+  // useLayoutEffect fires AFTER the DOM is updated but BEFORE the browser paints,
+  // so the user never sees the scroll jump caused by content being added above.
+  useLayoutEffect(() => {
+    const anchor = scrollAnchorRef.current;
+    const el = scrollContainerRef.current;
+    if (!anchor || !el) return;
+    const heightDiff = el.scrollHeight - anchor.scrollHeight;
+    if (heightDiff > 0) {
+      el.scrollTop = anchor.scrollTop + heightDiff;
+    }
+    // Clear the anchor so subsequent non-pagination renders don't incorrectly re-offset
+    scrollAnchorRef.current = null;
+  }, [olderMessages.length]);
+
+
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    // Pagination trigger
-    if (!isFetchingRef.current && hasMore && el.scrollTop < 120) loadOlderMessages();
+    // Preload older messages well before the user reaches the top (1000px buffer)
+    // This mimics Telegram's seamless infinite scroll — the user rarely sees a spinner
+    if (!isFetchingRef.current && hasMore && el.scrollTop < 1000) loadOlderMessages();
     // Show/hide scroll nav arrows
     setShowScrollTop(el.scrollTop > 200);
     setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 400);
