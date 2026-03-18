@@ -1645,31 +1645,82 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   
   const handleMentionClick = useCallback(async (text: string, type: 'username' | 'email') => {
     if (!currentUser) return;
-    
-    // Clean up the text (remove @ if it's a username)
+
     const query = type === 'username' ? text.replace(/^@/, '') : text;
-    
+
+    // Helper: does this user object match the query?
+    const matchesQuery = (u: { username?: string; email?: string }) =>
+      type === 'username'
+        ? u.username?.toLowerCase() === query.toLowerCase()
+        : u.email?.toLowerCase() === query.toLowerCase();
+
+    // Check if user clicked their own mention
+    const isSelf = matchesQuery(currentUser);
+    if (isSelf) {
+      const selfChat = chats.find(c =>
+        c.type === 'private' && c.members?.every(m => m === currentUser.uid)
+      );
+      if (selfChat) {
+        navigate(`/chats/${selfChat.chatId}`);
+      } else {
+        setMentionToast("That's you!");
+        setTimeout(() => setMentionToast(null), 2500);
+      }
+      return;
+    }
+
+    // Fast path: check existing userProfiles in store first
+    const existingUser = Object.values(userProfiles).find(matchesQuery);
+    if (existingUser) {
+      const existingChat = chats.find(c =>
+        c.type === 'private' && c.members?.includes(existingUser.uid)
+      );
+      if (existingChat) {
+        // Always refresh profile to ensure avatar is up-to-date (Google users may lack it)
+        setUserProfile(existingUser);
+        navigate(`/chats/${existingChat.chatId}`);
+        return;
+      }
+    }
+
+    // Slow path: resolve via API
     try {
       const { searchUsers, createPrivateChat, getChats } = await import('../services/apiService');
       const res = await searchUsers(query);
       if (res.success && res.data && res.data.length > 0) {
-        // Find exact match
-        const user = res.data.find(u => 
-          type === 'username' 
-            ? u.username?.toLowerCase() === query.toLowerCase()
-            : u.email?.toLowerCase() === query.toLowerCase()
-        );
-        
+        const user = res.data.find(matchesQuery);
+
         if (user) {
+          // Double-check self (in case username wasn't set when fast-path ran)
+          if (user.uid === currentUser.uid) {
+            const selfChat = chats.find(c =>
+              c.type === 'private' && c.members?.every(m => m === currentUser.uid)
+            );
+            if (selfChat) {
+              navigate(`/chats/${selfChat.chatId}`);
+            } else {
+              setMentionToast("That's you!");
+              setTimeout(() => setMentionToast(null), 2500);
+            }
+            return;
+          }
+
+          // Store full profile immediately so avatar is available when chat opens
+          setUserProfile(user);
+
+          const alreadyExists = chats.find(c =>
+            c.type === 'private' && c.members?.includes(user.uid)
+          );
+          if (alreadyExists) {
+            navigate(`/chats/${alreadyExists.chatId}`);
+            return;
+          }
+
           const chatRes = await createPrivateChat(user.uid);
           if (chatRes.success && chatRes.data) {
             const newChatId = chatRes.data.chatId;
-            // Pre-populate profile
-            setUserProfile(user);
-            // Refresh chats list to ensure it's visible in sidebar
             const refreshed = await getChats();
             if (refreshed.success && refreshed.data) setChats(refreshed.data);
-            // Navigate to the chat
             navigate(`/chats/${newChatId}`);
           }
         }
@@ -1677,7 +1728,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     } catch (err) {
       console.error('Failed to resolve mention:', err);
     }
-  }, [currentUser, navigate, setUserProfile, setChats]);
+  }, [currentUser, navigate, setUserProfile, setChats, userProfiles, chats]);
 
   const mediaPickerRef = useRef<HTMLDivElement>(null);
 
@@ -1764,6 +1815,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // We keep a history for a rolling waveform (e.g., last 40 samples)
   const [waveformHistory, setWaveformHistory] = useState<number[]>(Array(40).fill(0));
   const [showHoldToast, setShowHoldToast] = useState(false);
+  const [mentionToast, setMentionToast] = useState<string | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressActive = useRef(false);
   const [recordingDurationRef, setRecordingDurationRef] = useState(0); // For UI display
@@ -5649,6 +5701,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               animation: 'fadeIn 0.2s ease'
             }}>
               Hold for a second to start recording
+            </div>
+          )}
+
+          {/* Mention toast */}
+          {mentionToast && (
+            <div style={{
+              position: 'fixed',
+              bottom: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              padding: '8px 18px',
+              borderRadius: 20,
+              fontSize: 13,
+              fontWeight: 500,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+              border: '1px solid var(--border)',
+              zIndex: 9999,
+              whiteSpace: 'nowrap',
+              animation: 'fadeIn 0.2s ease',
+            }}>
+              {mentionToast}
             </div>
           )}
 

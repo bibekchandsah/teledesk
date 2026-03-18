@@ -27,11 +27,11 @@ to be implemented:
 24. (fixed) video icon for video files containing spoiler
 25. (fixed) Disable double right click menu
 23. (fixed) sidebar status isn't linked with online/offline status
+29. (fixed) clicking on @username or @email is taking a bit longer time to open mentioned user chat 
 
+26. (fixed) Optimize call log loading, instead of loading all call logs at once load like chat history
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 
-26. Optimize call log loading, instead of loading all call logs at once load like chat history
 28. Playbar in audio clips
-29. clicking on @username or @email is taking a bit longer time to open mentioned user chat 
