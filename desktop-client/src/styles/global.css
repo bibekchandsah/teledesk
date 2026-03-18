@@ -48,6 +48,12 @@ body,
   overflow: hidden;
 }
 
+/* Login page needs scrolling — override the global overflow: hidden */
+body:has(.login-page),
+#root:has(.login-page) {
+  overflow: auto;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg-primary);

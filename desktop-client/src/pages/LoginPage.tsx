@@ -4,13 +4,16 @@ import { useAuthStore } from '../store/authStore';
 import { useMultiAccountStore } from '../store/multiAccountStore';
 import { QuickAccountPicker } from '../components/QuickAccountPicker';
 import ConfirmationModal from '../components/modals/ConfirmationModal';
-import { MessageCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { MessageCircle, Eye, EyeOff, Loader2, Download } from 'lucide-react';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 const LoginPage: React.FC = () => {
   const { loginWithGoogle, loginWithGithub, loginWithEmail, registerWithEmail } = useAuth();
   const { isLoading, error } = useAuthStore();
   const { accounts } = useMultiAccountStore();
 
+  const { canInstall, install } = usePWAInstall();
+  const [installDismissed, setInstallDismissed] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -19,8 +22,6 @@ const LoginPage: React.FC = () => {
   const [showAccountPicker, setShowAccountPicker] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
-
-  // Revocation modal state
   const [showRevokedModal, setShowRevokedModal] = useState(false);
   const [revokedMessage, setRevokedMessage] = useState('');
 
@@ -129,33 +130,39 @@ const LoginPage: React.FC = () => {
 
   return (
     <div
+      className="login-page"
       style={{
-        minHeight: '100vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch' as any,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 60%)',
+        padding: '24px 16px',
+        boxSizing: 'border-box',
       }}
     >
       <div
         className="login-card"
         style={{
-          padding: '40px 44px',
+          padding: 'clamp(20px, 5vw, 40px) clamp(16px, 5vw, 44px)',
           backgroundColor: 'var(--bg-secondary)',
           borderRadius: 24,
           boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
           width: '100%',
           maxWidth: 420,
+          flexShrink: 0,
         }}
       >
         {/* Show Account Picker or Login Form */}
         {showAccountPicker ? (
           <>
             {/* Logo */}
-            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{ textAlign: 'center', marginBottom: 'clamp(12px, 3vw, 28px)' }}>
               <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
-                <MessageCircle size={52} color="var(--accent)" />
+                <MessageCircle size={42} color="var(--accent)" />
               </div>
               <h1
                 style={{
@@ -188,9 +195,9 @@ const LoginPage: React.FC = () => {
         ) : (
           <>
             {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ textAlign: 'center', marginBottom: 'clamp(12px, 3vw, 28px)' }}>
           <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
-            <MessageCircle size={52} color="var(--accent)" />
+            <MessageCircle size={42} color="var(--accent)" />
           </div>
           <h1
             style={{
@@ -435,6 +442,49 @@ const LoginPage: React.FC = () => {
         <p style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 20, textAlign: 'center' }}>
           By continuing, you agree to TeleDesk's Terms of Service and Privacy Policy.
         </p>
+
+        {/* PWA Install Banner */}
+        {canInstall && !installDismissed && (
+          <div
+            style={{
+              marginTop: 16,
+              padding: '12px 14px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.12))',
+              border: '1px solid rgba(99,102,241,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              animation: 'fadeIn 0.4s ease both',
+            }}
+          >
+            <img src="/PWA-icon.png" alt="TeleDesk" style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Install TeleDesk</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>Get the full app experience</div>
+            </div>
+            <button
+              onClick={install}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '6px 12px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Download size={13} />
+              Install
+            </button>
+            <button
+              onClick={() => setInstallDismissed(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px 4px', fontSize: 16, lineHeight: 1, flexShrink: 0 }}
+              title="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Back to Account Picker */}
         {accounts.length > 0 && !showAccountPicker && (

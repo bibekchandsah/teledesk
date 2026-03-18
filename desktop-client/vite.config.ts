@@ -17,7 +17,7 @@ export default defineConfig({
     }),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.ico', 'icon.png', 'icon.webp', 'apple-touch-icon.png'],
+      includeAssets: ['icon.ico', 'icon.png', 'icon.webp', 'apple-touch-icon.png', 'PWA-icon.png'],
       manifest: {
         name: 'TeleDesk',
         short_name: 'TeleDesk',
@@ -30,17 +30,17 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'icon-192.png',
+            src: 'PWA-icon.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'icon-512.png',
+            src: 'PWA-icon.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: 'icon-512.png',
+            src: 'PWA-icon.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable',
