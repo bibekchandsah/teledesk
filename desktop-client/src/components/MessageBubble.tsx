@@ -1493,10 +1493,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               {isOwn && !message.deleted && otherUserShowMessageStatus && (
                 <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
                   {message.readBy.length > 1
-                    ? <CheckCheck size={13} style={{ color: '#4fc3f7' }} />
+                    ? (
+                      // Double tick — read (blue)
+                      <svg width="15" height="11" viewBox="0 0 15 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 5.5L4.5 9L10 2" stroke="#363ef1" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M5 5.5L8.5 9L14 2" stroke="#363ef1" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )
                     : (message.deliveredTo ?? []).length > 0
-                      ? <CheckCheck size={13} style={{ opacity: 0.65 }} />
-                      : <Check size={13} style={{ opacity: 0.65 }} />}
+                      ? (
+                        // Double tick — delivered (dim)
+                        <svg width="15" height="11" viewBox="0 0 15 11" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.55 }}>
+                          <path d="M1 5.5L4.5 9L10 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M5 5.5L8.5 9L14 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )
+                      : (
+                        // Single tick — sent (dim)
+                        <svg width="11" height="11" viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.55 }}>
+                          <path d="M1.5 5.5L4.5 8.5L9.5 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )
+                  }
                 </span>
               )}
             </div>
