@@ -481,3 +481,10 @@ Modal closes instantly on click — no waiting
 Checks local chats store first — if the chat already exists, navigates in zero network calls
 For new chats, navigates immediately after createPrivateChat returns — no longer blocked by getChats()
 getChats() still runs but in the background, so the sidebar updates without delaying navigation
+
+
+<--------------------------- voice note ---------------------------------->
+make the voice note waveforms interactive, allowing you to click or drag to seek through the audio
+Interactive Seeker: Tap or click anywhere on the waveform to jump playback.
+Precision Scrubbing: Smooth real-time seeking via mouse drag or touch sliding.
+Visual Feedback: The progress highlight and timestamp update instantly as you seek.

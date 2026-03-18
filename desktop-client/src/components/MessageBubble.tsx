@@ -67,7 +67,75 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(messageDuration || 0);
   const [waveform, setWaveform] = useState<number[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveformRef = useRef<HTMLDivElement>(null);
+
+  const handleSeek = (e: MouseEvent | React.MouseEvent | TouchEvent | React.TouchEvent) => {
+    if (!waveformRef.current || !duration || duration === 0) return;
+    const rect = waveformRef.current.getBoundingClientRect();
+    
+    let clientX: number;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+    } else {
+      clientX = (e as MouseEvent | React.MouseEvent).clientX;
+    }
+
+    const x = clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    const newTime = percentage * duration;
+    
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
+      setProgress(newTime);
+    }
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDragging(true);
+    handleSeek(e);
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    // Don't preventDefault here as it might block scrolling if the user just wants to scroll
+    // But if we're on the waveform, we probably want to seek.
+    setIsDragging(true);
+    handleSeek(e);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      handleSeek(e);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      // Prevent scrolling while dragging the waveform
+      if (e.cancelable) e.preventDefault();
+      handleSeek(e);
+    };
+
+    const onEnd = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, [isDragging, duration]);
 
   const togglePlay = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent message bubble click
@@ -263,7 +331,20 @@ const VoiceNotePlayer = ({ fileUrl, isOwn, messageId, messageDuration }: { fileU
       </button>
       
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 28 }}>
+         <div 
+            ref={waveformRef}
+            onMouseDown={onMouseDown}
+            onTouchStart={onTouchStart}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 2, 
+              height: 28,
+              cursor: 'pointer',
+              padding: '4px 0',
+              boxSizing: 'content-box'
+            }}
+          >
             {/* Real waveform visualization */}
             {waveform.length > 0 ? (
                waveform.map((val, i) => (

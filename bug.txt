@@ -29,10 +29,9 @@ to be implemented:
 23. (fixed) sidebar status isn't linked with online/offline status
 29. (fixed) clicking on @username or @email is taking a bit longer time to open mentioned user chat 
 30. (fixed) optimize the time when user select user from new chat 
+28. (fixed) Playbar in audio clips
 
 26. (fixed) Optimize call log loading, instead of loading all call logs at once load like chat history
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
-
-28. Playbar in audio clips
