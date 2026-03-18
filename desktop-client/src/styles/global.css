@@ -433,10 +433,21 @@ body {
   }
 
   .chat-list-layout .chat-sidebar-wrapper {
-    width: 100% !important;
+    /* On mobile the wrapper is a transparent overlay — inner .chat-sidebar handles slide */
+    position: absolute !important;
+    inset: 0;
+    width: auto !important;
+    height: auto !important;
     opacity: 1 !important;
-    overflow: visible;
-    transition: none;
+    overflow: visible !important;
+    transition: none !important;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Re-enable pointer events on the sidebar itself */
+  .chat-list-layout .chat-sidebar-wrapper .chat-sidebar {
+    pointer-events: auto;
   }
 
   .chat-list-layout .chat-sidebar {

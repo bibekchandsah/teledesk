@@ -508,3 +508,7 @@ handleBookmarkMessage now calls showBookmarkToast('saved') or showBookmarkToast(
 Fixed MessageBubble.handleBookmark to fully delegate to onBookmark (was double-calling addBookmark before)
 Toast renders as a pill at the bottom center — "Saved to bookmarks" with a filled bookmark icon, or "Removed from bookmarks" with an outline icon
 
+
+<----------------------------- sidebar logic ---------------------------------->
+Chat open → tap chat icon → show sidebar (slide in)
+Sidebar showing, no chat open → tap chat icon → should show "select a chat" (sidebar hidden)
