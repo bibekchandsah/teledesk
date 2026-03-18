@@ -474,3 +474,10 @@ Optimized Call History:
 If showActiveStatus is enabled → green dot (you're online, you're literally using the app)
 If showActiveStatus is disabled → grey/offline (you've hidden your status)
 The self-chat entry in the sidebar now shows the green dot when showActiveStatus is enabled, same logic as the chat header and profile page. Also removed the unused isSelfVisible variable that was left over from the earlier fix.
+
+
+<--------------------------- new chat searching users ---------------------------------->
+Modal closes instantly on click — no waiting
+Checks local chats store first — if the chat already exists, navigates in zero network calls
+For new chats, navigates immediately after createPrivateChat returns — no longer blocked by getChats()
+getChats() still runs but in the background, so the sidebar updates without delaying navigation

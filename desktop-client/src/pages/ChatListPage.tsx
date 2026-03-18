@@ -95,33 +95,47 @@ const ChatListPage: React.FC = () => {
 
   const handleStartChatWithUser = async (user: User) => {
     if (!currentUser) return;
-    let chatId: string | undefined;
-    try {
-      // Try backend first
-      const res = await createPrivateChat(user.uid);
-      if (res.success && res.data) {
-        chatId = res.data.chatId;
-      }
-    } catch {
-      // Backend unavailable — fall through to client-side creation
-    }
-    if (!chatId) {
-      // Fallback: create chat directly in Firestore
-      const chat = await getOrCreatePrivateChatDirect(currentUser.uid, user.uid);
-      chatId = chat.chatId;
-    }
-    
-    // Pre-populate profile to prevent "Unknown" flash
-    setUserProfile(user);
 
-    // Immediately refresh Chat list so the new chat appears in the sidebar
-    // without waiting for the Supabase realtime event.
-    const refreshed = await getChats();
-    if (refreshed.success && refreshed.data) setChats(refreshed.data);
+    // Close modal immediately for snappy UX
     setShowNewChat(false);
     setSearchQuery('');
     setSearchResults([]);
+
+    // Pre-populate profile so avatar shows instantly
+    setUserProfile(user);
+
+    // Fast path: chat already exists locally — navigate instantly
+    const { chats } = useChatStore.getState();
+    const existing = chats.find(c =>
+      c.type === 'private' && c.members?.includes(user.uid) &&
+      (user.uid === currentUser.uid
+        ? c.members.every(m => m === currentUser.uid)
+        : c.members.includes(currentUser.uid))
+    );
+    if (existing) {
+      navigate(`/chats/${existing.chatId}`);
+      return;
+    }
+
+    // Slow path: create chat, then navigate — refresh sidebar in background
+    let chatId: string | undefined;
+    try {
+      const res = await createPrivateChat(user.uid);
+      if (res.success && res.data) chatId = res.data.chatId;
+    } catch {}
+
+    if (!chatId) {
+      const chat = await getOrCreatePrivateChatDirect(currentUser.uid, user.uid);
+      chatId = chat.chatId;
+    }
+
+    // Navigate immediately — don't wait for getChats()
     navigate(`/chats/${chatId}`);
+
+    // Refresh sidebar in background so the new chat appears in the list
+    getChats().then(refreshed => {
+      if (refreshed.success && refreshed.data) setChats(refreshed.data);
+    });
   };
 
   return (
