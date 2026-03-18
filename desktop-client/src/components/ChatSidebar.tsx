@@ -320,8 +320,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     <aside
       className="chat-sidebar"
       style={{
-        width: width ?? 320,
-        minWidth: 200,
+        width: '100%',
+        minWidth: 0,
         height: '100%',
         display: 'flex',
         flexDirection: 'column',

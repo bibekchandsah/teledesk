@@ -186,6 +186,41 @@ body {
   background-color: var(--bg-primary);
 }
 
+/* Desktop sidebar wrapper — animates open/close */
+.chat-sidebar-wrapper {
+  width: 0;
+  height: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+  /* Smooth cubic-bezier slide */
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  will-change: width, opacity;
+}
+
+.chat-sidebar-wrapper.open {
+  width: var(--sidebar-w, 320px);
+  opacity: 1;
+}
+
+/* Sidebar always fills its wrapper — wrapper controls the width */
+.chat-sidebar-wrapper .chat-sidebar {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* Resize handle */
+.sidebar-resize-handle {
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background-color: transparent;
+  transition: background-color 0.15s;
+  z-index: 5;
+}
+
 .chat-main-area {
   flex: 1;
   display: flex;
@@ -395,6 +430,13 @@ body {
   .chat-list-layout {
     position: relative;
     overflow: hidden;
+  }
+
+  .chat-list-layout .chat-sidebar-wrapper {
+    width: 100% !important;
+    opacity: 1 !important;
+    overflow: visible;
+    transition: none;
   }
 
   .chat-list-layout .chat-sidebar {

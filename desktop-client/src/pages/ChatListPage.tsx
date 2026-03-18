@@ -27,6 +27,7 @@ const ChatListPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const sidebarWrapperRef = useRef<HTMLDivElement>(null);
   const isResizingSidebar = useRef(false);
 
   const handleSidebarResizeMouseDown = (e: React.MouseEvent) => {
@@ -34,15 +35,36 @@ const ChatListPage: React.FC = () => {
     isResizingSidebar.current = true;
     const startX = e.clientX;
     const startWidth = sidebarWidth;
+    let lastWidth = startWidth;
+
+    // Disable transition for instant drag response
+    if (sidebarWrapperRef.current) {
+      sidebarWrapperRef.current.style.transition = 'none';
+    }
+
     const onMouseMove = (ev: MouseEvent) => {
       if (!isResizingSidebar.current) return;
-      setSidebarWidth(Math.min(600, Math.max(200, startWidth + (ev.clientX - startX))));
+      lastWidth = Math.min(600, Math.max(200, startWidth + (ev.clientX - startX)));
+      // Directly mutate DOM — no React re-render on every pixel
+      if (sidebarWrapperRef.current) {
+        sidebarWrapperRef.current.style.width = `${lastWidth}px`;
+        sidebarWrapperRef.current.style.setProperty('--sidebar-w', `${lastWidth}px`);
+      }
     };
+
     const onMouseUp = () => {
       isResizingSidebar.current = false;
+      setSidebarWidth(lastWidth);
+      if (sidebarWrapperRef.current) {
+        // Clear inline width so CSS class (.open { width: var(--sidebar-w) }) takes over
+        // Only keep --sidebar-w updated so the CSS variable drives the width
+        sidebarWrapperRef.current.style.width = '';
+        sidebarWrapperRef.current.style.transition = '';
+      }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
+
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
   };
@@ -146,27 +168,20 @@ const ChatListPage: React.FC = () => {
       className={`chat-list-layout${chatId ? ' has-chat' : ''}${!sidebarOpen ? ' sidebar-hidden' : ''}`}
       style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: 'var(--bg-primary)' }}
     >
-      {sidebarOpen && (
-        <>
-          <ChatSidebar onNewChat={() => setShowNewChat(true)} width={sidebarWidth} />
+      {/* Sidebar wrapper — always mounted for smooth animation */}
+      <div ref={sidebarWrapperRef} className={`chat-sidebar-wrapper${sidebarOpen ? ' open' : ''}`} style={{ '--sidebar-w': `${sidebarWidth}px` } as React.CSSProperties}>
+        <ChatSidebar onNewChat={() => setShowNewChat(true)} width={sidebarWidth} />
+      </div>
 
-          {/* Resize handle */}
-          <div
-            onMouseDown={handleSidebarResizeMouseDown}
-            style={{
-              width: 5,
-              height: '100%',
-              cursor: 'col-resize',
-              flexShrink: 0,
-              backgroundColor: 'transparent',
-              transition: 'background-color 0.15s',
-              zIndex: 5,
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.opacity = '0.4'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
-            title="Drag to resize"
-          />
-        </>
+      {/* Resize handle — only interactive when open */}
+      {sidebarOpen && (
+        <div
+          onMouseDown={handleSidebarResizeMouseDown}
+          className="sidebar-resize-handle"
+          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--accent)'; (e.currentTarget as HTMLDivElement).style.opacity = '0.4'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
+          title="Drag to resize"
+        />
       )}
 
       {/* Main content (chat window or empty state) */}
