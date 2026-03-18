@@ -28,3 +28,9 @@ to be implemented:
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 
+23. sidebar status isn't linked with online/offline status
+24. video icon for video files containing spoiler
+25. Disable double right click menu
+26. Optimize call log loading, instead of loading all call logs at once load like chat history
+27. Right click menu is hidden in nav bar
+28. Playbar in audio clips

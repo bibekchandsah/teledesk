@@ -424,3 +424,10 @@ Smart Positioning: I updated the coordinate logic to calculate the picker's posi
 
 <-------------------------- edit last message with up arrow key -------------------------->
 Now pressing ↑ in an empty input box will find your last sent text message and drop it straight into edit mode — cursor placed at the end, textarea auto-resized. It only triggers when the input is empty and you're not already editing, so it won't interfere with normal cursor navigation while typing.
+
+
+
+<-------------------------- image copy from browser -------------------------->
+Now you can copy image from browser and paste it in chat window
+copy for file preview in chat window 
+

@@ -808,7 +808,9 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
       // 2. Browser Clipboard API
       if (navigator.clipboard && (window as any).ClipboardItem) {
         try {
-          const res = await fetch(message.fileUrl, { mode: 'cors' });
+          // Add cache-buster to force fresh CORS request
+          const fetchUrl = message.fileUrl.includes('?') ? `${message.fileUrl}&cors=1` : `${message.fileUrl}?cors=1`;
+          const res = await fetch(fetchUrl, { mode: 'cors' });
           if (!res.ok) throw new Error('Fetch failed');
           const blob = await res.blob();
           
