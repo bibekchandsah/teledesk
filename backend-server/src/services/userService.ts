@@ -56,6 +56,7 @@ const rowToUser = (r: UserRow): User => ({
   chatThemes: r.chat_themes ?? {},
   twoFactorEnabled: r.two_factor_enabled ?? false,
   // Note: two_factor_secret is intentionally not included in regular user profile for security
+  isDeleted: r.email?.endsWith('@deleted.local') && r.name === 'Deleted User',
 });
 
 export const upsertUser = async (uid: string, data: Partial<User>): Promise<User> => {
@@ -276,18 +277,26 @@ export const deleteUserAccount = async (uid: string): Promise<void> => {
   
   // 4. Delete user's device sessions
   await supabase.from('device_sessions').delete().eq('user_id', uid);
-  
-  // 5. Remove user from all chats (we don't delete chats, just remove the user from members)
+
+  // 5. Keep the deleted user in chat members so the opposite user can still
+  //    identify the chat and see "Deleted User" instead of a self-chat.
+  //    Only fully remove from group chats where keeping them makes no sense,
+  //    and only delete the chat if it would be left with zero members.
   const { data: userChats } = await supabase
     .from('chats')
-    .select('chat_id, members')
+    .select('chat_id, members, type')
     .contains('members', [uid]);
-  
+
   if (userChats && userChats.length > 0) {
     for (const chat of userChats) {
+      if (chat.type === 'private') {
+        // Keep deleted user in private chat members so the other side
+        // can detect the deletion via the isDeleted flag on the profile.
+        // Nothing to update — leave members as-is.
+        continue;
+      }
+      // Group chats: remove the deleted user
       const updatedMembers = chat.members.filter((m: string) => m !== uid);
-      
-      // If chat has no members left, delete it
       if (updatedMembers.length === 0) {
         await supabase.from('chats').delete().eq('chat_id', chat.chat_id);
       } else {

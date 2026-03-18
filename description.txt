@@ -488,3 +488,10 @@ make the voice note waveforms interactive, allowing you to click or drag to seek
 Interactive Seeker: Tap or click anywhere on the waveform to jump playback.
 Precision Scrubbing: Smooth real-time seeking via mouse drag or touch sliding.
 Visual Feedback: The progress highlight and timestamp update instantly as you seek.
+
+
+<--------------------------- Delete account -------------------------------->
+The issue is: when user B's chat partner (user A) deletes their account, user A's UID is removed from the chat members array (per the backend code). So the chat now only has user B's UID. This makes it look like a self-chat to user B's client, hence "(You)".
+    The real fix: keep the deleted user in members but mark the user record as deleted. This way the opposite user's client can still fetch the deleted user's profile and show "Deleted User" correctly.
+When a user deletes their account, the backend now immediately emits USER_UPDATED with the anonymized profile (isDeleted: true, name "Deleted User") to all connected peers via their personal socket rooms. The client's existing handleUserUpdated handler calls setUserProfile() which overwrites the stale cached profile, causing the sidebar and chat header to re-render instantly — no more "(You)" showing up for the opposite user.
+The ChatListPage cache-skip fallback (if (cached && !cached.isDeleted) continue) still handles the case where a peer was offline when the deletion happened and reconnects later.

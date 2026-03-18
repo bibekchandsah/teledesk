@@ -1,37 +1,19 @@
+16. (fixed) chat recent view for (image, audio, video, file, sticker, gif, emoji, text), reactions for emoji
+17. (fixed) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
+
 to be implemented:
-1. playbar for audio message
-2. chat theme logic improved 
-    if A user enabled theme for B recently then show both user A's theme
-    if B user enabled theme for A recently then show both user B's theme
 
-3. (fixed) exit application from system tray menu error 
-4. (fixed) restart application from system tray menu
-5. (fixed) add "lock/unlock app" feature in system tray menu (only show when user has enabled app lock)
-6. (fixed) show dropdown menu for switching account in system tray menu
-7. (fixed) while recording voice/video note camera and microphone remains on even after stopping recording
-8. (fixed) while disabeling app lock confirm it with app lock pin 
-10. (fixed) disable browser right click only teledesk right click menu 
-13. (fixed) more reaction inside view port for grid layout too
-17. (fixed) incoming call ringtone, outgoing call ringtone 
-9. (fixed) chat isn't scrolling down when reload 
-17. (fixed) Missed, canceled, declined, incomming, outgoing icon for audio and video calls as we use in call log page 
-19. (fixed) show chat them preview in both user chat window
-18. (fixed) load the older chat faster
-20. (fixed) If both user disable read or online then only both don't see each other online and read status but if anyone enable then opposite user should see enabled status of enabled user (like if A disable and B enable then B should see A is disabled and A should see B is enabled)
-21. (fixed) add copy(ctrl + c), cut(ctrl + x), select all(ctrl + a) and paste(ctrl + v) support for mobile devices
-16. (fixed) in mobile devices image isn't getting copied to clipboard, url is getting copied instead of image
-19. (fixed) Store deleted account in separate table
-14. (fixed)single emoji to full row animated 
-22. (fixed) pressing up arrow will trigger last message edit mode
-27. (fixed) Right click menu is hidden in nav bar
-24. (fixed) video icon for video files containing spoiler
-25. (fixed) Disable double right click menu
-23. (fixed) sidebar status isn't linked with online/offline status
-29. (fixed) clicking on @username or @email is taking a bit longer time to open mentioned user chat 
-30. (fixed) optimize the time when user select user from new chat 
-28. (fixed) Playbar in audio clips
+(partially) while voice/video incoming or outgoing calling open in popup window for web version
+add flip camera in pip camera and hide icon after 3 second of mouse inactive
+redesign calling functions and sound for calling 
 
-26. (fixed) Optimize call log loading, instead of loading all call logs at once load like chat history
+allow user to import and export chat History
+store chats in device and update accordingly when new events occurs and while user is offline load it from device and when connection restored then update the chats and device storage as like telegram and whatsapp logic is implemented
+
+
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
+16. improve the touch device logic for showing delete icon in account switcher 
+17. show toast when saved to bookmark
+18. remove the text "sent an image" for image files when send if no caption is there

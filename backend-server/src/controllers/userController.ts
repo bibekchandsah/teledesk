@@ -398,12 +398,30 @@ export const deleteAccount = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { deleteUserAccount } = await import('../services/userService');
+    const { deleteUserAccount, getUserById: getUser } = await import('../services/userService');
     
     // 1. Delete from database (marks as deleted, removes from chats, etc.)
     await deleteUserAccount(uid);
+
+    // 2. Notify all chat peers in real-time so they immediately see "Deleted User"
+    //    instead of waiting for the next chat list reload.
+    if (_io) {
+      try {
+        const deletedProfile = await getUser(uid);
+        if (deletedProfile) {
+          const chats = await getUserChats(uid);
+          const peers = new Set<string>();
+          chats.forEach((c: Chat) => c.members.forEach((mId: string) => { if (mId !== uid) peers.add(mId); }));
+          peers.forEach((peerId: string) => {
+            _io!.to(`user:${peerId}`).emit(SOCKET_EVENTS.USER_UPDATED, deletedProfile);
+          });
+        }
+      } catch (notifyErr) {
+        logger.warn(`Failed to notify peers of account deletion: ${(notifyErr as Error).message}`);
+      }
+    }
     
-    // 2. Delete from Firebase Auth using Admin SDK
+    // 4. Delete from Firebase Auth using Admin SDK
     // Admin SDK bypasses the client-side "requires-recent-login" restriction entirely.
     // Identity is already verified by the bearer token on this request.
     try {

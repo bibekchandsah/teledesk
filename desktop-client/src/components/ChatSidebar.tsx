@@ -222,35 +222,44 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         const otherUid = isSelfChat
           ? currentUser?.uid
           : chat.members.find((m: string) => m !== currentUser?.uid);
-        
+
         // For the current user, always use the latest currentUser data
         // For other users, use the cached profile
-        const profile = otherUid === currentUser?.uid 
-          ? currentUser 
+        const profile = otherUid === currentUser?.uid
+          ? currentUser
           : (otherUid ? userProfiles[otherUid] : null);
-          
+
+        // A chat that looks like a self-chat but the other member's profile is
+        // marked deleted means the peer deleted their account (they were removed
+        // from members), not a genuine saved-messages chat.
+        const isDeletedUser = !isSelfChat && profile?.isDeleted;
         const isPeerVisible = profile?.showActiveStatus !== false;
-        const baseName = isSelfChat
-          ? `${profile?.name || profile?.email?.split('@')[0] || 'Unknown'} (You)`
-          : profile?.name || profile?.email?.split('@')[0] || 'Unknown';
-        const displayName = (!isSelfChat && otherUid && nicknames[otherUid])
+
+        let baseName: string;
+        if (isDeletedUser) {
+          baseName = nicknames[otherUid!] || profile?.name || 'Deleted User';
+        } else if (isSelfChat) {
+          baseName = `${profile?.name || profile?.email?.split('@')[0] || 'Unknown'} (You)`;
+        } else {
+          baseName = profile?.name || profile?.email?.split('@')[0] || 'Unknown';
+        }
+
+        const displayName = (!isSelfChat && !isDeletedUser && otherUid && nicknames[otherUid])
           ? nicknames[otherUid]
           : baseName;
 
-        // Self-chat: online if showActiveStatus enabled (user is actively using the app)
-        // Other chat: online if peer is in onlineUsers and has showActiveStatus enabled
         const online = isSelfChat
           ? currentUser?.showActiveStatus !== false
           : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
 
         return {
           name: displayName,
-          avatar: profile?.avatar,
-          online,
+          avatar: isDeletedUser ? '' : profile?.avatar,
+          online: isDeletedUser ? false : online,
         };
       }
       return {
-        name: chat.chatId, // Will be replaced by group name
+        name: chat.chatId,
         avatar: undefined,
         online: false,
       };

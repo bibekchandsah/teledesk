@@ -60,14 +60,17 @@ const ChatListPage: React.FC = () => {
       setChats(chats);
 
       // Load profiles of chat members (including own uid for self-chats).
-      // Only fetch profiles not already cached in the store.
+      // Always re-fetch profiles that look deleted or aren't cached yet.
       const memberIds = new Set<string>();
       chats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
       const hasSelfChat = chats.some((c) => c.members.every((m) => m === currentUser.uid));
       if (!hasSelfChat) memberIds.delete(currentUser.uid);
 
       for (const uid of memberIds) {
-        if (userProfilesRef.current[uid]) continue; // already loaded — skip the network call
+        const cached = userProfilesRef.current[uid];
+        // Skip only if cached AND not marked deleted (deleted profiles must be re-fetched
+        // in case the user deleted their account since we last loaded their profile)
+        if (cached && !cached.isDeleted) continue;
         const res = await getUserById(uid);
         if (res.success && res.data) setUserProfile(res.data);
       }

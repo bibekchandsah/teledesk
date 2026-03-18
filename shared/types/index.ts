@@ -13,6 +13,7 @@ export interface User {
   onlineStatus: 'online' | 'offline' | 'away';
   showActiveStatus?: boolean; // if false, hides online dot from others (mutual: both must enable to see each other)
   showMessageStatus?: boolean; // if false, hides message delivery/read receipts (mutual: both must enable to see each other's status)
+  isDeleted?: boolean; // true if the account has been deleted (anonymized record kept for chat history)
   pinnedChatIds?: string[]; // chats pinned by this user (synced across devices)
   archivedChatIds?: string[]; // chats archived by this user (synced across devices)
   lockedChatIds?: string[]; // chats locked with PIN (synced across devices)

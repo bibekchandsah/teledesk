@@ -2366,25 +2366,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? currentUser?.uid
       : activeChat.members.find((m) => m !== currentUser?.uid);
     if (!peerId) return null;
-    
-    // For the current user, always use the latest currentUser data
-    // For other users, use the cached profile
-    const peerProfile = peerId === currentUser?.uid 
-      ? currentUser 
-      : userProfiles[peerId];
-    
-    // Independent visibility: the peer's online status is visible to me based only on THEIR setting.
-    // My own showActiveStatus setting only affects what OTHERS see about ME — not whether I can see the peer.
-    const isPeerVisible = peerProfile?.showActiveStatus !== false;
 
-    // For self-chat: show online if the current user has active status enabled (they're using the app right now)
-    const online = isSelfChat
-      ? currentUser?.showActiveStatus !== false
-      : onlineUsers.has(peerId) && isPeerVisible;
-      
+    const peerProfile = peerId === currentUser?.uid
+      ? currentUser
+      : userProfiles[peerId];
+
+    // If the peer's profile is marked deleted, treat as deleted user (not self-chat)
+    const isDeleted = !isSelfChat && peerProfile?.isDeleted === true;
+
+    const isPeerVisible = peerProfile?.showActiveStatus !== false;
+    const online = isDeleted
+      ? false
+      : isSelfChat
+        ? currentUser?.showActiveStatus !== false
+        : onlineUsers.has(peerId) && isPeerVisible;
+
     return {
       uid: peerId,
-      isSelf: isSelfChat,
+      isSelf: isSelfChat && !isDeleted,
+      isDeleted,
       profile: peerProfile,
       online,
     };
@@ -3992,22 +3992,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             >
               <div className="chat-header-name" style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {peer.isSelf
-                    ? (peer.profile?.name || currentUser?.name || 'You')
-                    : (nicknames[peer.uid] || peer.profile?.name || 'User')}
+                  {peer.isDeleted
+                    ? (nicknames[peer.uid] || peer.profile?.name || 'Deleted User')
+                    : peer.isSelf
+                      ? (peer.profile?.name || currentUser?.name || 'You')
+                      : (nicknames[peer.uid] || peer.profile?.name || 'User')}
                 </span>
-                {peer.isSelf && (
+                {peer.isSelf && !peer.isDeleted && (
                   <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', flexShrink: 0 }}>(You)</span>
+                )}
+                {peer.isDeleted && (
+                  <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-secondary)', flexShrink: 0 }}>(Deleted User)</span>
                 )}
               </div>
               <div className="chat-header-status" style={{ fontSize: 12, color: peer.isSelf ? 'var(--text-secondary)' : (peer.online ? '#22c55e' : 'var(--text-secondary)'), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {peer.isSelf 
-                  ? 'Message yourself' 
-                  : peer.online 
-                    ? 'Online' 
-                    : peer.profile?.lastSeen 
-                      ? formatLastSeen(peer.profile.lastSeen)
-                      : 'Offline'}
+                {peer.isDeleted
+                  ? 'Account deleted'
+                  : peer.isSelf
+                    ? 'Message yourself'
+                    : peer.online
+                      ? 'Online'
+                      : peer.profile?.lastSeen
+                        ? formatLastSeen(peer.profile.lastSeen)
+                        : 'Offline'}
               </div>
             </button>
           </>
@@ -6123,12 +6130,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                 >
                   <span>
-                    {peer.isSelf
-                      ? (peer.profile?.name || currentUser?.name || 'You')
-                      : (nicknames[peer.uid] || peer.profile?.name || 'User')}
+                    {peer.isDeleted
+                      ? (nicknames[peer.uid] || peer.profile?.name || 'Deleted User')
+                      : peer.isSelf
+                        ? (peer.profile?.name || currentUser?.name || 'You')
+                        : (nicknames[peer.uid] || peer.profile?.name || 'User')}
                   </span>
-                  {peer.isSelf && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', marginLeft: 6 }}>(You)</span>}
-                  {!peer.isSelf && (
+                  {peer.isSelf && !peer.isDeleted && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--accent)', marginLeft: 6 }}>(You)</span>}
+                  {peer.isDeleted && <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-secondary)', marginLeft: 6 }}>(Deleted User)</span>}
+                  {!peer.isSelf && !peer.isDeleted && (
                     <button
                       onClick={() => { setNicknameInput(nicknames[peer.uid] || ''); setEditingNickname(true); }}
                       title="Edit nickname"
@@ -6137,17 +6147,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
                   )}
-                  {!peer.isSelf && nicknames[peer.uid] && (
+                  {!peer.isSelf && !peer.isDeleted && nicknames[peer.uid] && (
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 400 }}>({peer.profile?.name})</span>
                   )}
                 </div>
               )}
               <div style={{ fontSize: 13, color: peer.online ? '#22c55e' : 'var(--text-secondary)', fontWeight: 500 }}>
-                {peer.isSelf
-                  ? 'Your saved messages'
-                  : peer.online
-                    ? '● Online'
-                    : peer.profile?.lastSeen ? formatLastSeen(peer.profile.lastSeen) : 'Offline'}
+                {peer.isDeleted
+                  ? 'Account deleted'
+                  : peer.isSelf
+                    ? 'Your saved messages'
+                    : peer.online
+                      ? '● Online'
+                      : peer.profile?.lastSeen ? formatLastSeen(peer.profile.lastSeen) : 'Offline'}
               </div>
             </div>
           </div>
@@ -6436,14 +6448,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   const isSelf = c.type === 'private' && c.members.every((m) => m === currentUid);
                   const uid = c.type === 'private' ? (isSelf ? currentUid : c.members.find((m) => m !== currentUid)) : null;
                   const p = uid === currentUid ? currentUser : (uid ? userProfiles[uid] : null);
-                  const n = isSelf ? `${p?.name || 'you'} (you)` : (p?.name || c.chatId);
+                  const isDeletedInFilter = !isSelf && p?.isDeleted;
+                  const n = isDeletedInFilter
+                    ? (nicknames[uid!] || p?.name || 'Deleted User')
+                    : isSelf
+                      ? `${p?.name || 'you'} (you)`
+                      : (nicknames[uid!] || p?.name || c.chatId);
                   return n.toLowerCase().includes(q);
                 })
                 .map((c) => {
                   const isSelfChat = c.type === 'private' && c.members.every((m) => m === currentUid);
                   const otherUid = c.type === 'private' ? (isSelfChat ? currentUid : c.members.find((m) => m !== currentUid)) : null;
                   const profile = otherUid === currentUid ? currentUser : (otherUid ? userProfiles[otherUid] : null);
-                  const name = isSelfChat ? `${profile?.name || 'You'} (You)` : (profile?.name || c.chatId);
+                  const isDeletedPeer = !isSelfChat && profile?.isDeleted;
+                  const name = isDeletedPeer
+                    ? (nicknames[otherUid!] || profile?.name || 'Deleted User')
+                    : isSelfChat
+                      ? `${profile?.name || 'You'} (You)`
+                      : (nicknames[otherUid!] || profile?.name || c.chatId);
                   const checked = forwardTargetIds.has(c.chatId);
                   return (
                     <button
