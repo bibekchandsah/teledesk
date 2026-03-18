@@ -31,7 +31,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   
 
   const { currentUser } = useAuthStore();
-  const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived, showLocked, setShowLocked, isUnlocked, setIsUnlocked } = useUIStore();
+  const { searchQuery, setSearchQuery, setNewGroupModal, showArchived, setShowArchived, showLocked, setShowLocked, isUnlocked, setIsUnlocked, setSidebarOpen } = useUIStore();
   const navigate = useNavigate();
 
   // ─── Context Menu State ───────────────────────────────────────────────────
@@ -306,12 +306,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   }, [chats, searchQuery, getChatDisplayInfo, pinnedChatIds, archivedChatIds, lockedChatIds, showLocked, showArchived]);
 
   const handleChatClick = (chat: Chat) => {
-    // Only lock if we are navigating out of the locked view/group
     const isTargetLocked = lockedChatIds.includes(chat.chatId);
     if (!isTargetLocked) {
       setIsUnlocked(false);
       setShowLocked(false);
     }
+    // Ensure sidebar-hidden is cleared so has-chat transition is clean
+    setSidebarOpen(true);
     setActiveChat(chat);
     navigate(`/chats/${chat.chatId}`);
   };

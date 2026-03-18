@@ -485,14 +485,14 @@ body {
     pointer-events: none;
   }
 
-  /* When a chat is open: swap panels */
+  /* When a chat is open: swap panels — has-chat always wins */
   .chat-list-layout.has-chat .chat-sidebar {
     transform: translateX(-100%);
     pointer-events: none;
   }
 
   .chat-list-layout.has-chat .chat-main-area {
-    transform: translateX(0);
+    transform: translateX(0) !important;
     z-index: 3;
   }
 
