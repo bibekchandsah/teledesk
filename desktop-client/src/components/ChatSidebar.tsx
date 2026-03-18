@@ -230,19 +230,23 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           : (otherUid ? userProfiles[otherUid] : null);
           
         const isPeerVisible = profile?.showActiveStatus !== false;
-        const isSelfVisible = currentUser?.showActiveStatus !== false;
         const baseName = isSelfChat
           ? `${profile?.name || profile?.email?.split('@')[0] || 'Unknown'} (You)`
           : profile?.name || profile?.email?.split('@')[0] || 'Unknown';
         const displayName = (!isSelfChat && otherUid && nicknames[otherUid])
           ? nicknames[otherUid]
           : baseName;
+
+        // Self-chat: online if showActiveStatus enabled (user is actively using the app)
+        // Other chat: online if peer is in onlineUsers and has showActiveStatus enabled
+        const online = isSelfChat
+          ? currentUser?.showActiveStatus !== false
+          : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
+
         return {
           name: displayName,
           avatar: profile?.avatar,
-          online: !isSelfChat && otherUid
-            ? onlineUsers.has(otherUid) && isPeerVisible
-            : false,
+          online,
         };
       }
       return {

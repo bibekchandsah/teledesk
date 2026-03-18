@@ -59,7 +59,12 @@ const UserProfile: React.FC = () => {
 
   // Use store profile for showActiveStatus (kept up-to-date via socket) with API profile as fallback
   const storeProfile = profile.uid === currentUser?.uid ? currentUser : (userProfiles[profile.uid] ?? profile);
-  const isOnline = onlineUsers.has(profile.uid) && storeProfile?.showActiveStatus !== false;
+  const isOwnProfile = profile.uid === currentUser?.uid;
+  // Own profile: online if showActiveStatus is enabled (user is actively using the app)
+  // Other profiles: online if in onlineUsers set and they have showActiveStatus enabled
+  const isOnline = isOwnProfile
+    ? storeProfile?.showActiveStatus !== false
+    : onlineUsers.has(profile.uid) && storeProfile?.showActiveStatus !== false;
 
   return (
     <div

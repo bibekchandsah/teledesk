@@ -455,3 +455,15 @@ copy for file preview in chat window
 right click on message in chat window and right click on input box Both menus now measure the actual .nav-sidebar element height from the DOM instead of using hardcoded guesses. When a menu would overlap the nav bar, it flips above the click point. If there's not enough space above either, it clamps to the highest safe position above the nav bar.
 
 
+<-------------------------- call logs optimization -------------------------->
+Optimized Call History: 
+    Implemented backend pagination and frontend infinite scroll for call logs, ensuring smooth performance even with thousands of calls.
+    Backend Pagination: The /api/chats/call-logs endpoint now supports limit and before (timestamp) parameters.
+    Infinite Scroll: The CallHistoryPage.tsx incrementally loads logs (50 at a time) as the user scrolls, preventing large initial load times.
+    Visual Feedback: Added a loading spinner at the bottom of the list when fetching more logs.
+
+
+<-------------------------- self message chat --------------------------------->
+If showActiveStatus is enabled → green dot (you're online, you're literally using the app)
+If showActiveStatus is disabled → grey/offline (you've hidden your status)
+The self-chat entry in the sidebar now shows the green dot when showActiveStatus is enabled, same logic as the chat header and profile page. Also removed the unused isSelfVisible variable that was left over from the earlier fix.
