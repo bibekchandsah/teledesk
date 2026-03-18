@@ -188,7 +188,11 @@ export const searchUsers = (query: string) =>
 
 export const getChats = () => authFetch<Chat[]>('/api/chats');
 
-export const getCallLogs = () => authFetch<Message[]>('/api/chats/call-logs');
+export const getCallLogs = (limit = 50, before?: string) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set('before', before);
+  return authFetch<Message[]>(`/api/chats/call-logs?${params}`);
+};
 
 export const createPrivateChat = (targetUid: string) =>
   authFetch<Chat>('/api/chats/private', {

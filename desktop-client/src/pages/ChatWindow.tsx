@@ -1655,21 +1655,33 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         : u.email?.toLowerCase() === query.toLowerCase();
 
     // Check if user clicked their own mention
+    const showToast = (msg: string) => {
+      setMentionToast(msg);
+      setTimeout(() => setMentionToast(null), 2500);
+    };
+
+    // Already in this chat? Show toast instead of re-navigating
+    const alreadyHere = (targetChatId: string) => targetChatId === chatId;
+
+    // Self-mention
     const isSelf = matchesQuery(currentUser);
     if (isSelf) {
       const selfChat = chats.find(c =>
         c.type === 'private' && c.members?.every(m => m === currentUser.uid)
       );
       if (selfChat) {
-        navigate(`/chats/${selfChat.chatId}`);
+        if (alreadyHere(selfChat.chatId)) {
+          showToast("You're already in your saved messages");
+        } else {
+          navigate(`/chats/${selfChat.chatId}`);
+        }
       } else {
-        setMentionToast("That's you!");
-        setTimeout(() => setMentionToast(null), 2500);
+        showToast("That's you!");
       }
       return;
     }
 
-    // Fast path: check existing userProfiles in store first
+    // Fast path: profile already in store
     const existingUser = Object.values(userProfiles).find(matchesQuery);
     if (existingUser) {
       const existingChat = chats.find(c =>
@@ -1678,7 +1690,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       if (existingChat) {
         // Always refresh profile to ensure avatar is up-to-date (Google users may lack it)
         setUserProfile(existingUser);
-        navigate(`/chats/${existingChat.chatId}`);
+        if (alreadyHere(existingChat.chatId)) {
+          const name = existingUser.name || query;
+          showToast(`You're already chatting with ${name}`);
+        } else {
+          navigate(`/chats/${existingChat.chatId}`);
+        }
         return;
       }
     }
@@ -1691,28 +1708,34 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         const user = res.data.find(matchesQuery);
 
         if (user) {
-          // Double-check self (in case username wasn't set when fast-path ran)
           if (user.uid === currentUser.uid) {
             const selfChat = chats.find(c =>
               c.type === 'private' && c.members?.every(m => m === currentUser.uid)
             );
             if (selfChat) {
-              navigate(`/chats/${selfChat.chatId}`);
+              if (alreadyHere(selfChat.chatId)) {
+                showToast("You're already in your saved messages");
+              } else {
+                navigate(`/chats/${selfChat.chatId}`);
+              }
             } else {
-              setMentionToast("That's you!");
-              setTimeout(() => setMentionToast(null), 2500);
+              showToast("That's you!");
             }
             return;
           }
 
-          // Store full profile immediately so avatar is available when chat opens
           setUserProfile(user);
 
           const alreadyExists = chats.find(c =>
             c.type === 'private' && c.members?.includes(user.uid)
           );
           if (alreadyExists) {
-            navigate(`/chats/${alreadyExists.chatId}`);
+            if (alreadyHere(alreadyExists.chatId)) {
+              const name = user.name || query;
+              showToast(`You're already chatting with ${name}`);
+            } else {
+              navigate(`/chats/${alreadyExists.chatId}`);
+            }
             return;
           }
 
@@ -1728,7 +1751,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     } catch (err) {
       console.error('Failed to resolve mention:', err);
     }
-  }, [currentUser, navigate, setUserProfile, setChats, userProfiles, chats]);
+  }, [currentUser, chatId, navigate, setUserProfile, setChats, userProfiles, chats]);
 
   const mediaPickerRef = useRef<HTMLDivElement>(null);
 

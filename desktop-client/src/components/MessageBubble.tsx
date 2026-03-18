@@ -594,8 +594,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   // Handle context menu
   const handleContextMenu = (e: React.MouseEvent) => {
-    if (!onDelete) return;
     e.preventDefault();
+    if (!onDelete) return;
     onContextMenuOpen?.();
     setCtxMenu({ x: e.clientX, y: e.clientY });
   };

@@ -614,9 +614,13 @@ export const removeReaction = async (
 
 // ─── Get Call Logs ────────────────────────────────────────────────────────
 /**
- * Fetch all call messages for a user across all their chats
+ * Fetch call messages for a user with pagination
  */
-export const getUserCallLogs = async (uid: string): Promise<Message[]> => {
+export const getUserCallLogs = async (
+  uid: string,
+  limit = 50,
+  before?: string,
+): Promise<Message[]> => {
   // Get all chat IDs where this user is a member
   const { data: chatData } = await supabase
     .from('chats')
@@ -627,15 +631,21 @@ export const getUserCallLogs = async (uid: string): Promise<Message[]> => {
 
   const chatIds = chatData.map((c) => c.chat_id);
 
-  // Fetch all call messages from these chats
-  const { data, error } = await supabase
+  // Fetch call messages from these chats with pagination
+  let query = supabase
     .from('messages')
     .select('*')
     .in('chat_id', chatIds)
     .eq('type', 'call')
     .not('deleted_for', 'cs', `{${uid}}`) // Exclude messages deleted for this user
     .order('timestamp', { ascending: false })
-    .limit(500); // Limit to last 500 call logs
+    .limit(limit);
+
+  if (before) {
+    query = query.lt('timestamp', before);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     logger.error(`getUserCallLogs error: ${error.message}`);

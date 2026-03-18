@@ -138,12 +138,14 @@ const AppInner: React.FC = () => {
     };
   }, []);
 
-  // Disable right-click context menu when devtools are not allowed
+  // Disable right-click context menu globally (except for inputs)
   useEffect(() => {
-    const allowDevTools = import.meta.env.VITE_ALLOW_DEVTOOLS === 'true';
-    if (allowDevTools) return; // Allow when explicitly enabled
-
     const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Allow native menu only on inputs and textareas for copy/paste/etc.
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
       e.preventDefault();
       return false;
     };

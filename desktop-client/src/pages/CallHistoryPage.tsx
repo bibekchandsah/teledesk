@@ -45,31 +45,67 @@ const CallHistoryPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [callLogs, setCallLogs] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   
   const menuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Load call logs from backend
-  useEffect(() => {
-    const loadCallLogs = async () => {
-      try {
+  const loadCallLogs = async (before?: string) => {
+    try {
+      if (before) {
+        setIsLoadingMore(true);
+      } else {
         setIsLoading(true);
-        const { getCallLogs } = await import('../services/apiService');
-        const result = await getCallLogs();
-        if (result.success && result.data) {
+      }
+
+      const { getCallLogs } = await import('../services/apiService');
+      const limit = 50;
+      const result = await getCallLogs(limit, before);
+
+      if (result.success && result.data) {
+        if (before) {
+          setCallLogs((prev) => [...prev, ...result.data]);
+        } else {
           setCallLogs(result.data);
         }
-      } catch (error) {
-        console.error('Failed to load call logs:', error);
-      } finally {
-        setIsLoading(false);
+        
+        // If we got fewer than the limit, there are no more logs
+        if (result.data.length < limit) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+        }
       }
-    };
+    } catch (error) {
+      console.error('Failed to load call logs:', error);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  };
 
+  useEffect(() => {
     if (currentUser) {
       loadCallLogs();
     }
   }, [currentUser]);
+
+  // Infinite scroll handler
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!hasMore || isLoading || isLoadingMore) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    // Load more when 100px from bottom
+    if (scrollHeight - scrollTop <= clientHeight + 100) {
+      const lastLog = callLogs[callLogs.length - 1];
+      if (lastLog) {
+        loadCallLogs(lastLog.timestamp);
+      }
+    }
+  };
 
   const callEntries = useMemo<CallEntry[]>(() => {
     if (!currentUser) return [];
@@ -481,7 +517,10 @@ const CallHistoryPage: React.FC = () => {
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div 
+        style={{ flex: 1, overflowY: 'auto' }}
+        onScroll={handleScroll}
+      >
         {isLoading ? (
           <div
             style={{
@@ -676,6 +715,25 @@ const CallHistoryPage: React.FC = () => {
               ))}
             </div>
           ))
+        )}
+
+        {/* Loading more indicator */}
+        {isLoadingMore && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '16px 0',
+            color: 'var(--text-secondary)'
+          }}>
+            <div style={{
+              width: 24,
+              height: 24,
+              border: '2px solid var(--border)',
+              borderTopColor: 'var(--accent)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+          </div>
         )}
       </div>
 

@@ -235,13 +235,16 @@ export const updatePins = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * GET /api/chats/call-logs
- * Get all call logs for the current user
+ * GET /api/chats/call-logs?limit=50&before=timestamp
+ * Get call logs for the current user with pagination
  */
 export const getCallLogs = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const callLogs = await getUserCallLogs(uid);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const before = req.query.before as string | undefined;
+    
+    const callLogs = await getUserCallLogs(uid, limit, before);
     res.json({ success: true, data: callLogs });
   } catch (error) {
     logger.error(`getCallLogs error: ${(error as Error).message}`);
