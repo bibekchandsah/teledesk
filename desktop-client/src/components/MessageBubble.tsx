@@ -664,7 +664,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         // 3. Fallback: Copy URL as text if blob fails (CORS or API issues)
         try {
-          await navigator.clipboard.writeText(target.fileUrl);
+          if (window.electronAPI?.copyTextToClipboard) {
+            window.electronAPI.copyTextToClipboard(target.fileUrl);
+          } else {
+            await navigator.clipboard.writeText(target.fileUrl);
+          }
           showToast(`Direct copy blocked by browser. Image link copied.`);
           return;
         } catch (err) {

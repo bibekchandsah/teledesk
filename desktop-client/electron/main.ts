@@ -606,15 +606,37 @@ ipcMain.handle('copy-image-to-clipboard', async (_event, url: string) => {
   if (!url || !url.startsWith('http')) return false;
   try {
     const res = await net.fetch(url);
-    if (!res.ok) return false;
+    if (!res.ok) {
+      // If fetch fails, still try to write the URL as text as a last resort
+      clipboard.writeText(url);
+      return true;
+    }
     const buf = Buffer.from(await res.arrayBuffer());
     const img = nativeImage.createFromBuffer(buf);
-    if (img.isEmpty()) return false;
-    clipboard.writeImage(img);
+    
+    if (img.isEmpty()) {
+      // If it's an animated GIF or unsupported format, nativeImage will be empty.
+      // We fall back to copying the URL so the user at least gets the link.
+      clipboard.writeText(url);
+      return true;
+    }
+
+    // For images that ARE supported, we can write both the image AND the text (URL)
+    // to the clipboard. This is the most compatible way.
+    clipboard.write({
+      image: img,
+      text: url
+    });
     return true;
   } catch (err) {
     console.error('[IPC] Failed to copy image to clipboard:', err);
-    return false;
+    // Even on error, try to write the text if we have the URL
+    try {
+      clipboard.writeText(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
 });
 

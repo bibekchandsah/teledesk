@@ -87,43 +87,28 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       const vh = window.innerHeight;
       const MARGIN = 8;
       
-      // On mobile, account for bottom navigation bar (56px on mobile, 52px on small mobile)
-      const isMobile = window.innerWidth <= 768;
-      const navBarHeight = window.innerWidth <= 480 ? 52 : (isMobile ? 56 : 0);
-      const bottomMargin = isMobile ? navBarHeight + MARGIN : MARGIN;
-      
+      // Measure the actual nav bar height from the DOM, fall back to CSS values
+      const navEl = document.querySelector('.nav-sidebar') as HTMLElement | null;
+      const navBarHeight = navEl ? navEl.offsetHeight : (window.innerWidth <= 480 ? 52 : window.innerWidth <= 768 ? 56 : 0);
+      const bottomBoundary = vh - navBarHeight - MARGIN;
+
       let px = x;
       let py = y;
       
-      // Check if menu would overflow right edge
-      if (x + w > vw - MARGIN) {
+      // Overflow right → shift left
+      if (px + w > vw - MARGIN) {
         px = vw - w - MARGIN;
       }
-      
-      // Check if menu would overflow bottom edge (accounting for nav bar on mobile)
-      if (y + h > vh - bottomMargin) {
-        // Position above the click point if there's more space there
-        const spaceAbove = y - MARGIN;
-        const spaceBelow = vh - bottomMargin - y;
-        
-        if (spaceAbove > spaceBelow && spaceAbove >= h) {
-          // Position above click point
-          py = y - h - MARGIN;
-        } else {
-          // Position to fit within viewport
-          py = Math.max(MARGIN, vh - h - bottomMargin);
-        }
+      // Overflow left
+      if (px < MARGIN) px = MARGIN;
+
+      // Overflow bottom (into nav bar) → flip above click point
+      if (py + h > bottomBoundary) {
+        const above = y - h - MARGIN;
+        py = above >= MARGIN ? above : Math.max(MARGIN, bottomBoundary - h);
       }
-      
-      // Check if menu would overflow top edge
-      if (py < MARGIN) {
-        py = MARGIN;
-      }
-      
-      // Check if menu would overflow left edge
-      if (px < MARGIN) {
-        px = MARGIN;
-      }
+      // Overflow top
+      if (py < MARGIN) py = MARGIN;
       
       setAdjustedPos({ x: px, y: py });
     }, showExtended ? 10 : 0); // Small delay when picker opens to get accurate height

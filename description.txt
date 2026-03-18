@@ -430,4 +430,6 @@ Now pressing ↑ in an empty input box will find your last sent text message and
 <-------------------------- image copy from browser -------------------------->
 Now you can copy image from browser and paste it in chat window
 copy for file preview in chat window 
-
+    1. Open Previewer: Click on any image to open the full-screen preview.
+    2. Click Copy: Use the "Copy" button in the top header.
+    3. Result: The image should now be copied directly to your clipboard in the web browser, without any CORS errors!

@@ -212,7 +212,11 @@ const MediaGroupBubble = ({
 
       // 3. Fallback: Copy URL as text
       try {
-        await navigator.clipboard.writeText(m.fileUrl);
+        if (window.electronAPI?.copyTextToClipboard) {
+          window.electronAPI.copyTextToClipboard(m.fileUrl);
+        } else {
+          await navigator.clipboard.writeText(m.fileUrl);
+        }
         showToast('Direct copy blocked by browser. Image link copied.');
       } catch (err) {
         console.error('Copy URL fallback failed:', err);
@@ -832,11 +836,13 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
 
       // 3. Fallback: Copy URL as text
       try {
-        await navigator.clipboard.writeText(message.fileUrl);
+        if (window.electronAPI?.copyTextToClipboard) {
+          window.electronAPI.copyTextToClipboard(message.fileUrl);
+        } else {
+          await navigator.clipboard.writeText(message.fileUrl);
+        }
         setCopied(true);
-        // Maybe change toast text here if we have a way to pass it to the previewer's local state
         setTimeout(() => setCopied(false), 2000);
-        return;
       } catch (err) {
         console.error('Copy URL fallback failed:', err);
       }
