@@ -1364,6 +1364,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     [savedEntries]
   );
 
+  // Track which message bubble's context menu is currently open — ensures only one is visible at a time
+  const [openBubbleMenuId, setOpenBubbleMenuId] = useState<string | null>(null);
+
   // Track the last pointer type used (mouse, touch, pen) to adapt UI dynamically
   const [lastPointerType, setLastPointerType] = useState<'mouse' | 'touch' | 'pen' | null>(null);
 
@@ -4510,6 +4513,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     currentUserId={currentUser?.uid}
                     getUserName={(uid: string) => uid === currentUser?.uid ? 'You' : (userProfiles[uid]?.name || 'Unknown')}
                     onMentionClick={handleMentionClick}
+                    onContextMenuOpen={() => setOpenBubbleMenuId(msg.messageId)}
+                    openBubbleMenuId={openBubbleMenuId}
                   />
                   </div>
                 </div>

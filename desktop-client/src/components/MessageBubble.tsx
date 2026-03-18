@@ -495,6 +495,8 @@ interface MessageBubbleProps {
   getUserName?: (uid: string) => string;
   onMentionClick?: (text: string, type: 'username' | 'email') => void;
   isTouchDevice?: boolean;
+  onContextMenuOpen?: () => void;
+  openBubbleMenuId?: string | null;
 }
 
 
@@ -527,6 +529,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   getUserName,
   onMentionClick,
   isTouchDevice = false,
+  onContextMenuOpen,
+  openBubbleMenuId,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -581,10 +585,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setTimeout(() => setToast(null), 2500);
   };
 
+  // Close this bubble's menu when another bubble opens its own
+  useEffect(() => {
+    if (openBubbleMenuId !== undefined && openBubbleMenuId !== message.messageId) {
+      setCtxMenu(null);
+    }
+  }, [openBubbleMenuId, message.messageId]);
+
   // Handle context menu
   const handleContextMenu = (e: React.MouseEvent) => {
     if (!onDelete) return;
     e.preventDefault();
+    onContextMenuOpen?.();
     setCtxMenu({ x: e.clientX, y: e.clientY });
   };
 

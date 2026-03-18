@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Expand } from 'lucide-react';
+import { Expand, Play } from 'lucide-react';
 
 interface ImageSpoilerProps {
   src: string;
@@ -232,45 +232,29 @@ const ImageSpoiler: React.FC<ImageSpoilerProps> = ({
             />
           )}
 
-          {/* SPOILER label — only for real messages */}
-          {!disableReveal && (
+          {/* Video Icon (only for videos) */}
+          {!disableReveal && isVideo && (
             <div
-              // style={{
-              //   position: 'absolute',
-              //   top: '50%',
-              //   left: '50%',
-              //   transform: `translate(-50%, -50%) scale(${isHovered ? 1.05 : 1})`,
-              //   backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              //   backdropFilter: 'blur(10px)',
-              //   padding: '12px 24px',
-              //   borderRadius: 12,
-              //   border: '2px solid rgba(255, 255, 255, 0.3)',
-              //   boxShadow: isHovered
-              //     ? '0 0 20px rgba(255, 255, 255, 0.3), inset 0 0 10px rgba(255, 255, 255, 0.1)'
-              //     : '0 0 15px rgba(255, 255, 255, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.05)',
-              //   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              //   pointerEvents: 'none',
-              // }}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) scale(${isHovered ? 1.05 : 1})`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                pointerEvents: 'none',
+              }}
             >
-              {/* <div style={{
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 600,
-                textAlign: 'center',
-                textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
-                letterSpacing: '0.5px',
-              }}>
-                SPOILER
-              </div>
-              <div style={{
-                color: 'rgba(255, 255, 255, 0.8)',
-                fontSize: 11,
-                textAlign: 'center',
-                marginTop: 4,
-                textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
-              }}>
-                Click to reveal
-              </div> */}
+              <Play size={28} color="#fff" fill="#fff" style={{ marginLeft: 4 }} />
             </div>
           )}
         </>
