@@ -212,6 +212,11 @@ User Experience:
     Textarea auto-resizes to accommodate the new content
     Modal closes automatically after insertion
 
+icons used:
+    Copy → Copy, Cut → Scissors, Paste → ClipboardPaste, Select All → CheckSquare
+    Bold → Bold, Italic → Italic, Underline → Underline, Strikethrough → Strikethrough
+    Code → Code, Spoiler → EyeOff, Numbered List → ListOrdered, Bullet List → List, Quote → Quote, Link → Link
+
 
 <------------------ image/video in grid too spoiler ---------------->
 Grid layout now wraps images/videos with ImageSpoiler component when isSpoiler === true

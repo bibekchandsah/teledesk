@@ -5686,7 +5686,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       }}
                     >
                       {/* Clipboard section — fixed, never scrolls away */}
-                      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)', userSelect: 'none' } as React.CSSProperties}
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
                         {clipboardItems.map(({ label, icon, action, shortcut }, i) => (
                           <button key={label} onPointerDown={(e) => { e.preventDefault(); action(); }}
                             style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '9px 14px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', gap: 10, textAlign: 'left', borderBottom: i < clipboardItems.length - 1 ? '1px solid var(--border)' : 'none' }}
@@ -5705,31 +5707,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                           Formatting {!hasSelection && <span style={{ fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>(select text first)</span>}
                         </div>
                         {/* Scrollable formatter rows */}
-                        <div style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-                          {fmtItems.map(({ icon, label, syntax, shortcut, type }, i) => (
-                            <button key={type}
-                              onPointerDown={(e) => {
-                                e.preventDefault();
-                                if (!hasSelection) return;
-                                applyFormatting(type);
-                                closeMobileCtxMenu();
-                              }}
-                              style={{
-                                display: 'flex', alignItems: 'flex-start', width: '100%',
-                                padding: '8px 14px', background: 'none', border: 'none',
-                                borderBottom: i < fmtItems.length - 1 ? '1px solid var(--border)' : 'none',
-                                color: 'var(--text-primary)', fontSize: 13, cursor: hasSelection ? 'pointer' : 'default',
-                                gap: 10, textAlign: 'left', opacity: hasSelection ? 1 : 0.4,
-                              }}
-                            >
-                              <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0, paddingTop: 1 }}>{icon}</span>
-                              <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                                <span>{label}</span>
-                                <span style={{ color: 'var(--text-secondary)', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}>{syntax}</span>
-                              </span>
-                              <span style={{ color: 'var(--text-secondary)', fontSize: 10, flexShrink: 0, marginLeft: 4, paddingTop: 2, whiteSpace: 'nowrap' }}>{shortcut}</span>
-                            </button>
-                          ))}
+                        <div
+                          style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch', userSelect: 'none', touchAction: 'pan-y' } as React.CSSProperties}
+                          onMouseDown={(e) => e.preventDefault()}
+                        >
+                          {fmtItems.map(({ icon, label, syntax, shortcut, type }, i) => {
+                            let startY = 0;
+                            return (
+                              <button key={type}
+                                onPointerDown={(e) => { e.preventDefault(); startY = e.clientY; }}
+                                onPointerUp={(e) => {
+                                  if (Math.abs(e.clientY - startY) > 6) return; // was a scroll, not a tap
+                                  if (!hasSelection) return;
+                                  applyFormatting(type);
+                                  closeMobileCtxMenu();
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'flex-start', width: '100%',
+                                  padding: '8px 14px', background: 'none', border: 'none',
+                                  borderBottom: i < fmtItems.length - 1 ? '1px solid var(--border)' : 'none',
+                                  color: 'var(--text-primary)', fontSize: 13, cursor: hasSelection ? 'pointer' : 'default',
+                                  gap: 10, textAlign: 'left', opacity: hasSelection ? 1 : 0.4,
+                                }}
+                              >
+                                <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0, paddingTop: 1 }}>{icon}</span>
+                                <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                                  <span>{label}</span>
+                                  <span style={{ color: 'var(--text-secondary)', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}>{syntax}</span>
+                                </span>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: 10, flexShrink: 0, marginLeft: 4, paddingTop: 2, whiteSpace: 'nowrap' }}>{shortcut}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
