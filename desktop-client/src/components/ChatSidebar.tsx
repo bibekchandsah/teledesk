@@ -241,7 +241,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           name: displayName,
           avatar: profile?.avatar,
           online: !isSelfChat && otherUid
-            ? onlineUsers.has(otherUid) && isPeerVisible && isSelfVisible
+            ? onlineUsers.has(otherUid) && isPeerVisible
             : false,
         };
       }

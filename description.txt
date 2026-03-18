@@ -370,6 +370,14 @@ A ✅ enabled, B ❌ disabled  →  ❌ No  →  ✅ Yes
 A ❌ disabled, B ❌ disabled  →  ❌ No  →  ❌ No
 
 
+Location  →  	Logic
+Sidebar  →  	onlineUsers.has(uid) && isPeerVisible && isSelfVisible
+Chat window header  →  	onlineUsers.has(uid) && isPeerVisible (missing isSelfVisible)
+Profile view  →  	onlineUsers.has(uid) (missing both visibility checks)
+A user shows as online only if they're in onlineUsers and their showActiveStatus !== false. The sidebar was incorrectly also gating on your own showActiveStatus (which should only affect what others see about you, not what you see about others). The profile view was ignoring showActiveStatus entirely. Both are now consistent with the chat window header.
+
+
+
 <-------------------------- typing indicator improvements -------------------------->
 Remove the maxWidth: 260px restriction (it now expands up to 500px or 80% of the width).
 Remove the ellipsis truncation.
@@ -441,3 +449,5 @@ copy for file preview in chat window
 
 <-------------------------- right click on message in chat window -------------------------->
 right click on message in chat window and right click on input box Both menus now measure the actual .nav-sidebar element height from the DOM instead of using hardcoded guesses. When a menu would overlap the nav bar, it flips above the click point. If there's not enough space above either, it clamps to the highest safe position above the nav bar.
+
+

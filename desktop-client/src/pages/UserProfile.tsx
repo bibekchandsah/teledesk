@@ -10,7 +10,7 @@ import { User } from '@shared/types';
 const UserProfile: React.FC = () => {
   const { uid } = useParams<{ uid?: string }>();
   const { currentUser } = useAuthStore();
-  const { onlineUsers } = useChatStore();
+  const { onlineUsers, userProfiles } = useChatStore();
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +57,9 @@ const UserProfile: React.FC = () => {
     );
   }
 
-  const isOnline = onlineUsers.has(profile.uid);
+  // Use store profile for showActiveStatus (kept up-to-date via socket) with API profile as fallback
+  const storeProfile = profile.uid === currentUser?.uid ? currentUser : (userProfiles[profile.uid] ?? profile);
+  const isOnline = onlineUsers.has(profile.uid) && storeProfile?.showActiveStatus !== false;
 
   return (
     <div
