@@ -355,7 +355,7 @@ Before the fetch, we snapshot { scrollHeight, scrollTop } into a ref (scrollAnch
 After setOlderMessages triggers a re-render, a useLayoutEffect fires synchronously after React commits the DOM but before the browser paints, reads the new scrollHeight, computes the difference, and corrects scrollTop — all before the user sees anything
 
 
-<-------------------------- online/read status visibility -------------------------->
+<-------------------------- online/read/last seen status visibility -------------------------->
 Independent visibility: the peer's online status is visible to me based only on THEIR setting.
 My own showActiveStatus setting only affects what OTHERS see about ME — not whether I can see the peer.
 Scenario  →  A sees B's online?  →  B sees A's online?  →  A sees B's ticks?  →  B sees A's ticks?
@@ -379,6 +379,13 @@ Sidebar  →  	onlineUsers.has(uid) && isPeerVisible && isSelfVisible
 Chat window header  →  	onlineUsers.has(uid) && isPeerVisible (missing isSelfVisible)
 Profile view  →  	onlineUsers.has(uid) (missing both visibility checks)
 A user shows as online only if they're in onlineUsers and their showActiveStatus !== false. The sidebar was incorrectly also gating on your own showActiveStatus (which should only affect what others see about you, not what you see about others). The profile view was ignoring showActiveStatus entirely. Both are now consistent with the chat window header.
+
+last seen:
+    last seen today at 04:57 PM
+    last seen yesterday at 09:30 AM
+    last seen Mon, Jan 6 at 11:15 AM (same year)
+    last seen Jan 6, 2023 at 11:15 AM (older)
+    Offline if no lastSeen timestamp exists
 
 
 

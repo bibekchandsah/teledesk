@@ -36,6 +36,41 @@ export const formatTime = (timestamp: string | Date): string => {
 };
 
 /**
+ * Format a "last seen" timestamp with full context:
+ * - Today     → "last seen today at 04:57 PM"
+ * - Yesterday → "last seen yesterday at 04:57 PM"
+ * - This year → "last seen Mon, Jan 6 at 04:57 PM"
+ * - Older     → "last seen Jan 6, 2023 at 04:57 PM"
+ */
+export const formatLastSeen = (timestamp: string | Date): string => {
+  if (!timestamp) return 'last seen recently';
+  const d = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  if (isNaN(d.getTime())) return 'last seen recently';
+
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (sameDay(d, now)) return `last seen today at ${time}`;
+  if (sameDay(d, yesterday)) return `last seen yesterday at ${time}`;
+
+  if (d.getFullYear() === now.getFullYear()) {
+    const dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    return `last seen ${dateStr} at ${time}`;
+  }
+
+  const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `last seen ${dateStr} at ${time}`;
+};
+
+/**
  * Format call duration (seconds) as mm:ss
  */
 export const formatDuration = (seconds: number): string => {

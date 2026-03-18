@@ -23,7 +23,7 @@ import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
 import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff } from 'lucide-react';
-import { getDateKey, formatDateLabel, formatTime, formatFileSize, formatDuration } from '../utils/formatters';
+import { getDateKey, formatDateLabel, formatTime, formatLastSeen, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
@@ -4006,7 +4006,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   : peer.online 
                     ? 'Online' 
                     : peer.profile?.lastSeen 
-                      ? `Last seen ${formatTime(peer.profile.lastSeen)}`
+                      ? formatLastSeen(peer.profile.lastSeen)
                       : 'Offline'}
               </div>
             </button>
@@ -6147,7 +6147,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   ? 'Your saved messages'
                   : peer.online
                     ? '● Online'
-                    : `Last seen ${formatTime(peer.profile?.lastSeen || '')}`}
+                    : peer.profile?.lastSeen ? formatLastSeen(peer.profile.lastSeen) : 'Offline'}
               </div>
             </div>
           </div>

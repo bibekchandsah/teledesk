@@ -4,7 +4,7 @@ import { getUserById } from '../services/apiService';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import UserAvatar from '../components/UserAvatar';
-import { formatTime } from '../utils/formatters';
+import { formatTime, formatLastSeen } from '../utils/formatters';
 import { User } from '@shared/types';
 
 const UserProfile: React.FC = () => {
@@ -93,7 +93,7 @@ const UserProfile: React.FC = () => {
           fontWeight: 500,
         }}
       >
-        {isOnline ? '● Online' : `Last seen ${formatTime(profile.lastSeen)}`}
+        {isOnline ? '● Online' : profile.lastSeen ? formatLastSeen(profile.lastSeen) : 'Offline'}
       </div>
 
       <div

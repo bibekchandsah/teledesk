@@ -35,3 +35,4 @@ to be implemented:
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
 
 28. Playbar in audio clips
+30. optimize the time when user select user from new chat 
