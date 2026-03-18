@@ -2,6 +2,8 @@
 17. (fixed) when user delete account then in another user chat it shows "Deleted User" instead of owner profile
 16. (fixed) improve the touch device logic for showing delete icon in account selection 
 17. (fixed) show toast when saved to bookmark
+18. (fixed) remove the text "sent an image" for image files when send if no caption is there
+20. (fixed) responsive grid layout
 
 to be implemented:
 
@@ -16,4 +18,4 @@ store chats in device and update accordingly when new events occurs and while us
 11. when user mute then still show app using microphone
 12. when user turn off camera then still it shows app using camera
 15. the person who call, don't receive call duaration message after hangup call, only shows after reload 
-18. remove the text "sent an image" for image files when send if no caption is there
+19. toggle chat icon

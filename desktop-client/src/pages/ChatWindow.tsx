@@ -277,7 +277,7 @@ const MediaGroupBubble = ({
           {/* Caption — shown above the grid when last message has custom text */}
           {(() => {
             const cap = lastMsg.content;
-            const isDefaultContent = !cap || cap.startsWith('Sent a ');
+            const isDefaultContent = !cap || cap.startsWith('Sent a ') || cap === '';
             if (isDefaultContent) return null;
             return (
               <div style={{
@@ -296,12 +296,12 @@ const MediaGroupBubble = ({
             display: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'flex' : 'grid',
             flexDirection: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 'column' : undefined,
             gridTemplateColumns: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? undefined : 'repeat(6, 1fr)',
-            gridAutoRows: msgs.length === 1 ? undefined : '110px', 
+            gridAutoRows: msgs.length === 1 ? undefined : 'clamp(70px, 18vw, 110px)',
             gap: 3,
             borderRadius: (!lastMsg.content || lastMsg.content.startsWith('Sent a ')) ? 12 : '0px 0px 12px 12px',
-            overflow: 'hidden', 
-            maxWidth: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 300 : 340,
-            width: msgs.length > 1 ? (is2Col ? 220 : 330) : undefined,
+            overflow: 'hidden',
+            maxWidth: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? 300 : 'min(340px, calc(100vw - 96px))',
+            width: msgs.length > 1 ? (is2Col ? 'min(220px, calc(100vw - 96px))' : 'min(330px, calc(100vw - 96px))') : undefined,
             backgroundColor: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? (isOwn ? 'var(--accent)' : 'var(--bg-secondary)') : (isOwn ? 'var(--accent)' : 'var(--bg-secondary)'),
             border: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '1px solid var(--border)' : 'none',
             padding: (firstMsg.type === 'file' || firstMsg.type === 'pdf') ? '4px 0' : '4px',
@@ -3492,7 +3492,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         sendMessage({
           chatId,
           // Attach caption to last file message so it renders in the same bubble
-          content: isLastFile && caption ? caption : `Sent a ${msgType}`,
+          content: isLastFile && caption ? caption : '',
           type: msgType,
           fileUrl: result.url,
           fileName: result.fileName,
