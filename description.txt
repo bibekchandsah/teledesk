@@ -500,3 +500,11 @@ The ChatListPage cache-skip fallback (if (cached && !cached.isDeleted) continue)
 <---------------------------- Account picker --------------------------------->
 optimized for touch and non-touch devices
 trash icon show instantly for touch devices
+
+
+<----------------------------- Bookmark ---------------------------------------->
+Added bookmarkToast state and a showBookmarkToast helper with a 2.5s auto-dismiss timer
+handleBookmarkMessage now calls showBookmarkToast('saved') or showBookmarkToast('removed') accordingly
+Fixed MessageBubble.handleBookmark to fully delegate to onBookmark (was double-calling addBookmark before)
+Toast renders as a pill at the bottom center — "Saved to bookmarks" with a filled bookmark icon, or "Removed from bookmarks" with an outline icon
+

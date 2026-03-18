@@ -1364,6 +1364,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     [savedEntries]
   );
 
+  const [bookmarkToast, setBookmarkToast] = useState<'saved' | 'removed' | null>(null);
+  const bookmarkToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showBookmarkToast = useCallback((type: 'saved' | 'removed') => {
+    if (bookmarkToastTimer.current) clearTimeout(bookmarkToastTimer.current);
+    setBookmarkToast(type);
+    bookmarkToastTimer.current = setTimeout(() => setBookmarkToast(null), 2500);
+  }, []);
+
   // Track which message bubble's context menu is currently open — ensures only one is visible at a time
   const [openBubbleMenuId, setOpenBubbleMenuId] = useState<string | null>(null);
 
@@ -2927,10 +2936,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const handleBookmarkMessage = useCallback((message: Message) => {
     if (isBookmarked(message.messageId)) {
       removeBookmark(message.messageId);
+      showBookmarkToast('removed');
     } else {
       addBookmark(message, getActiveChatName());
+      showBookmarkToast('saved');
     }
-  }, [isBookmarked, addBookmark, removeBookmark, getActiveChatName]);
+  }, [isBookmarked, addBookmark, removeBookmark, getActiveChatName, showBookmarkToast]);
 
   const handlePin = useCallback(async (message: Message, action: 'pin' | 'unpin') => {
     if (!chatId) return;
@@ -6859,6 +6870,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </div>
         </div>
       )}
+        </div>
+      )}
+
+      {/* Bookmark toast */}
+      {bookmarkToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 80,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'var(--bg-secondary)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-primary)',
+          padding: '10px 18px',
+          borderRadius: 20,
+          fontSize: 13,
+          fontWeight: 500,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          {bookmarkToast === 'saved' ? (
+            <><BookmarkCheck size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} /> Saved to bookmarks</>
+          ) : (
+            <><Bookmark size={15} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} /> Removed from bookmarks</>
+          )}
         </div>
       )}
     </div>

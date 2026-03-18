@@ -820,12 +820,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const handleBookmark = () => {
     setCtxMenu(null);
-    if (bookmarked) {
-      removeBookmark(message.messageId);
-    } else {
-      addBookmark(message);
-      onBookmark?.(message);
-    }
+    onBookmark?.(message);
   };
 
   const handlePin = () => {
