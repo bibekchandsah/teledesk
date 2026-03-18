@@ -543,6 +543,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showExtended, setShowExtended] = useState(false);
   const [pickerDirection, setPickerDirection] = useState<'up' | 'down'>('up');
   const [pickerPos, setPickerPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
+  // const [barPos, setBarPos] = useState<{ top?: number; bottom?: number; left?: number; right?: number } | null>(null);
   const [tooltipEmoji, setTooltipEmoji] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const emojiBarRef = useRef<HTMLDivElement>(null);
@@ -598,63 +599,101 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     onStartEdit?.(message);
   };
 
+  const convertToPng = useCallback((blob: Blob): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // Important for canvas extraction from cross-origin URLs
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas context failed')); return; }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => {
+        reject(new Error('Image load failed'));
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(blob);
+    });
+  }, []);
+
   const handleCopy = async (msg?: Message) => {
     const target = msg || message;
     const isImage = target.type === 'image' || target.type === 'gif' || target.type === 'sticker';
+    
     if (isImage && target.fileUrl) {
-      // 1. Electron native copy
-      if (window.electronAPI?.copyImageToClipboard) {
-        try {
+      try {
+        // 1. Electron native copy
+        if (window.electronAPI?.copyImageToClipboard) {
           const ok = await window.electronAPI.copyImageToClipboard(target.fileUrl);
-          if (ok) { showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`); return; }
-        } catch {}
-      }
-      // 2. Modern Clipboard API (desktop browsers / secure contexts with permission)
-      try {
-        const res = await fetch(target.fileUrl);
-        const blob = await res.blob();
-        // Normalise to image/png which ClipboardItem requires on most browsers
-        let pngBlob = blob;
-        if (blob.type !== 'image/png') {
-          pngBlob = await new Promise<Blob>((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = img.naturalWidth;
-              canvas.height = img.naturalHeight;
-              canvas.getContext('2d')!.drawImage(img, 0, 0);
-              canvas.toBlob(b => b ? resolve(b) : reject(), 'image/png');
-            };
-            img.onerror = reject;
-            img.src = URL.createObjectURL(blob);
-          });
+          if (ok) {
+            showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
+            return;
+          }
         }
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-        showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied`);
-        return;
-      } catch {}
-      // 3. Mobile fallback: trigger native share/save instead of silently copying URL
-      if (navigator.share) {
+
+        // 2. Browser Clipboard API
+        if (navigator.clipboard && (window as any).ClipboardItem) {
+          try {
+            // Add cache-buster to force fresh CORS request (bypasses non-CORS cached display images)
+            const fetchUrl = target.fileUrl.includes('?') ? `${target.fileUrl}&cors=1` : `${target.fileUrl}?cors=1`;
+            const res = await fetch(fetchUrl, { mode: 'cors' });
+            if (!res.ok) throw new Error('Fetch failed');
+            const blob = await res.blob();
+            
+            let finalBlob = blob;
+            // Clipboard API mostly only supports image/png reliably across browsers
+            if (blob.type !== 'image/png') {
+              finalBlob = await convertToPng(blob);
+            }
+            
+            await navigator.clipboard.write([
+              new (window as any).ClipboardItem({ [finalBlob.type]: finalBlob })
+            ]);
+            showToast(`${target.type === 'sticker' ? 'Sticker' : target.type === 'gif' ? 'GIF' : 'Image'} copied to clipboard`);
+            return;
+          } catch (err) {
+            // This is usually a CORS block on the web
+            console.warn('Browser blocked direct image data access (CORS). Falling back to URL copy.');
+          }
+        }
+
+        // 3. Fallback: Copy URL as text if blob fails (CORS or API issues)
         try {
-          const res = await fetch(target.fileUrl);
-          const blob = await res.blob();
-          const ext = blob.type.split('/')[1] || 'png';
-          const file = new File([blob], `image.${ext}`, { type: blob.type });
-          await navigator.share({ files: [file] });
+          await navigator.clipboard.writeText(target.fileUrl);
+          showToast(`Direct copy blocked by browser. Image link copied.`);
           return;
-        } catch {}
+        } catch (err) {
+          console.error('Copy URL fallback failed:', err);
+        }
+
+        // 4. Mobile Share Fallback
+        if (navigator.share) {
+          try {
+            const fetchUrl = target.fileUrl.includes('?') ? `${target.fileUrl}&cors=1` : `${target.fileUrl}?cors=1`;
+            const res = await fetch(fetchUrl, { mode: 'cors' });
+            const blob = await res.blob();
+            const ext = blob.type.split('/')[1] || 'png';
+            const file = new File([blob], `image.${ext}`, { type: blob.type });
+            await navigator.share({ 
+              files: [file],
+              title: 'Copy Image',
+            });
+            return;
+          } catch (err) {
+            console.error('Share failed:', err);
+          }
+        }
+
+        showToast('Unable to copy image');
+      } catch (err) {
+        showToast('Unable to copy image');
+        console.error('Copy error:', err);
       }
-      // 4. Last resort: download the image
-      try {
-        const a = document.createElement('a');
-        a.href = target.fileUrl;
-        a.download = 'image';
-        a.click();
-        showToast('Image saved');
-        return;
-      } catch {}
-      showToast('Unable to copy image on this device');
     } else if (target.content) {
       if (window.electronAPI?.copyTextToClipboard) {
         window.electronAPI.copyTextToClipboard(target.content);
@@ -701,6 +740,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     setShowEmojiBar(false);
     setShowExtended(false);
     setPickerPos(null);
+    // setBarPos(null);
     setCtxMenu(null);
     onMessageReaction?.(message.messageId, emoji);
   };
@@ -712,7 +752,37 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   const handleMouseEnterBubble = () => {
+  // const handleMouseEnterBubble = (e: React.MouseEvent) => {
     if (message.deleted) return;
+    
+    // Calculate bar position relative to portal container
+    // const bubble = e.currentTarget as HTMLElement;
+    // const rect = bubble.getBoundingClientRect();
+    // const chatContainer = document.getElementById('chat-emoji-picker-container');
+    // const chatRect = chatContainer?.getBoundingClientRect() || { top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth, width: window.innerWidth, height: window.innerHeight };
+    
+    // const barWidth = isTouchDevice ? 265 : 48; // Initial width (single emoji or touch row)
+    // const expandedWidth = isTouchDevice ? 265 : 265; 
+    
+    // const relativeBottom = rect.top - chatRect.top;
+    // const relativeLeft = rect.left - chatRect.left;
+    // const relativeRight = rect.right - chatRect.left;
+
+    // // Default to top of bubble
+    // const top = relativeBottom - 42; // 36px height + 6px margin
+    
+    // // Horizontal positioning:
+    // // For sender (isOwn), anchor to right of bubble, but don't go off-screen left
+    // // For receiver, anchor to left of bubble, but don't go off-screen right
+    // let left = isOwn ? (relativeRight - barWidth) : relativeLeft;
+    
+    // // Constraints: must be at least 8px from left and 8px from right of chat window
+    // // Account for expanded width if we're on touch or planning to hover
+    // const maxLeft = chatRect.width - expandedWidth - 8;
+    // left = Math.max(8, Math.min(left, maxLeft));
+
+    // setBarPos({ top, left });
+    
     hoverTimerRef.current = setTimeout(() => setShowEmojiBar(true), 150);
   };
 
@@ -725,6 +795,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         setIsEmojiBarHovered(false);
         setShowExtended(false);
         setPickerPos(null);
+        // setBarPos(null);
       }
     }, 120);
   };
@@ -1023,6 +1094,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* ─── Hovering Emoji Quick-Bar ──────────────────────────────────── */}
         {showEmojiBar && !message.deleted && onMessageReaction && (
+        // {showEmojiBar && !message.deleted && onMessageReaction && barPos && createPortal(
           <div
             ref={emojiBarRef}
             onMouseLeave={() => { 
@@ -1030,10 +1102,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 setShowEmojiBar(false); 
                 setShowExtended(false); 
                 setPickerPos(null); 
+                // setBarPos(null);
               }
             }}
             style={{
               position: 'absolute',
+              // left: barPos.left,
+              // top: barPos.top,
               [isOwn ? 'right' : 'left']: isTouchDevice ? 0 : 'calc(100% - 48px)',
               bottom: '100%',
               marginBottom: 6,
@@ -1043,6 +1118,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               alignItems: isOwn ? 'flex-end' : 'flex-start',
               gap: 4,
               animation: 'reactionBarSlideUp 0.15s ease-out',
+              // pointerEvents: 'auto',
             }}
           >
             <div 
@@ -1073,6 +1149,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 cursor: 'pointer',
               }}
             >
+              {/* {tooltipEmoji && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  backgroundColor: 'rgba(0,0,0,0.85)',
+                  color: '#fff',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  marginBottom: 8,
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                  zIndex: 1000,
+                  backdropFilter: 'blur(4px)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {tooltipEmoji}
+                </div>
+              )} */}
               {/* More emojis button (now at the start) */}
               <button
                 ref={smilePlusBtnRef}
@@ -1169,6 +1267,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               })}
             </div>
           </div>
+          // </div>,
+          // document.getElementById('chat-emoji-picker-container')!
         )}
 
         {/* ─── Emoji Picker Portal (renders inside chat window, never overlaps sidebar) ── */}

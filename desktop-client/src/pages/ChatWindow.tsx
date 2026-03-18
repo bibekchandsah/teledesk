@@ -32,18 +32,58 @@ import ChatThemeModal from '../components/modals/ChatThemeModal';
 import ImageSpoiler from '../components/ImageSpoiler';
 import PremiumToggle from '../components/PremiumToggle';
 
-export const downloadMessageFile = (m: Message) => {
+export const downloadMessageFile = async (m: Message) => {
   if (!m.fileUrl) return;
   if (window.electronAPI?.downloadFile) {
     window.electronAPI.downloadFile(m.fileUrl, m.fileName);
   } else {
-    const link = document.createElement('a');
-    link.href = m.fileUrl;
-    link.download = m.fileName || 'download';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      // 1. Try to fetch as blob to force a real download (prevents navigation)
+      const res = await fetch(m.fileUrl, { mode: 'cors' });
+      if (!res.ok) throw new Error('Fetch failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = m.fileName || 'download';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+    } catch (err) {
+      // 2. Fallback to direct anchor (safeguard with target="_blank" to prevent same-page navigation)
+      const link = document.createElement('a');
+      link.href = m.fileUrl;
+      link.download = m.fileName || 'download';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   }
+};
+
+const convertToPng = (blob: Blob): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas context failed')); return; }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => {
+      reject(new Error('Image load failed'));
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(blob);
+  });
 };
 
 // --- MediaGroupBubble Subcomponent ---
@@ -137,18 +177,49 @@ const MediaGroupBubble = ({
   const handleCopyImage = async (m: Message) => {
     if (!m.fileUrl) return;
     try {
+      // 1. Electron native copy
       if (window.electronAPI?.copyImageToClipboard) {
         const ok = await window.electronAPI.copyImageToClipboard(m.fileUrl);
-        if (ok) showToast('Image copied to clipboard');
-      } else {
-        const res = await fetch(m.fileUrl);
-        const blob = await res.blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        showToast('Image copied to clipboard');
+        if (ok) {
+          showToast('Image copied to clipboard');
+          return;
+        }
       }
-    } catch (err) { 
-      console.error('[CopyImage] Failed:', err);
-      showToast('Failed to copy image'); 
+
+      // 2. Browser Clipboard API
+      if (navigator.clipboard && (window as any).ClipboardItem) {
+        try {
+          // Add cache-buster to force fresh CORS request
+          const fetchUrl = m.fileUrl.includes('?') ? `${m.fileUrl}&cors=1` : `${m.fileUrl}?cors=1`;
+          const res = await fetch(fetchUrl, { mode: 'cors' });
+          if (!res.ok) throw new Error('Fetch failed');
+          const blob = await res.blob();
+          
+          let finalBlob = blob;
+          if (blob.type !== 'image/png') {
+            finalBlob = await convertToPng(blob);
+          }
+          
+          await navigator.clipboard.write([
+            new (window as any).ClipboardItem({ [finalBlob.type]: finalBlob })
+          ]);
+          showToast('Image copied to clipboard');
+          return;
+        } catch (err) {
+          console.warn('Browser blocked direct image data access (CORS). Falling back to URL copy.');
+        }
+      }
+
+      // 3. Fallback: Copy URL as text
+      try {
+        await navigator.clipboard.writeText(m.fileUrl);
+        showToast('Direct copy blocked by browser. Image link copied.');
+      } catch (err) {
+        console.error('Copy URL fallback failed:', err);
+        showToast('Failed to copy image link');
+      }
+    } catch (err) {
+      showToast('Failed to copy image');
     }
   };
 
@@ -357,7 +428,11 @@ const MediaGroupBubble = ({
                         style={{ width: '100%', height: '100%' }}
                       />
                     ) : (
-                      <img src={m.fileUrl} alt={m.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img 
+                      src={m.fileUrl} 
+                      alt={m.fileName} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
                     )
                   ) : m.type === 'video' ? (
                     m.isSpoiler ? (
@@ -720,41 +795,82 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
   const copyImage = async () => {
     if (!isImage || !message.fileUrl) return;
     try {
-      let success = false;
-      // Use native Electron API if available to bypass CORS
+      // 1. Electron native copy
       if (window.electronAPI?.copyImageToClipboard) {
-        success = await window.electronAPI.copyImageToClipboard(message.fileUrl);
-      } else {
-        // Fallback to renderer fetch (subject to CORS)
-        const response = await fetch(message.fileUrl);
-        const blob = await response.blob();
-        const item = new ClipboardItem({ [blob.type]: blob });
-        await navigator.clipboard.write([item]);
-        success = true;
+        const ok = await window.electronAPI.copyImageToClipboard(message.fileUrl);
+        if (ok) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+          return;
+        }
       }
 
-      if (success) {
+      // 2. Browser Clipboard API
+      if (navigator.clipboard && (window as any).ClipboardItem) {
+        try {
+          const res = await fetch(message.fileUrl, { mode: 'cors' });
+          if (!res.ok) throw new Error('Fetch failed');
+          const blob = await res.blob();
+          
+          let finalBlob = blob;
+          if (blob.type !== 'image/png') {
+            finalBlob = await convertToPng(blob);
+          }
+          
+          await navigator.clipboard.write([
+            new (window as any).ClipboardItem({ [finalBlob.type]: finalBlob })
+          ]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+          return;
+        } catch (err) {
+          console.warn('Browser blocked direct image data access (CORS). Falling back to URL copy.');
+        }
+      }
+
+      // 3. Fallback: Copy URL as text
+      try {
+        await navigator.clipboard.writeText(message.fileUrl);
         setCopied(true);
+        // Maybe change toast text here if we have a way to pass it to the previewer's local state
         setTimeout(() => setCopied(false), 2000);
+        return;
+      } catch (err) {
+        console.error('Copy URL fallback failed:', err);
       }
     } catch (err) {
       console.error('Failed to copy image:', err);
     }
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (!message.fileUrl) return;
     if (window.electronAPI?.downloadFile) {
       window.electronAPI.downloadFile(message.fileUrl, message.fileName);
     } else {
-      // Fallback for web/older desktop versions
-      const link = document.createElement('a');
-      link.href = message.fileUrl;
-      link.download = message.fileName || 'download';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const res = await fetch(message.fileUrl, { mode: 'cors' });
+        if (!res.ok) throw new Error('Fetch failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = message.fileName || 'download';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      } catch (err) {
+        const link = document.createElement('a');
+        link.href = message.fileUrl;
+        link.download = message.fileName || 'download';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     }
   };
 
