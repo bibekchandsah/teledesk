@@ -495,3 +495,8 @@ The issue is: when user B's chat partner (user A) deletes their account, user A'
     The real fix: keep the deleted user in members but mark the user record as deleted. This way the opposite user's client can still fetch the deleted user's profile and show "Deleted User" correctly.
 When a user deletes their account, the backend now immediately emits USER_UPDATED with the anonymized profile (isDeleted: true, name "Deleted User") to all connected peers via their personal socket rooms. The client's existing handleUserUpdated handler calls setUserProfile() which overwrites the stale cached profile, causing the sidebar and chat header to re-render instantly — no more "(You)" showing up for the opposite user.
 The ChatListPage cache-skip fallback (if (cached && !cached.isDeleted) continue) still handles the case where a peer was offline when the deletion happened and reconnects later.
+
+
+<---------------------------- Account picker --------------------------------->
+optimized for touch and non-touch devices
+trash icon show instantly for touch devices
