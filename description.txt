@@ -433,3 +433,11 @@ copy for file preview in chat window
     1. Open Previewer: Click on any image to open the full-screen preview.
     2. Click Copy: Use the "Copy" button in the top header.
     3. Result: The image should now be copied directly to your clipboard in the web browser, without any CORS errors!
+(Desktop):
+    1. Try copying a GIF or Sticker: You should see the "copied" toast, and no errors in the console.
+    2. Paste it: You should now be able to paste the link (or first frame) into other apps or back into the chat.
+    3. Check Images: Standard image copying remains robust and CORS-aware.
+
+
+<-------------------------- right click on message in chat window -------------------------->
+right click on message in chat window and right click on input box Both menus now measure the actual .nav-sidebar element height from the DOM instead of using hardcoded guesses. When a menu would overlap the nav bar, it flips above the click point. If there's not enough space above either, it clamps to the highest safe position above the nav bar.

@@ -5491,11 +5491,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 const mod = isMac ? '⌘' : 'Ctrl+';
                 const menuH = 4 * 44; // 4 items × ~44px each
                 const menuW = 160;
-                const spaceBelow = window.innerHeight - mobileCtxMenu.y;
-                const top = spaceBelow < menuH + 8
-                  ? mobileCtxMenu.y - menuH - 8
+                const MARGIN = 8;
+                const navEl = document.querySelector('.nav-sidebar') as HTMLElement | null;
+                const navBarH = navEl ? navEl.offsetHeight : (window.innerWidth <= 480 ? 52 : window.innerWidth <= 768 ? 56 : 0);
+                const bottomBoundary = window.innerHeight - navBarH - MARGIN;
+                const spaceBelow = bottomBoundary - mobileCtxMenu.y;
+                const top = spaceBelow < menuH + MARGIN
+                  ? mobileCtxMenu.y - menuH - MARGIN
                   : mobileCtxMenu.y;
-                const left = Math.min(mobileCtxMenu.x, window.innerWidth - menuW - 8);
+                const left = Math.min(mobileCtxMenu.x, window.innerWidth - menuW - MARGIN);
                 return (
                   <>
                     <div
