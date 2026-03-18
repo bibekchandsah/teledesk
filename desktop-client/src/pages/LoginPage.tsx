@@ -132,6 +132,7 @@ const LoginPage: React.FC = () => {
     <div
       className="login-page"
       style={{
+        minHeight: '100vh',
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch' as any,
         display: 'flex',

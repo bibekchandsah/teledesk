@@ -22,7 +22,7 @@ import ErrorModal from '../components/modals/ErrorModal';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff, Scissors, Clipboard, ClipboardPaste, Bold, Italic, Underline, Strikethrough, Code, List, ListOrdered, Quote, Link, EyeOff as SpoilerIcon } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatLastSeen, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -1414,13 +1414,47 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   
   // ─── Mobile context menu (copy/cut/paste/select all) ─────────────────────
   const [mobileCtxMenu, setMobileCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [mobileCtxMenuPos, setMobileCtxMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const mobileCtxMenuRef = useRef<HTMLDivElement | null>(null);
 
   const handleMobileContextMenu = (e: React.MouseEvent<HTMLTextAreaElement>) => {
     e.preventDefault();
+    // Capture current selection so formatter buttons work from the context menu
+    const el = inputRef.current;
+    if (el && el.selectionStart !== el.selectionEnd) {
+      setTextSelection({ start: el.selectionStart, end: el.selectionEnd });
+    } else {
+      setTextSelection(null);
+    }
+    setShowFormatToolbar(false); // suppress floating toolbar — it's merged into ctx menu
     setMobileCtxMenu({ x: e.clientX, y: e.clientY });
   };
 
-  const closeMobileCtxMenu = () => setMobileCtxMenu(null);
+  const closeMobileCtxMenu = () => { setMobileCtxMenu(null); setMobileCtxMenuPos(null); };
+
+  // After the menu renders, measure its actual size and clamp into viewport
+  useLayoutEffect(() => {
+    if (!mobileCtxMenu || !mobileCtxMenuRef.current) return;
+    const { offsetWidth: w, offsetHeight: h } = mobileCtxMenuRef.current;
+    const MARGIN = 8;
+    const navEl = document.querySelector('.nav-sidebar') as HTMLElement | null;
+    const navBarH = navEl ? navEl.offsetHeight : (window.innerWidth <= 480 ? 52 : window.innerWidth <= 768 ? 56 : 0);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight - navBarH;
+
+    let top = mobileCtxMenu.y;
+    let left = mobileCtxMenu.x;
+
+    // Prefer showing below click; flip above if not enough room
+    if (top + h > vh - MARGIN) top = Math.max(MARGIN, mobileCtxMenu.y - h - MARGIN);
+    if (top < MARGIN) top = MARGIN;
+
+    // Clamp horizontally
+    if (left + w > vw - MARGIN) left = vw - w - MARGIN;
+    if (left < MARGIN) left = MARGIN;
+
+    setMobileCtxMenuPos({ top, left });
+  }, [mobileCtxMenu]);
 
   // Clipboard helper: tries modern API first, falls back to execCommand
   const clipboardWrite = (text: string) => {
@@ -2595,7 +2629,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         top: rect.top - 50,
         left: rect.left + (rect.width / 2)
       });
-      setShowFormatToolbar(true);
+      setShowFormatToolbar(!isTouchDevice);
     } else {
       setShowFormatToolbar(false);
       setTextSelection(null);
@@ -5244,8 +5278,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 </div>
               )}
               
-              {/* Text Formatting Toolbar */}
-              {showFormatToolbar && (
+              {/* Text Formatting Toolbar — hidden on touch devices (use context menu instead) */}
+              {showFormatToolbar && !isTouchDevice && (
                 <div
                   style={{
                     position: 'fixed',
@@ -5595,70 +5629,109 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   boxSizing: 'border-box',
                 }}
               />
-              {/* Context menu: copy / cut / paste / select all */}
+              {/* Context menu: copy / cut / paste / select all + formatters */}
               {mobileCtxMenu && (() => {
                 const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
                 const mod = isMac ? '⌘' : 'Ctrl+';
-                const menuH = 4 * 44; // 4 items × ~44px each
-                const menuW = 160;
+                const sh = isMac ? '⇧' : 'Shift+';
+                const hasSelection = !!(textSelection && textSelection.start !== textSelection.end);
+
+                const clipboardItems = [
+                  { label: 'Copy',       icon: <Copy size={14} />,          action: mobileCtxCopy,      shortcut: `${mod}C` },
+                  { label: 'Cut',        icon: <Scissors size={14} />,      action: mobileCtxCut,       shortcut: `${mod}X` },
+                  { label: 'Paste',      icon: <ClipboardPaste size={14} />,action: mobileCtxPaste,     shortcut: `${mod}V` },
+                  { label: 'Select All', icon: <CheckSquare size={14} />,   action: mobileCtxSelectAll, shortcut: `${mod}A` },
+                ];
+
+                const fmtItems: { icon: React.ReactNode; label: string; syntax: string; shortcut: string; type: Parameters<typeof applyFormatting>[0] }[] = [
+                  { icon: <Bold size={14} />,         label: 'Bold',          syntax: '*asterisks*',               shortcut: `${mod}B`,      type: 'bold' },
+                  { icon: <Italic size={14} />,       label: 'Italic',        syntax: '_underscores_',             shortcut: `${mod}I`,      type: 'italic' },
+                  { icon: <Underline size={14} />,    label: 'Underline',     syntax: '__double underscores__',    shortcut: `${mod}U`,      type: 'underline' },
+                  { icon: <Strikethrough size={14} />,label: 'Strikethrough', syntax: '~tildes~',                  shortcut: `${mod}${sh}X`, type: 'strikethrough' },
+                  { icon: <Code size={14} />,         label: 'Inline Code',   syntax: '`backtick` or ```block```', shortcut: `${mod}${sh}I`, type: 'code' },
+                  { icon: <EyeOff size={14} />,       label: 'Spoiler',       syntax: '||spoiler text||',          shortcut: `${mod}${sh}P`, type: 'spoiler' },
+                  { icon: <ListOrdered size={14} />,  label: 'Numbered List', syntax: '1. text, 2. text…',         shortcut: `${mod}${sh}7`, type: 'numberedList' },
+                  { icon: <List size={14} />,         label: 'Bullet List',   syntax: '• text',                    shortcut: `${mod}${sh}8`, type: 'bulletList' },
+                  { icon: <Quote size={14} />,        label: 'Quote',         syntax: '> prefix line',             shortcut: `${mod}${sh}.`, type: 'quote' },
+                  { icon: <Link size={14} />,         label: 'Link',          syntax: '[text](url)',               shortcut: `${mod}K`,      type: 'url' },
+                ];
+
                 const MARGIN = 8;
+                const menuW = 268;
                 const navEl = document.querySelector('.nav-sidebar') as HTMLElement | null;
                 const navBarH = navEl ? navEl.offsetHeight : (window.innerWidth <= 480 ? 52 : window.innerWidth <= 768 ? 56 : 0);
-                const bottomBoundary = window.innerHeight - navBarH - MARGIN;
-                const spaceBelow = bottomBoundary - mobileCtxMenu.y;
-                const top = spaceBelow < menuH + MARGIN
-                  ? mobileCtxMenu.y - menuH - MARGIN
-                  : mobileCtxMenu.y;
-                const left = Math.min(mobileCtxMenu.x, window.innerWidth - menuW - MARGIN);
+                const maxMenuH = Math.min(360, window.innerHeight - navBarH - MARGIN * 2);
+
                 return (
                   <>
+                    <div onClick={closeMobileCtxMenu} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
                     <div
-                      onClick={closeMobileCtxMenu}
-                      style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
-                    />
-                    <div
+                      ref={mobileCtxMenuRef}
                       style={{
                         position: 'fixed',
-                        top: Math.max(8, top),
-                        left: Math.max(8, left),
+                        top: mobileCtxMenuPos ? mobileCtxMenuPos.top : mobileCtxMenu.y,
+                        left: mobileCtxMenuPos ? mobileCtxMenuPos.left : mobileCtxMenu.x,
+                        visibility: mobileCtxMenuPos ? 'visible' : 'hidden',
                         zIndex: 9999,
                         backgroundColor: 'var(--bg-secondary)',
                         border: '1px solid var(--border)',
-                        borderRadius: 10,
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                        borderRadius: 12,
+                        boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
+                        width: menuW,
+                        maxHeight: maxMenuH,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        animation: mobileCtxMenuPos ? 'slideUp 0.18s cubic-bezier(0.4,0,0.2,1) both' : 'none',
                         overflow: 'hidden',
-                        minWidth: menuW,
                       }}
                     >
-                      {[
-                        { label: 'Copy', action: mobileCtxCopy, key: 'C' },
-                        { label: 'Cut', action: mobileCtxCut, key: 'X' },
-                        { label: 'Paste', action: mobileCtxPaste, key: 'V' },
-                        { label: 'Select All', action: mobileCtxSelectAll, key: 'A' },
-                      ].map(({ label, action, key }) => (
-                        <button
-                          key={label}
-                          onPointerDown={(e) => { e.preventDefault(); action(); }}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            width: '100%',
-                            padding: '11px 16px',
-                            background: 'none',
-                            border: 'none',
-                            borderBottom: '1px solid var(--border)',
-                            color: 'var(--text-primary)',
-                            fontSize: 14,
-                            cursor: 'pointer',
-                            gap: 16,
-                            textAlign: 'left',
-                          }}
-                        >
-                          <span>{label}</span>
-                          <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{mod}{key}</span>
-                        </button>
-                      ))}
+                      {/* Clipboard section — fixed, never scrolls away */}
+                      <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+                        {clipboardItems.map(({ label, icon, action, shortcut }, i) => (
+                          <button key={label} onPointerDown={(e) => { e.preventDefault(); action(); }}
+                            style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '9px 14px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', gap: 10, textAlign: 'left', borderBottom: i < clipboardItems.length - 1 ? '1px solid var(--border)' : 'none' }}
+                          >
+                            <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0 }}>{icon}</span>
+                            <span style={{ flex: 1 }}>{label}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: 11, flexShrink: 0 }}>{shortcut}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Formatting section — scrollable */}
+                      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, overflow: 'hidden' }}>
+                        {/* Sticky section header */}
+                        <div style={{ flexShrink: 0, padding: '5px 14px 3px', fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>
+                          Formatting {!hasSelection && <span style={{ fontWeight: 400, textTransform: 'none', opacity: 0.7 }}>(select text first)</span>}
+                        </div>
+                        {/* Scrollable formatter rows */}
+                        <div style={{ overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                          {fmtItems.map(({ icon, label, syntax, shortcut, type }, i) => (
+                            <button key={type}
+                              onPointerDown={(e) => {
+                                e.preventDefault();
+                                if (!hasSelection) return;
+                                applyFormatting(type);
+                                closeMobileCtxMenu();
+                              }}
+                              style={{
+                                display: 'flex', alignItems: 'flex-start', width: '100%',
+                                padding: '8px 14px', background: 'none', border: 'none',
+                                borderBottom: i < fmtItems.length - 1 ? '1px solid var(--border)' : 'none',
+                                color: 'var(--text-primary)', fontSize: 13, cursor: hasSelection ? 'pointer' : 'default',
+                                gap: 10, textAlign: 'left', opacity: hasSelection ? 1 : 0.4,
+                              }}
+                            >
+                              <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0, paddingTop: 1 }}>{icon}</span>
+                              <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                                <span>{label}</span>
+                                <span style={{ color: 'var(--text-secondary)', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}>{syntax}</span>
+                              </span>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: 10, flexShrink: 0, marginLeft: 4, paddingTop: 2, whiteSpace: 'nowrap' }}>{shortcut}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </>
                 );
