@@ -450,12 +450,15 @@ const AppInner: React.FC = () => {
                 
                 // If already on chats page
                 if (location.pathname.startsWith('/chats')) {
-                  // On mobile, toggle sidebar
                   if (window.innerWidth < 768) {
-                    // On mobile devices, if a chat is open, go back to chat list
+                    // Mobile: 3-state cycle
+                    // State 1: chat open → show sidebar (navigate to /chats, open sidebar)
                     if (location.pathname !== '/chats') {
+                      setSidebarOpen(true);
                       navigate('/chats');
                     } else {
+                      // State 2: sidebar showing → show placeholder
+                      // State 3: placeholder showing → show sidebar
                       toggleSidebar();
                     }
                   } else {

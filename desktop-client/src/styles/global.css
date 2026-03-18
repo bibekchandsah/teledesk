@@ -475,9 +475,14 @@ body {
     display: none !important;
   }
 
-  /* When sidebar is toggled off with no chat open, slide main area into view */
+  /* When sidebar is toggled off with no chat open, slide main area into view and sidebar out */
   .chat-list-layout.sidebar-hidden .chat-main-area {
     transform: translateX(0) !important;
+  }
+
+  .chat-list-layout.sidebar-hidden .chat-sidebar {
+    transform: translateX(-100%);
+    pointer-events: none;
   }
 
   /* When a chat is open: swap panels */
