@@ -572,27 +572,27 @@ const AppInner: React.FC = () => {
                 <Route path=":chatId" element={<ChatWindow />} />
               </Route>
               <Route path="/settings" element={
-                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
                   <SettingsPage />
                 </div>
               } />
               <Route path="/device-sessions" element={
-                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
                   <DeviceSessionsPage />
                 </div>
               } />
               <Route path="/calls" element={
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                   <CallHistoryPage />
                 </div>
               } />
               <Route path="/bookmarks" element={
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                   <BookmarksPage />
                 </div>
               } />
               <Route path="/profile/:uid?" element={
-                <div style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
                   <UserProfile />
                 </div>
               } />

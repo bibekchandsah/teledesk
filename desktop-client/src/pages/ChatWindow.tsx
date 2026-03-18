@@ -1619,7 +1619,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [profileClosing, setProfileClosing] = useState(false);
   const [showProfileMore, setShowProfileMore] = useState(false);
+
+  const openProfile = () => setShowProfile(true);
+  const closeProfile = () => {
+    setProfileClosing(true);
+    setTimeout(() => { setShowProfile(false); setProfileClosing(false); }, 260);
+  };
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [editingNickname, setEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
@@ -3984,7 +3991,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         {peer ? (
           <>
             <button
-              onClick={() => setShowProfile((v) => !v)}
+              onClick={() => showProfile ? closeProfile() : openProfile()}
               title="View profile"
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', borderRadius: '50%', flexShrink: 0 }}
             >
@@ -3996,7 +4003,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               />
             </button>
             <button
-              onClick={() => setShowProfile((v) => !v)}
+              onClick={() => showProfile ? closeProfile() : openProfile()}
               title="View profile"
               className="chat-header-info"
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', minWidth: 0, flex: 1, overflow: 'hidden' }}
@@ -4161,7 +4168,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             <>
               {peer && (
                 <button
-                  onClick={() => { setHeaderMenu(null); setShowProfile(true); }}
+                  onClick={() => { setHeaderMenu(null); openProfile(); }}
                   style={headerCtxItemStyle}
                 >
                   <UserRound size={14} style={{ marginRight: 8 }} />View profile
@@ -6070,13 +6077,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             flexDirection: 'column',
             overflowY: 'auto',
             boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
+            animation: profileClosing
+              ? 'profilePanelOut 0.26s cubic-bezier(0.4,0,0.2,1) forwards'
+              : 'profilePanelIn 0.28s cubic-bezier(0.4,0,0.2,1) both',
           }}
         >
           {/* Close button */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>Profile</span>
             <button
-              onClick={() => setShowProfile(false)}
+              onClick={() => closeProfile()}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}
             >
               <X size={18} />
@@ -6183,7 +6193,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                 {/* Message */}
                 <button
-                  onClick={() => setShowProfile(false)}
+                  onClick={() => closeProfile()}
                   title="Message"
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--accent)', fontSize: 11, fontWeight: 500 }}
                 >
@@ -6192,7 +6202,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 </button>
                 {/* Voice call */}
                 <button
-                  onClick={() => { if (!isInCall) { setShowProfile(false); handleStartCall('voice'); } }}
+                  onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('voice'); } }}
                   title={isInCall ? 'Already in a call' : 'Voice call'}
                   disabled={isInCall}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
@@ -6202,7 +6212,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 </button>
                 {/* Video call */}
                 <button
-                  onClick={() => { if (!isInCall) { setShowProfile(false); handleStartCall('video'); } }}
+                  onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('video'); } }}
                   title={isInCall ? 'Already in a call' : 'Video call'}
                   disabled={isInCall}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
