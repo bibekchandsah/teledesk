@@ -24,10 +24,24 @@ const UpdateBanner: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [showBanner, setShowBanner] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [justUpdated, setJustUpdated] = useState(false);
   const [autoDownload, setAutoDownload] = useState(() => {
     return localStorage.getItem('teledesk_auto_download') === 'true';
   });
   const { isAuthenticated } = useAuthStore();
+
+  // Show "Update installed successfully" toast if version changed since last run
+  useEffect(() => {
+    if (!window.electronAPI?.getAppVersion) return;
+    window.electronAPI.getAppVersion().then((currentVersion: string) => {
+      const lastVersion = localStorage.getItem('teledesk_last_version');
+      if (lastVersion && lastVersion !== currentVersion) {
+        setJustUpdated(true);
+        setTimeout(() => setJustUpdated(false), 5000);
+      }
+      localStorage.setItem('teledesk_last_version', currentVersion);
+    });
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -70,6 +84,25 @@ const UpdateBanner: React.FC = () => {
     setAutoDownload(newVal);
     localStorage.setItem('teledesk_auto_download', String(newVal));
   };
+
+  if (!showBanner && !justUpdated) return null;
+
+  // "Update installed successfully" toast
+  if (justUpdated && !showBanner) {
+    return (
+      <div style={{
+        position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+        background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(34,197,94,0.4)',
+        borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center',
+        gap: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', animation: 'slideUp 0.3s ease-out',
+        color: '#f8fafc', fontSize: 14,
+      }}>
+        <CheckCircle2 size={18} color="#22c55e" />
+        <span>Update installed successfully</span>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }` }} />
+      </div>
+    );
+  }
 
   if (!showBanner || !updateStatus) return null;
 

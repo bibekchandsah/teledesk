@@ -15,6 +15,7 @@ import savedMessagesRoutes from './routes/savedMessagesRoutes';
 import deviceSessionRoutes from './routes/deviceSessionRoutes';
 import authRoutes from './routes/authRoutes';
 import draftRoutes from './routes/draftRoutes';
+import updateRoutes from './routes/updateRoutes';
 import { initializeSocket } from './sockets/socketManager';
 import { setIo as setUserIo } from './controllers/userController';
 import { setIo } from './controllers/chatController';
@@ -64,6 +65,7 @@ app.use('/api/saved-messages', savedMessagesRoutes);
 app.use('/api/device-sessions', deviceSessionRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/drafts', draftRoutes);
+app.use('/api/updates', updateRoutes);
 
 // ─── Debug route to verify deployment ──────────────────────────────────────
 app.get('/api/debug/routes', (_req, res) => {

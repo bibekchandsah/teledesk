@@ -45,6 +45,7 @@ Get-ChildItem -Recurse -Include "*.tsx","*.ts" src | Select-String -Pattern "Rou
 Get-Process | Where-Object { $_.Name -like "*TeleDesk*" } | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item -Recurse -Force "release\win-unpacked","release\*.exe","release\*.7z" -ErrorAction SilentlyContinue; Write-Host "Cleaned"
 $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"; $env:WIN_CSC_LINK = ""; npm run electron:build 2>&1 | Select-Object -Last 15
 1:23 - 1:29:10
+10:45:45 10:45:49
 
 "electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development npx electron .\""
 
@@ -614,6 +615,14 @@ Testing:
 2. Verify Banner: The update banner should appear immediately.
 3. Start Download: Click "Update Now" and observe the progress bar, speed, and ETA.
 4. Tray Usage: Right-click the tray icon and select "Check for Updates" to see the manual check flow.
+
+update and restart logic:
+download file in same directory with .new extension
+after download complete then show restart button
+when user click restart button then rename the old app with .bak extension and remove the .new extension of the new app
+then launch the new app
+then app will open automatically
+then show notification message "Update installed successfully"
 
 1. Check for Updates (Electron + Node.js)
 

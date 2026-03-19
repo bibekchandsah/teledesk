@@ -15,7 +15,7 @@ import {
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 
 // ─── Keep reference to prevent garbage collection ─────────────────────────
 let mainWindow: BrowserWindow | null = null;
@@ -26,20 +26,28 @@ let isQuitting = false;
 // ─── Load Environment Variables ──────────────────────────────────────────
 const loadEnv = () => {
   try {
-    const envPath = path.join(process.cwd(), '.env');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf8');
-      content.split('\n').forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-          const [key, ...valueParts] = trimmed.split('=');
-          const value = valueParts.join('=').trim();
-          // Remove quotes if present
-          const cleanValue = value.replace(/^["']|["']$/g, '');
-          process.env[key.trim()] = cleanValue;
-        }
-      });
-      console.log('[Main] Loaded .env from:', envPath);
+    const possiblePaths = [
+      path.join(process.cwd(), '.env'),
+      path.join(path.dirname(process.execPath), '.env'),
+      path.join(app.getAppPath(), '.env'),
+    ];
+
+    for (const envPath of possiblePaths) {
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        content.split('\n').forEach(line => {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+            const [key, ...valueParts] = trimmed.split('=');
+            const value = valueParts.join('=').trim();
+            const cleanValue = value.replace(/^["']|["']$/g, '');
+            process.env[key.trim()] = cleanValue;
+          }
+        });
+        console.log('[Main] Loaded .env from:', envPath);
+        // Break after first found .env to avoid overrides if multiple exist
+        break;
+      }
     }
   } catch (e) {
     console.error('[Main] Failed to load .env:', e);
@@ -674,28 +682,88 @@ ipcMain.on('updater:cancel-download', () => {
 });
 
 ipcMain.on('updater:quit-and-install', () => {
-  if (downloadFilePath && fs.existsSync(downloadFilePath)) {
-    isQuitting = true;
-    shell.openPath(downloadFilePath);
+  if (!downloadFilePath || !fs.existsSync(downloadFilePath)) return;
+  isQuitting = true;
+
+  if (process.platform === 'win32') {
+    const currentExe = process.execPath;
+    const exeDir = path.dirname(currentExe);
+    const exeName = path.basename(currentExe);
+    const dlPath = downloadFilePath;
+    downloadFilePath = null;
+
+    // PowerShell script: runs hidden, waits for PID to exit, renames old to .bak, new to current.
+    const ps1Path = path.join(app.getPath('temp'), 'teledesk-update.ps1');
+    const ps1 = [
+      `$pid_target = ${process.pid}`,
+      `$src = '${dlPath.replace(/'/g, "''")}'`,
+      `$dst = '${currentExe.replace(/'/g, "''")}'`,
+      `$bak = '${currentExe.replace(/'/g, "''")}.bak'`,
+      '',
+      '# Wait for the app process to fully exit',
+      'for ($i = 0; $i -lt 120; $i++) {',
+      '  $proc = Get-Process -Id $pid_target -ErrorAction SilentlyContinue',
+      '  if (-not $proc) { break }',
+      '  Start-Sleep -Milliseconds 500',
+      '}',
+      '',
+      'Start-Sleep -Seconds 2',
+      '',
+      '# Portable strategy: rename old to .bak, remove .new extension',
+      'for ($r = 0; $r -lt 5; $r++) {',
+      '  try {',
+      '    if (Test-Path $bak) { Remove-Item -Path $bak -Force -ErrorAction SilentlyContinue }',
+      '    Rename-Item -Path $dst -NewName "$([System.IO.Path]::GetFileName($bak))" -Force -ErrorAction Stop',
+      '    Rename-Item -Path $src -NewName "$([System.IO.Path]::GetFileName($dst))" -Force -ErrorAction Stop',
+      '    break',
+      '  } catch {',
+      '    Start-Sleep -Seconds 2',
+      '  }',
+      '}',
+      '',
+      '# Launch the updated app',
+      'Start-Process -FilePath $dst',
+      '',
+      '# Clean up script',
+      'Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue',
+    ].join('\n');
+
+    try {
+      fs.writeFileSync(ps1Path, ps1, 'utf8');
+
+      // -WindowStyle Hidden = no window. -NonInteractive = no prompts.
+      const child = spawn('powershell.exe', [
+        '-NonInteractive',
+        '-WindowStyle', 'Hidden',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', ps1Path,
+      ], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+
+      if (tray && !tray.isDestroyed()) { tray.destroy(); tray = null; }
+      app.quit();
+    } catch (err) {
+      console.error('[Updater] Failed to launch update script:', err);
+      shell.openPath(dlPath);
+      app.quit();
+    }
+  } else {
+    const dlPath = downloadFilePath;
+    downloadFilePath = null;
+    shell.openPath(dlPath);
     app.quit();
   }
 });
 
 const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
   try {
-    const headers: Record<string, string> = {
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'TeleDesk-Updater',
-    };
-
-    if (process.env.GITHUB_TOKEN) {
-      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
-    }
-
-    const response = await net.fetch('https://api.github.com/repos/bibekchandsah/teledesk/releases/latest', {
-      headers,
-    });
-    if (!response.ok) throw new Error('Failed to fetch latest release');
+    const backendUrl = process.env.VITE_BACKEND_URL || 'https://teledesk-backend-production.up.railway.app';
+    const response = await net.fetch(`${backendUrl}/api/updates/latest`);
+    
+    if (!response.ok) throw new Error(`Failed to fetch latest release: ${response.status}`);
 
     const release = await response.json() as any;
     const latestVersion = release.tag_name.replace(/^v/, '');
@@ -734,7 +802,18 @@ const startDownload = (url: string) => {
   if (isDownloading) return;
 
   isDownloading = true;
-  downloadFilePath = path.join(app.getPath('temp'), `teledesk-update-${Date.now()}.exe`);
+  // Download to the same directory as the executable with a .new extension
+  const exeDir = path.dirname(process.execPath);
+  downloadFilePath = path.join(exeDir, `${path.basename(process.execPath)}.new`);
+  
+  // Fallback to temp if exe directory is not writable
+  try {
+    fs.accessSync(exeDir, fs.constants.W_OK);
+  } catch (err) {
+    console.warn('[Updater] App directory is not writable, falling back to temp:', exeDir);
+    downloadFilePath = path.join(app.getPath('temp'), `TeleDesk-update-${Date.now()}.exe`);
+  }
+
   const fileStream = fs.createWriteStream(downloadFilePath);
 
   let downloadedBytes = 0;
