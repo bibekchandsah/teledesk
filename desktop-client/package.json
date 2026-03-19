@@ -2,6 +2,10 @@
   "name": "teledesk-desktop",
   "version": "1.0.0",
   "description": "TeleDesk Desktop Messaging App",
+  "author": {
+    "name": "Bibek Chand Sah",
+    "email": "bibeksha48@gmail.com"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -43,7 +47,7 @@
     "@vitest/ui": "^4.1.0",
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
-    "electron": "^31.2.0",
+    "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
     "fast-check": "^4.6.0",
     "jsdom": "^29.0.0",
@@ -61,6 +65,7 @@
   "build": {
     "appId": "com.teledesk.app",
     "productName": "TeleDesk",
+    "electronVersion": "31.7.7",
     "directories": {
       "output": "release"
     },
@@ -68,11 +73,17 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
     "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "assets/icon.ico"
+      "target": ["portable"],
+      "icon": "assets/icon.png",
+      "signingHashAlgorithms": null,
+      "sign": null
     },
     "mac": {
       "target": [

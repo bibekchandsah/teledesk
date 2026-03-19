@@ -1,0 +1,91 @@
+Add-Type -AssemblyName System.Drawing
+
+function ConvertTo-BmpBytes($bmp) {
+    # Write a BMP without file header (BITMAPINFOHEADER + pixels) as rcedit expects
+    $w = $bmp.Width; $h = $bmp.Height
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter($ms)
+    
+    # BITMAPINFOHEADER (40 bytes)
+    $bw.Write([uint32]40)       # biSize
+    $bw.Write([int32]$w)        # biWidth
+    $bw.Write([int32]($h*2))    # biHeight (doubled for ICO format)
+    $bw.Write([uint16]1)        # biPlanes
+    $bw.Write([uint16]32)       # biBitCount
+    $bw.Write([uint32]0)        # biCompression (BI_RGB)
+    $bw.Write([uint32]0)        # biSizeImage
+    $bw.Write([int32]0)         # biXPelsPerMeter
+    $bw.Write([int32]0)         # biYPelsPerMeter
+    $bw.Write([uint32]0)        # biClrUsed
+    $bw.Write([uint32]0)        # biClrImportant
+    
+    # Pixel data - bottom-up BGRA
+    for ($y = $h-1; $y -ge 0; $y--) {
+        for ($x = 0; $x -lt $w; $x++) {
+            $c = $bmp.GetPixel($x, $y)
+            $bw.Write([byte]$c.B)
+            $bw.Write([byte]$c.G)
+            $bw.Write([byte]$c.R)
+            $bw.Write([byte]$c.A)
+        }
+    }
+    
+    # AND mask (1 bit per pixel, bottom-up, row padded to 4 bytes)
+    $rowBytes = [Math]::Ceiling($w / 8.0)
+    $paddedRow = [Math]::Ceiling($rowBytes / 4.0) * 4
+    for ($y = $h-1; $y -ge 0; $y--) {
+        $written = 0
+        for ($x = 0; $x -lt $w; $x += 8) {
+            $bw.Write([byte]0)
+            $written++
+        }
+        while ($written -lt $paddedRow) { $bw.Write([byte]0); $written++ }
+    }
+    
+    $bw.Flush()
+    return $ms.ToArray()
+}
+
+$src = [System.Drawing.Image]::FromFile("$PWD\assets\icon.png")
+$sizes = @(16, 32, 48, 256)
+$images = @()
+
+foreach ($s in $sizes) {
+    $bmp = New-Object System.Drawing.Bitmap($s, $s, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.DrawImage($src, 0, 0, $s, $s)
+    $g.Dispose()
+    $images += ,@($s, (ConvertTo-BmpBytes $bmp))
+    $bmp.Dispose()
+}
+$src.Dispose()
+
+$out = New-Object System.IO.MemoryStream
+$bw = New-Object System.IO.BinaryWriter($out)
+
+# ICO header
+$bw.Write([uint16]0)                    # reserved
+$bw.Write([uint16]1)                    # type: ICO
+$bw.Write([uint16]$images.Count)        # count
+
+# Directory entries (16 bytes each)
+$offset = 6 + $images.Count * 16
+foreach ($entry in $images) {
+    $s = $entry[0]; $data = $entry[1]
+    $bw.Write([byte]$(if($s -eq 256){0}else{$s}))  # width
+    $bw.Write([byte]$(if($s -eq 256){0}else{$s}))  # height
+    $bw.Write([byte]0)                              # color count
+    $bw.Write([byte]0)                              # reserved
+    $bw.Write([uint16]1)                            # planes
+    $bw.Write([uint16]32)                           # bit count
+    $bw.Write([uint32]$data.Length)                 # size
+    $bw.Write([uint32]$offset)                      # offset
+    $offset += $data.Length
+}
+
+foreach ($entry in $images) { $bw.Write($entry[1]) }
+$bw.Flush()
+
+[System.IO.File]::WriteAllBytes("$PWD\assets\icon.ico", $out.ToArray())
+Write-Host "ICO created: $($out.Length) bytes"

@@ -1,5 +1,5 @@
 import React, { useEffect, Component, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { MessageCircle, User, Settings, AlertTriangle, Loader2, Archive, Phone, Bookmark, Lock, Unlock } from 'lucide-react';
 import { AccountSwitcher } from './components/AccountSwitcher';
@@ -705,14 +705,17 @@ const AppInner: React.FC = () => {
 };
 
 // ─── Root App (wraps with router & auth provider) ─────────────────────────
+// Use HashRouter in Electron (file:// protocol) and BrowserRouter in web
+const Router = window.electronAPI ? HashRouter : BrowserRouter;
+
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
+      <Router>
         <AuthProvider>
           <AppInner />
         </AuthProvider>
-      </BrowserRouter>
+      </Router>
     </ErrorBoundary>
   );
 };

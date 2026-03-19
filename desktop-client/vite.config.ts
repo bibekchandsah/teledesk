@@ -7,6 +7,7 @@ import { fileURLToPath, URL } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  envDir: fileURLToPath(new URL('.', import.meta.url)), // always load .env from desktop-client/
   plugins: [
     react(),
     // Polyfill Node built-ins (stream, buffer, util, events) used by simple-peer
@@ -49,7 +50,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,webp,woff2}'],
-        navigateFallback: '/index.html',
+        navigateFallback: null,
         navigateFallbackAllowlist: [/^\/call-window/, /^\/incoming-call-window/, /^(?!\/__).*/],
         runtimeCaching: [
           {
@@ -73,7 +74,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/',
+  base: process.env.NODE_ENV === 'production' ? './' : '/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -233,6 +233,7 @@ const createWindow = () => {
     title: 'TeleDesk',
     backgroundColor: '#1a1a2e',
     show: false, // Show after ready-to-show
+    autoHideMenuBar: true, // remove native menu bar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -377,10 +378,15 @@ const createWindow = () => {
 
 // ─── System Tray ──────────────────────────────────────────────────────────
 const createTray = () => {
-  const iconPath = path.join(__dirname, '../assets/icon.png');
+  // In packaged app, assets are in resources/assets/; in dev they're relative to dist-electron/
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'icon.png')
+    : path.join(__dirname, '../assets/icon.png');
   const icon = nativeImage.createFromPath(iconPath);
+  // Resize to standard tray size (16x16 on Windows)
+  const trayIcon = icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 });
 
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+  tray = new Tray(trayIcon);
 
   const updateTrayMenu = () => {
     // Check if tray still exists before updating
@@ -895,6 +901,9 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.whenReady().then(() => {
+  // Remove native menu bar (File/Edit/View/Window/Help)
+  Menu.setApplicationMenu(null);
+
   registerWindowsAUMID();
 
   // Grant camera & microphone permissions for the renderer
