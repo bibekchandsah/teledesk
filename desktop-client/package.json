@@ -1,6 +1,6 @@
 {
   "name": "teledesk-desktop",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "description": "TeleDesk Desktop Messaging App",
   "author": {
     "name": "Bibek Chand Sah",
@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
-    "electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development npx electron .\"",
     "electron:build": "vite build && tsc -p tsconfig.electron.json && electron-builder",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",

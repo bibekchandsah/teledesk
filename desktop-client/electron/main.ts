@@ -21,6 +21,31 @@ import { execFileSync } from 'child_process';
 let mainWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let isQuitting = false;
+
+// ─── Load Environment Variables ──────────────────────────────────────────
+const loadEnv = () => {
+  try {
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8');
+      content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const [key, ...valueParts] = trimmed.split('=');
+          const value = valueParts.join('=').trim();
+          // Remove quotes if present
+          const cleanValue = value.replace(/^["']|["']$/g, '');
+          process.env[key.trim()] = cleanValue;
+        }
+      });
+      console.log('[Main] Loaded .env from:', envPath);
+    }
+  } catch (e) {
+    console.error('[Main] Failed to load .env:', e);
+  }
+};
+loadEnv();
 
 // App lock state (synced from renderer)
 let appLockEnabled = false;
@@ -38,6 +63,26 @@ interface TrayAccount {
 }
 let trayAccounts: TrayAccount[] = [];
 let trayActiveAccountUid: string | null = null;
+
+// ─── Update Management State ──────────────────────────────────────────────
+interface UpdateInfo {
+  version: string;
+  url: string;
+  name: string;
+  size: number;
+}
+
+let updateInfo: UpdateInfo | null = null;
+let downloadRequest: Electron.ClientRequest | null = null;
+let downloadFilePath: string | null = null;
+let isDownloading = false;
+let downloadProgress = {
+  percent: 0,
+  transferred: 0,
+  total: 0,
+  speed: 0,
+  eta: 0,
+};
 
 // ─── Window state persistence ─────────────────────────────────────────────
 const userDataPath = app.getPath('userData');
@@ -264,13 +309,15 @@ const createWindow = () => {
 
   // Save state and hide window on close (instead of quitting)
   mainWindow.on('close', (event) => {
-    saveWindowState();
-    
-    // Prevent the window from closing
-    event.preventDefault();
-    
-    // Hide the window instead
-    mainWindow?.hide();
+    if (isQuitting) {
+      mainWindow = null;
+    } else {
+      saveWindowState();
+      // Prevent the window from closing
+      event.preventDefault();
+      // Hide the window instead
+      mainWindow?.hide();
+    }
   });
 
   // Load the app
@@ -466,8 +513,16 @@ const createTray = () => {
       },
       { type: 'separator' },
       {
+        label: 'Check for Updates',
+        click: () => {
+          checkForUpdates(true);
+        },
+      },
+      { type: 'separator' },
+      {
         label: 'Restart',
         click: () => {
+          isQuitting = true;
           if (tray && !tray.isDestroyed()) {
             tray.destroy();
             tray = null;
@@ -479,6 +534,7 @@ const createTray = () => {
       {
         label: 'Quit',
         click: () => {
+          isQuitting = true;
           if (tray && !tray.isDestroyed()) {
             tray.destroy();
             tray = null;
@@ -601,6 +657,178 @@ ipcMain.on('tray:accounts-changed', (_e, data: { accounts: TrayAccount[]; active
 
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
+
+// ─── Update IPC Handlers ──────────────────────────────────────────────────
+ipcMain.handle('updater:check-for-update', async () => {
+  return await checkForUpdates(false);
+});
+
+ipcMain.on('updater:start-download', () => {
+  if (updateInfo) {
+    startDownload(updateInfo.url);
+  }
+});
+
+ipcMain.on('updater:cancel-download', () => {
+  cancelDownload();
+});
+
+ipcMain.on('updater:quit-and-install', () => {
+  if (downloadFilePath && fs.existsSync(downloadFilePath)) {
+    isQuitting = true;
+    shell.openPath(downloadFilePath);
+    app.quit();
+  }
+});
+
+const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'TeleDesk-Updater',
+    };
+
+    if (process.env.GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+    }
+
+    const response = await net.fetch('https://api.github.com/repos/bibekchandsah/teledesk/releases/latest', {
+      headers,
+    });
+    if (!response.ok) throw new Error('Failed to fetch latest release');
+
+    const release = await response.json() as any;
+    const latestVersion = release.tag_name.replace(/^v/, '');
+    const currentVersion = app.getVersion();
+
+    // Simple version comparison (can be improved with semver)
+    if (latestVersion !== currentVersion) {
+      // Find the appropriate asset (prefer .exe for Windows)
+      const asset = release.assets.find((a: any) => a.name.endsWith('.exe') || a.name.endsWith('.zip'));
+      if (asset) {
+        updateInfo = {
+          version: latestVersion,
+          url: asset.browser_download_url,
+          name: asset.name,
+          size: asset.size,
+        };
+        mainWindow?.webContents.send('updater:status', { status: 'available', info: updateInfo });
+        return updateInfo;
+      }
+    }
+
+    if (manual) {
+      mainWindow?.webContents.send('updater:status', { status: 'no-update' });
+    }
+    return null;
+  } catch (error) {
+    console.error('[Updater] Check failed:', error);
+    if (manual) {
+      mainWindow?.webContents.send('updater:status', { status: 'error', message: 'Failed to check for updates' });
+    }
+    return null;
+  }
+};
+
+const startDownload = (url: string) => {
+  if (isDownloading) return;
+
+  isDownloading = true;
+  downloadFilePath = path.join(app.getPath('temp'), `teledesk-update-${Date.now()}.exe`);
+  const fileStream = fs.createWriteStream(downloadFilePath);
+
+  let downloadedBytes = 0;
+  let lastBytes = 0;
+  let lastTime = Date.now();
+
+  const request = net.request(url);
+  downloadRequest = request;
+
+  request.on('response', (response) => {
+    const totalBytes = parseInt(response.headers['content-length'] as string, 10) || updateInfo?.size || 0;
+
+    response.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      fileStream.write(chunk);
+
+      // Calculate speed and ETA every 500ms
+      const now = Date.now();
+      const delta = now - lastTime;
+      if (delta >= 500) {
+        const speed = (downloadedBytes - lastBytes) / (delta / 1000); // bytes per second
+        const remainingBytes = totalBytes - downloadedBytes;
+        const eta = speed > 0 ? remainingBytes / speed : 0;
+
+        downloadProgress = {
+          percent: totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0,
+          transferred: downloadedBytes,
+          total: totalBytes,
+          speed,
+          eta,
+        };
+
+        mainWindow?.webContents.send('updater:status', { 
+          status: 'downloading', 
+          progress: downloadProgress,
+          info: updateInfo 
+        });
+
+        lastBytes = downloadedBytes;
+        lastTime = now;
+      }
+    });
+
+    response.on('end', () => {
+      fileStream.end();
+      isDownloading = false;
+      downloadRequest = null;
+      mainWindow?.webContents.send('updater:status', { status: 'downloaded', info: updateInfo });
+    });
+
+    response.on('error', (err) => {
+      fileStream.end();
+      isDownloading = false;
+      downloadRequest = null;
+      console.error('[Updater] Download error:', err);
+      mainWindow?.webContents.send('updater:status', { status: 'error', message: 'Download failed', info: updateInfo });
+    });
+  });
+
+  request.on('error', (err) => {
+    isDownloading = false;
+    downloadRequest = null;
+    console.error('[Updater] Request error:', err);
+    mainWindow?.webContents.send('updater:status', { status: 'error', message: 'Network error during download', info: updateInfo });
+  });
+
+  request.end();
+};
+
+const cancelDownload = () => {
+  console.log('[Updater] cancelDownload requested. Active request:', !!downloadRequest);
+  if (downloadRequest) {
+    try {
+      downloadRequest.abort();
+      console.log('[Updater] Download request aborted');
+    } catch (e) {
+      console.error('[Updater] Failed to abort request:', e);
+    }
+    downloadRequest = null;
+  }
+  
+  isDownloading = false;
+  
+  if (downloadFilePath && fs.existsSync(downloadFilePath)) {
+    try {
+      fs.unlinkSync(downloadFilePath);
+      console.log('[Updater] Partial download file removed:', downloadFilePath);
+    } catch (e) {
+      console.error('[Updater] Failed to remove partial file:', e);
+    }
+  }
+  
+  mainWindow?.webContents.send('updater:status', { status: 'cancelled' });
+};
 
 // Copy text to clipboard natively
 ipcMain.on('copy-text-to-clipboard', (_e, text: string) => {
@@ -979,6 +1207,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   // Only destroy tray if it hasn't been destroyed already
   if (tray && !tray.isDestroyed()) {
     tray.destroy();

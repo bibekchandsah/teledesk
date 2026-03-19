@@ -148,6 +148,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray:switch-account', handler);
     return () => ipcRenderer.off('tray:switch-account', handler);
   },
+
+  // Updater
+  checkForUpdates: (): Promise<any> => ipcRenderer.invoke('updater:check-for-update'),
+  startDownload: () => ipcRenderer.send('updater:start-download'),
+  cancelDownload: () => ipcRenderer.send('updater:cancel-download'),
+  quitAndInstall: () => ipcRenderer.send('updater:quit-and-install'),
+  onUpdateStatus: (cb: (status: any) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, status: any) => cb(status);
+    ipcRenderer.on('updater:status', handler);
+    return () => ipcRenderer.off('updater:status', handler);
+  },
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -173,6 +184,24 @@ export interface IncomingCallData {
   callerName: string;
   callerAvatar?: string;
   callType: 'video' | 'voice';
+}
+
+export interface UpdateStatus {
+  status: 'available' | 'no-update' | 'downloading' | 'downloaded' | 'error' | 'cancelled';
+  info?: {
+    version: string;
+    url: string;
+    name: string;
+    size: number;
+  };
+  progress?: {
+    percent: number;
+    transferred: number;
+    total: number;
+    speed: number;
+    eta: number;
+  };
+  message?: string;
 }
 
 export interface ElectronAPI {
@@ -223,6 +252,13 @@ export interface ElectronAPI {
   onTrayLockApp: (cb: () => void) => () => void;
   setTrayAccounts: (data: { accounts: { uid: string; name: string; email: string }[]; activeAccountUid: string | null }) => void;
   onTraySwitchAccount: (cb: (uid: string) => void) => () => void;
+
+  // Updater
+  checkForUpdates: () => Promise<any>;
+  startDownload: () => void;
+  cancelDownload: () => void;
+  quitAndInstall: () => void;
+  onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void;
 }
 
 declare global {

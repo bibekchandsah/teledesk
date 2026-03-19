@@ -46,6 +46,16 @@ Get-Process | Where-Object { $_.Name -like "*TeleDesk*" } | Stop-Process -Force 
 $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"; $env:WIN_CSC_LINK = ""; npm run electron:build 2>&1 | Select-Object -Last 15
 1:23 - 1:29:10
 
+"electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development npx electron .\""
+
+compile to exe
+------------------------------------
+cd desktop-client
+$env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
+npm run electron:build
+
+!!! The $env:CSC_IDENTITY_AUTO_DISCOVERY = "false" skips code signing (needed on Windows without a certificate). The output exe will be at desktop-client/release/TeleDesk 1.0.0.exe.
+
 http://localhost:3001/api/auth/desktop/google
 
 
@@ -573,3 +583,130 @@ Toast renders as a pill at the bottom center — "Saved to bookmarks" with a fil
 <----------------------------- sidebar logic ---------------------------------->
 Chat open → tap chat icon → show sidebar (slide in)
 Sidebar showing, no chat open → tap chat icon → should show "select a chat" (sidebar hidden)
+
+
+<-------------------------- app update logic ---------------------------------->
+it will check update in startup and show banner if update is available
+if update available then show banner and auto download update in background
+while downloading show premium progress bar, ETA, speed, cancel button in banner
+start downloading in minimize mode
+if user cancel then stop downloading and hide banner
+when update is downloaded then show restart button (show in top of app)
+when user click restart button then app will restart and update will be installed
+after update is installed then show toast message "Update installed successfully" and open app automatically
+update link : https://github.com/bibekchandsah/teledesk/releases/tag/v1.0.0
+handle all types of errors during update process
+add autodownload option in banner
+Partial download file removed: C:\Users\bibek\AppData\Local\Temp\teledesk-update-1773895764424.exe
+
+download update in same directoy and put previous app as backup
+handle error when downloading update and it's connection failures
+
+System tray menu option
+check for update 
+    if update available -> download update
+    if update downloaded -> show restart button
+    if user click restart button -> restart App
+    if no update available -> show toast message "You are already using the latest version"
+
+Testing:
+1. Down-versioning: Change the version in package.json to 0.9.0 and restart the app.
+2. Verify Banner: The update banner should appear immediately.
+3. Start Download: Click "Update Now" and observe the progress bar, speed, and ETA.
+4. Tray Usage: Right-click the tray icon and select "Check for Updates" to see the manual check flow.
+
+1. Check for Updates (Electron + Node.js)
+
+// check-for-updates.js
+const { autoUpdater } = require('electron-updater');
+const { dialog } = require('electron');
+
+autoUpdater.autoDownload = false; // Manual control
+
+autoUpdater.on('update-available', () => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Update Available',
+    message: 'A new version is ready to install.',
+    buttons: ['Download', 'Cancel']
+  }).then(result => {
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate();
+    }
+  });
+});
+
+autoUpdater.on('update-downloaded', () => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Update Ready',
+    message: 'Update downloaded. Restart to install?',
+    buttons: ['Restart', 'Later']
+  }).then(result => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+});
+
+autoUpdater.on('error', (error) => {
+  console.error('Update error:', error);
+});
+
+autoUpdater.checkForUpdates();
+
+
+2. Check for Updates (React Web App)
+
+// Check version from backend
+const checkVersion = async () => {
+  const response = await fetch('/api/version');
+  const data = await response.json();
+  
+  if (data.version > CURRENT_VERSION) {
+    // Show update banner
+    showUpdateBanner();
+  }
+};
+
+// Update banner component
+const UpdateBanner = () => (
+  <div className="update-banner">
+    New version available! Click to refresh.
+    <button onClick={() => window.location.reload()}>Update</button>
+  </div>
+);
+
+
+3. Version Endpoint (Node.js Backend)
+
+// GET /api/version
+app.get('/api/version', (req, res) => {
+  res.json({ version: '1.0.0' });
+});
+
+
+4. Update Logic Flow
+
+Electron App:
+
+Startup: Check for updates using autoUpdater.checkForUpdates()
+
+User Prompt: Show dialog when update available
+
+Download: User clicks "Download"
+
+Install: User clicks "Restart" → autoUpdater.quitAndInstall()
+
+Web App:
+
+Startup: Fetch /api/version
+
+Banner: Show banner if new version
+
+Refresh: User clicks "Update" → window.location.reload()
+
+
+5. Configuration (package.json)
+
+{ "build": { "appId": "com.example.app", "productName": "TeleDesk", "directories": { "output": "build" }, "files": [ "**/*", "!node_modules/**/*", "!src/**/*", "dist/**/*" ], "win": { "target": "nsis", "icon": "build/icon.ico" } } }

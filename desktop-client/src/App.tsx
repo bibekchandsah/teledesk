@@ -52,6 +52,7 @@ import AppLockPinModal from './components/modals/AppLockPinModal';
 import ToastProvider from './components/ToastProvider';
 import NetworkListener from './components/NetworkListener';
 import PopupBlockedNotification from './components/PopupBlockedNotification';
+import UpdateBanner from './components/UpdateBanner';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
@@ -200,6 +201,25 @@ const AppInner: React.FC = () => {
       setIsAppUnlocked(false);
     });
     return cleanup;
+  }, []);
+
+  // Version check for "Update installed successfully" toast
+  useEffect(() => {
+    const checkVersion = async () => {
+      if (!window.electronAPI) return;
+      const currentVersion = await window.electronAPI.getAppVersion();
+      const lastVersion = localStorage.getItem('last_version');
+      
+      if (lastVersion && lastVersion !== currentVersion) {
+        const { setToast } = useUIStore.getState();
+        setToast({
+          message: 'Update installed successfully',
+          type: 'info'
+        });
+      }
+      localStorage.setItem('last_version', currentVersion);
+    };
+    checkVersion();
   }, []);
 
   // Sync accounts to tray menu
@@ -564,40 +584,42 @@ const AppInner: React.FC = () => {
             </NavLink>
           </nav>
 
-          {/* Main Content */}
-          <div className="main-content-area">
-            <Routes>
-              <Route path="/" element={<Navigate to="/chats" replace />} />
-              <Route path="/chats" element={<ChatListPage />}>
-                <Route path=":chatId" element={<ChatWindow />} />
-              </Route>
-              <Route path="/settings" element={
-                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
-                  <SettingsPage />
-                </div>
-              } />
-              <Route path="/device-sessions" element={
-                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
-                  <DeviceSessionsPage />
-                </div>
-              } />
-              <Route path="/calls" element={
-                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                  <CallHistoryPage />
-                </div>
-              } />
-              <Route path="/bookmarks" element={
-                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                  <BookmarksPage />
-                </div>
-              } />
-              <Route path="/profile/:uid?" element={
-                <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
-                  <UserProfile />
-                </div>
-              } />
-              <Route path="*" element={<Navigate to="/chats" replace />} />
-            </Routes>
+          <div className="main-content-area" style={{ display: 'flex', flexDirection: 'column' }}>
+            <UpdateBanner />
+            <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0, position: 'relative' }}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/chats" replace />} />
+                <Route path="/chats" element={<ChatListPage />}>
+                  <Route path=":chatId" element={<ChatWindow />} />
+                </Route>
+                <Route path="/settings" element={
+                  <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                    <SettingsPage />
+                  </div>
+                } />
+                <Route path="/device-sessions" element={
+                  <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                    <DeviceSessionsPage />
+                  </div>
+                } />
+                <Route path="/calls" element={
+                  <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                    <CallHistoryPage />
+                  </div>
+                } />
+                <Route path="/bookmarks" element={
+                  <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                    <BookmarksPage />
+                  </div>
+                } />
+                <Route path="/profile/:uid?" element={
+                  <div className="page-slide-in" style={{ flex: 1, display: 'flex', overflow: 'auto' }}>
+                    <UserProfile />
+                  </div>
+                } />
+                <Route path="*" element={<Navigate to="/chats" replace />} />
+              </Routes>
+            </div>
           </div>
 
           {/* Overlays — shown only as fallback when not running in Electron or when popup is blocked */}
@@ -705,8 +727,9 @@ const AppInner: React.FC = () => {
 };
 
 // ─── Root App (wraps with router & auth provider) ─────────────────────────
-// Use HashRouter in Electron (file:// protocol) and BrowserRouter in web
-const Router = window.electronAPI ? HashRouter : BrowserRouter;
+// Use HashRouter only in packaged Electron (file:// protocol), BrowserRouter everywhere else
+const isPackagedElectron = window.electronAPI && window.location.protocol === 'file:';
+const Router = isPackagedElectron ? HashRouter : BrowserRouter;
 
 const App: React.FC = () => {
   return (
