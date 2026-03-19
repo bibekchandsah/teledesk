@@ -92,6 +92,29 @@ let downloadProgress = {
   eta: 0,
 };
 
+const normalizeVersionParts = (version: string): number[] => {
+  const base = version.replace(/^v/i, '').split('-')[0];
+  return base.split('.').map((part) => {
+    const parsed = Number.parseInt(part, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  });
+};
+
+const isServerVersionNewer = (latestVersion: string, currentVersion: string): boolean => {
+  const latest = normalizeVersionParts(latestVersion);
+  const current = normalizeVersionParts(currentVersion);
+  const maxLen = Math.max(latest.length, current.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const l = latest[i] ?? 0;
+    const c = current[i] ?? 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+
+  return false;
+};
+
 const getInstalledExecutablePath = () => {
   // electron-builder portable exposes the launcher path via this env var.
   const portableExe = process.env.PORTABLE_EXECUTABLE_FILE;
@@ -833,7 +856,7 @@ const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
     const latestVersion = release.tag_name.replace(/^v/, '');
     const currentVersion = app.getVersion();
 
-    if (latestVersion !== currentVersion) {
+    if (isServerVersionNewer(latestVersion, currentVersion)) {
       // This updater flow is for Windows executable replacement.
       const asset = release.assets.find((a: any) => a.name.toLowerCase().endsWith('.exe'));
       if (asset) {

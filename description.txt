@@ -625,3 +625,11 @@ update and restart logic:
     then launch the new app automatically 
     then show notification message "Update installed successfully"
 
+change versions in these files:
+"name": "teledesk",
+"version": "1.0.1",
+    desktop-client/package.json
+    package.json (optional, if you want to keep the main version in sync with desktop-client)
+    backend-server/package.json (optional, if you want to keep the backend version in sync as well)
+
+

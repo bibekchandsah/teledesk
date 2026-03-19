@@ -1,6 +1,6 @@
 {
   "name": "teledesk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TeleDesk - Desktop Messaging & Video Calling App",
   "private": true,
   "workspaces": [
