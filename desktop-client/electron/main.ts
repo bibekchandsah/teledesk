@@ -1,4 +1,4 @@
-import {
+﻿import {
   app,
   BrowserWindow,
   ipcMain,
@@ -17,13 +17,13 @@ import path from 'path';
 import fs from 'fs';
 import { execFileSync, spawn } from 'child_process';
 
-// ─── Keep reference to prevent garbage collection ─────────────────────────
+// ΓöÇΓöÇΓöÇ Keep reference to prevent garbage collection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 let mainWindow: BrowserWindow | null = null;
 let callWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
-// ─── Load Environment Variables ──────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Load Environment Variables ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const loadEnv = () => {
   try {
     const possiblePaths = [
@@ -72,7 +72,7 @@ interface TrayAccount {
 let trayAccounts: TrayAccount[] = [];
 let trayActiveAccountUid: string | null = null;
 
-// ─── Update Management State ──────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Update Management State ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 interface UpdateInfo {
   version: string;
   url: string;
@@ -92,7 +92,24 @@ let downloadProgress = {
   eta: 0,
 };
 
-// ─── Window state persistence ─────────────────────────────────────────────
+const getInstalledExecutablePath = () => {
+  // electron-builder portable exposes the launcher path via this env var.
+  const portableExe = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (portableExe && portableExe.trim()) {
+    return portableExe;
+  }
+
+  return process.execPath;
+};
+
+const getExpectedUpdateFilePath = () => {
+  const exePath = getInstalledExecutablePath();
+  const exeDir = path.dirname(exePath);
+  const exeName = path.basename(exePath);
+  return path.join(exeDir, `${exeName}.new`);
+};
+
+// ΓöÇΓöÇΓöÇ Window state persistence ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const userDataPath = app.getPath('userData');
 const windowStateFile = path.join(userDataPath, 'window-state.json');
 
@@ -157,20 +174,20 @@ const saveWindowState = () => {
   }
 };
 
-// ─── Call window relay buffering ──────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Call window relay buffering ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 let callWindowReady = false;
 let pendingRelayEvents: Array<{ event: string; data: unknown }> = [];
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_DEV_SERVER_URL = 'http://localhost:5173';
 
-// Load .env file manually — Vite-prefixed vars are renderer-only and never reach the main process
+// Load .env file manually ΓÇö Vite-prefixed vars are renderer-only and never reach the main process
 const loadEnvFile = () => {
   // In dev: .env is in desktop-client/.env
   // __dirname in compiled code is: desktop-client/dist-electron
   // So we need to go up one level: ../
   const envPath = isDev 
-    ? path.join(__dirname, '../.env')  // from dist-electron/main.js → desktop-client/.env
+    ? path.join(__dirname, '../.env')  // from dist-electron/main.js ΓåÆ desktop-client/.env
     : path.join(app.getAppPath(), '.env');
   
   try {
@@ -212,7 +229,7 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.teledesk.app');
 }
 
-// ─── Deep Linking / Custom Protocol ────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Deep Linking / Custom Protocol ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const PROTOCOL = 'teledesk';
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -272,7 +289,7 @@ const registerWindowsAUMID = () => {
   }
 };
 
-// ─── Create Main Window ────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Create Main Window ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const createWindow = () => {
   const windowState = loadWindowState();
   
@@ -431,7 +448,7 @@ const createWindow = () => {
   });
 };
 
-// ─── System Tray ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ System Tray ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const createTray = () => {
   // In packaged app, assets are in resources/assets/; in dev they're relative to dist-electron/
   const iconPath = app.isPackaged
@@ -468,10 +485,10 @@ const createTray = () => {
       { type: 'separator' },
     ];
 
-    // Account switcher submenu — only shown when multiple accounts exist
+    // Account switcher submenu ΓÇö only shown when multiple accounts exist
     if (trayAccounts.length > 1) {
       const accountSubmenu: Electron.MenuItemConstructorOptions[] = trayAccounts.map((account) => ({
-        label: `${account.uid === trayActiveAccountUid ? '✓ ' : '    '}${account.name} (${account.email})`,
+        label: `${account.uid === trayActiveAccountUid ? 'Γ£ô ' : '    '}${account.name} (${account.email})`,
         enabled: account.uid !== trayActiveAccountUid,
         click: () => {
           mainWindow?.show();
@@ -487,10 +504,10 @@ const createTray = () => {
       menuItems.push({ type: 'separator' });
     }
 
-    // App lock item — only shown when app lock is enabled
+    // App lock item ΓÇö only shown when app lock is enabled
     if (appLockEnabled) {
       menuItems.push({
-        label: appLocked ? '🔓 Unlock App' : '🔒 Lock App',
+        label: appLocked ? '≡ƒöô Unlock App' : '≡ƒöÆ Lock App',
         click: () => {
           if (appLocked) {
             mainWindow?.show();
@@ -576,7 +593,7 @@ const createTray = () => {
   }
 };
 
-// ─── IPC Handlers ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ IPC Handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 // Desktop Notifications
 ipcMain.on(
@@ -624,7 +641,7 @@ ipcMain.on(
       } else {
         // Windows / Linux: standard notification with avatar as icon
         // (toastXml requires the AUMID to be registered in the Windows registry,
-        //  which only happens in packaged builds — use regular Notification in dev)
+        //  which only happens in packaged builds ΓÇö use regular Notification in dev)
         showBasic();
       }
     } catch (e) {
@@ -666,7 +683,7 @@ ipcMain.on('tray:accounts-changed', (_e, data: { accounts: TrayAccount[]; active
 // Get app version
 ipcMain.handle('get-app-version', () => app.getVersion());
 
-// ─── Update IPC Handlers ──────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Update IPC Handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 ipcMain.handle('updater:check-for-update', async () => {
   return await checkForUpdates(false);
 });
@@ -682,79 +699,126 @@ ipcMain.on('updater:cancel-download', () => {
 });
 
 ipcMain.on('updater:quit-and-install', () => {
-  if (!downloadFilePath || !fs.existsSync(downloadFilePath)) return;
-  isQuitting = true;
-
-  if (process.platform === 'win32') {
-    const currentExe = process.execPath;
-    const exeDir = path.dirname(currentExe);
-    const exeName = path.basename(currentExe);
-    const dlPath = downloadFilePath;
-    downloadFilePath = null;
-
-    // PowerShell script: runs hidden, waits for PID to exit, renames old to .bak, new to current.
-    const ps1Path = path.join(app.getPath('temp'), 'teledesk-update.ps1');
-    const ps1 = [
-      `$pid_target = ${process.pid}`,
-      `$src = '${dlPath.replace(/'/g, "''")}'`,
-      `$dst = '${currentExe.replace(/'/g, "''")}'`,
-      `$bak = '${currentExe.replace(/'/g, "''")}.bak'`,
-      '',
-      '# Wait for the app process to fully exit',
-      'for ($i = 0; $i -lt 120; $i++) {',
-      '  $proc = Get-Process -Id $pid_target -ErrorAction SilentlyContinue',
-      '  if (-not $proc) { break }',
-      '  Start-Sleep -Milliseconds 500',
-      '}',
-      '',
-      'Start-Sleep -Seconds 2',
-      '',
-      '# Portable strategy: rename old to .bak, remove .new extension',
-      'for ($r = 0; $r -lt 5; $r++) {',
-      '  try {',
-      '    if (Test-Path $bak) { Remove-Item -Path $bak -Force -ErrorAction SilentlyContinue }',
-      '    Rename-Item -Path $dst -NewName "$([System.IO.Path]::GetFileName($bak))" -Force -ErrorAction Stop',
-      '    Rename-Item -Path $src -NewName "$([System.IO.Path]::GetFileName($dst))" -Force -ErrorAction Stop',
-      '    break',
-      '  } catch {',
-      '    Start-Sleep -Seconds 2',
-      '  }',
-      '}',
-      '',
-      '# Launch the updated app',
-      'Start-Process -FilePath $dst',
-      '',
-      '# Clean up script',
-      'Remove-Item -Path $PSCommandPath -Force -ErrorAction SilentlyContinue',
-    ].join('\n');
-
-    try {
-      fs.writeFileSync(ps1Path, ps1, 'utf8');
-
-      // -WindowStyle Hidden = no window. -NonInteractive = no prompts.
-      const child = spawn('powershell.exe', [
-        '-NonInteractive',
-        '-WindowStyle', 'Hidden',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', ps1Path,
-      ], {
-        detached: true,
-        stdio: 'ignore',
-      });
-      child.unref();
-
-      if (tray && !tray.isDestroyed()) { tray.destroy(); tray = null; }
-      app.quit();
-    } catch (err) {
-      console.error('[Updater] Failed to launch update script:', err);
+  if (process.platform !== 'win32') {
+    if (downloadFilePath && fs.existsSync(downloadFilePath)) {
+      const dlPath = downloadFilePath;
+      downloadFilePath = null;
       shell.openPath(dlPath);
       app.quit();
     }
-  } else {
-    const dlPath = downloadFilePath;
-    downloadFilePath = null;
-    shell.openPath(dlPath);
-    app.quit();
+    return;
+  }
+
+  const expectedPath = getExpectedUpdateFilePath();
+  if (!downloadFilePath || downloadFilePath !== expectedPath || !fs.existsSync(downloadFilePath)) {
+    mainWindow?.webContents.send('updater:status', {
+      status: 'error',
+      message: 'Restart blocked: update file is missing. Download again to create the .new file beside TeleDesk.',
+      info: updateInfo,
+    });
+    return;
+  }
+
+  isQuitting = true;
+
+  const currentExe = getInstalledExecutablePath();
+  const dlPath = downloadFilePath;
+  const backupPath = `${currentExe}.bak`;
+  downloadFilePath = null;
+
+  const updateWorkDir = path.dirname(currentExe);
+  const updateLogPath = path.join(updateWorkDir, 'teledesk-update-log.txt');
+  const cmdPath = path.join(updateWorkDir, 'teledesk-update.cmd');
+  const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const backupName = path.basename(backupPath);
+
+  try {
+    console.log('[Updater] Preparing standalone CMD updater worker...');
+    if (fs.existsSync(updateLogPath)) fs.unlinkSync(updateLogPath);
+    fs.writeFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Preparing updater worker (.cmd)\n`, 'utf8');
+
+    const cmdScript = [
+      '@echo off',
+      'setlocal EnableExtensions EnableDelayedExpansion',
+      `set "LOG=${updateLogPath}"`,
+      `set "SRC=${dlPath}"`,
+      `set "DST=${currentExe}"`,
+      `set "BAK=${backupPath}"`,
+      `set "BAK_NAME=${backupName}"`,
+      '>> "%LOG%" echo [worker %date% %time%] cmd worker started',
+      'timeout /t 4 /nobreak >nul',
+      '>> "%LOG%" echo [worker %date% %time%] swap begin',
+      'if not exist "%SRC%" (>> "%LOG%" echo [worker %date% %time%] ERROR missing .new file & goto :end)',
+      'if exist "%BAK%" del /f /q "%BAK%" >nul 2>&1',
+      'if not exist "%DST%" (>> "%LOG%" echo [worker %date% %time%] ERROR current exe missing & goto :end)',
+      'ren "%DST%" "%BAK_NAME%" >nul 2>&1',
+      'if errorlevel 1 (>> "%LOG%" echo [worker %date% %time%] ERROR rename to .bak failed & goto :end)',
+      'move /y "%SRC%" "%DST%" >nul 2>&1',
+      'if errorlevel 1 (',
+      '  >> "%LOG%" echo [worker %date% %time%] ERROR promote .new failed',
+      '  if exist "%BAK%" move /y "%BAK%" "%DST%" >nul 2>&1',
+      '  goto :end',
+      ')',
+      '>> "%LOG%" echo [worker %date% %time%] swap succeeded',
+      'start "" "%DST%" >nul 2>&1',
+      '>> "%LOG%" echo [worker %date% %time%] relaunch dispatched',
+      ':end',
+      'start "" /b cmd /c del /f /q "%~f0" >nul 2>&1',
+      'exit /b 0',
+    ].join('\r\n');
+
+    fs.writeFileSync(cmdPath, cmdScript, 'utf8');
+    fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Script written: ${cmdPath}\n`, 'utf8');
+
+    // Primary launch via ShellExecute for better breakaway behavior in packaged apps.
+    void shell.openPath(cmdPath).then((openResult) => {
+      try {
+        fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - shell.openPath result: ${openResult || 'OK'}\n`, 'utf8');
+      } catch {
+        // no-op
+      }
+    });
+
+    // Fallback launch via cmd/start.
+    const comspec = process.env.ComSpec || 'cmd.exe';
+    const launchArgs = ['/d', '/c', `start "" /min "${cmdPath}"`];
+    fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Launch command (fallback): ${comspec} ${launchArgs.join(' ')}\n`, 'utf8');
+
+    const child = spawn(comspec, launchArgs, {
+      cwd: updateWorkDir,
+      detached: true,
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+
+    child.on('error', (spawnErr) => {
+      try {
+        fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Fallback spawn failed: ${String(spawnErr)}\n`, 'utf8');
+      } catch {
+        // no-op
+      }
+    });
+
+    child.unref();
+    fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Fallback spawned (pid=${child.pid ?? 'unknown'})\n`, 'utf8');
+
+    if (tray && !tray.isDestroyed()) { tray.destroy(); tray = null; }
+    setTimeout(() => {
+      app.exit(0);
+    }, 1800);
+  } catch (err) {
+    console.error('[Updater] Failed to launch update script:', err);
+    try {
+      fs.appendFileSync(updateLogPath, `[Bootstrap] ${new Date().toISOString()} - Launch failed: ${String(err)}\n`, 'utf8');
+    } catch {
+      // no-op if logging also fails
+    }
+    isQuitting = false;
+    mainWindow?.webContents.send('updater:status', {
+      status: 'error',
+      message: 'Failed to start restart installer. Please try again.',
+      info: updateInfo,
+    });
   }
 });
 
@@ -769,10 +833,9 @@ const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
     const latestVersion = release.tag_name.replace(/^v/, '');
     const currentVersion = app.getVersion();
 
-    // Simple version comparison (can be improved with semver)
     if (latestVersion !== currentVersion) {
-      // Find the appropriate asset (prefer .exe for Windows)
-      const asset = release.assets.find((a: any) => a.name.endsWith('.exe') || a.name.endsWith('.zip'));
+      // This updater flow is for Windows executable replacement.
+      const asset = release.assets.find((a: any) => a.name.toLowerCase().endsWith('.exe'));
       if (asset) {
         updateInfo = {
           version: latestVersion,
@@ -800,21 +863,19 @@ const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
 
 const startDownload = (url: string) => {
   if (isDownloading) return;
-
-  isDownloading = true;
-  // Download to the same directory as the executable with a .new extension
-  const exeDir = path.dirname(process.execPath);
-  downloadFilePath = path.join(exeDir, `${path.basename(process.execPath)}.new`);
-  
-  // Fallback to temp if exe directory is not writable
-  try {
-    fs.accessSync(exeDir, fs.constants.W_OK);
-  } catch (err) {
-    console.warn('[Updater] App directory is not writable, falling back to temp:', exeDir);
-    downloadFilePath = path.join(app.getPath('temp'), `TeleDesk-update-${Date.now()}.exe`);
+  if (process.platform !== 'win32') {
+    mainWindow?.webContents.send('updater:status', {
+      status: 'error',
+      message: 'Auto update is supported only on Windows in this build.',
+      info: updateInfo,
+    });
+    return;
   }
 
-  const fileStream = fs.createWriteStream(downloadFilePath);
+  const targetPath = getExpectedUpdateFilePath();
+  const fileStream = fs.createWriteStream(targetPath);
+  downloadFilePath = targetPath;
+  isDownloading = true;
 
   let downloadedBytes = 0;
   let lastBytes = 0;
@@ -874,6 +935,7 @@ const startDownload = (url: string) => {
   });
 
   request.on('error', (err) => {
+    fileStream.end();
     isDownloading = false;
     downloadRequest = null;
     console.error('[Updater] Request error:', err);
@@ -905,6 +967,8 @@ const cancelDownload = () => {
       console.error('[Updater] Failed to remove partial file:', e);
     }
   }
+
+  downloadFilePath = null;
   
   mainWindow?.webContents.send('updater:status', { status: 'cancelled' });
 };
@@ -1036,7 +1100,7 @@ ipcMain.on('open-chat-window', (_event, chatId: string) => {
   });
 });
 
-// ─── Avatar fetch helper ─────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Avatar fetch helper ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const fetchAvatarAsNativeImage = async (url?: string): Promise<import('electron').NativeImage | null> => {
   if (!url || !url.startsWith('http')) return null;
   try {
@@ -1053,7 +1117,7 @@ const fetchAvatarAsNativeImage = async (url?: string): Promise<import('electron'
   }
 };
 
-// ─── Call Window ──────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Call Window ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 interface CallInitData {
   callId: string;
   callType: 'video' | 'voice';
@@ -1080,7 +1144,7 @@ const createCallWindow = (initData: CallInitData) => {
     height: 680,
     minWidth: 640,
     minHeight: 480,
-    title: `${peerName} – ${callLabel}`,
+    title: `${peerName} ΓÇô ${callLabel}`,
     backgroundColor: '#0f172a',
     show: false,
     alwaysOnTop: true,
@@ -1135,14 +1199,14 @@ const createCallWindow = (initData: CallInitData) => {
   });
 };
 
-// ─── Call IPC Handlers ─────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Call IPC Handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 // Main window asks to open call window
 ipcMain.on('call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
 
-// Incoming call — open directly as the merged call window (isOutgoing: false)
+// Incoming call ΓÇö open directly as the merged call window (isOutgoing: false)
 ipcMain.on('incoming-call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
@@ -1152,11 +1216,11 @@ ipcMain.on('call:send-window-event', (_e, event: string) => {
   mainWindow?.webContents.send('call:window-event', event, {});
 });
 
-// Call window renderer is mounted and ready — flush buffered relay events
+// Call window renderer is mounted and ready ΓÇö flush buffered relay events
 ipcMain.on('call:window-ready', (event) => {
   if (callWindow && !callWindow.isDestroyed() && event.sender === callWindow.webContents) {
     callWindowReady = true;
-    // No longer send init-data (it's in URL params) — only flush buffered relay events
+    // No longer send init-data (it's in URL params) ΓÇö only flush buffered relay events
     pendingRelayEvents.forEach(({ event: e, data: d }) => {
       callWindow?.webContents.send('call:socket-event', e, d);
     });
@@ -1173,7 +1237,7 @@ ipcMain.on('call:relay-to-window', (_e, event: string, data: unknown) => {
   }
 });
 
-// Call window sends a socket emit request → relay to main window renderer
+// Call window sends a socket emit request ΓåÆ relay to main window renderer
 ipcMain.on('call:socket-emit', (_e, event: string, data: unknown) => {
   mainWindow?.webContents.send('call:window-socket-emit', event, data);
 });
@@ -1201,7 +1265,7 @@ ipcMain.on('call:force-close', () => {
 
 
 
-// ─── App Lifecycle ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ App Lifecycle ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {

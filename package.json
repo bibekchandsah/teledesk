@@ -12,7 +12,10 @@
     "dev:backend": "npm run dev --prefix backend-server",
     "dev:client": "npm run electron:dev --prefix desktop-client",
     "build:backend": "npm run build --prefix backend-server",
-    "build:client": "npm run electron:build --prefix desktop-client"
+    "build:client": "npm run electron:build --prefix desktop-client",
+    "lint": "npm run lint:backend && npm run lint:client",
+    "lint:backend": "npm run lint --prefix backend-server",
+    "lint:client": "npm run lint --prefix desktop-client"
   },
   "devDependencies": {
     "electron-builder": "^26.8.1"

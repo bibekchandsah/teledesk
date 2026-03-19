@@ -55,6 +55,8 @@ cd desktop-client
 $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
 npm run electron:build
 
+npx tsc -p tsconfig.electron.json --noEmit
+
 !!! The $env:CSC_IDENTITY_AUTO_DISCOVERY = "false" skips code signing (needed on Windows without a certificate). The output exe will be at desktop-client/release/TeleDesk 1.0.0.exe.
 
 http://localhost:3001/api/auth/desktop/google
@@ -617,11 +619,10 @@ Testing:
 4. Tray Usage: Right-click the tray icon and select "Check for Updates" to see the manual check flow.
 
 update and restart logic:
-download file in same directory with .new extension
+download file in same directory where is old version program is there and add .new extension to the new downloaded file
 after download complete then show restart button
-when user click restart button then rename the old app with .bak extension and remove the .new extension of the new app
-then launch the new app
-then app will open automatically
+when user click restart button then add the old app with .bak extension and remove the .new extension of the new downloaded app
+then launch the new app automatically 
 then show notification message "Update installed successfully"
 
 1. Check for Updates (Electron + Node.js)

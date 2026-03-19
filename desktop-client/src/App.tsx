@@ -203,25 +203,6 @@ const AppInner: React.FC = () => {
     return cleanup;
   }, []);
 
-  // Version check for "Update installed successfully" toast
-  useEffect(() => {
-    const checkVersion = async () => {
-      if (!window.electronAPI) return;
-      const currentVersion = await window.electronAPI.getAppVersion();
-      const lastVersion = localStorage.getItem('last_version');
-      
-      if (lastVersion && lastVersion !== currentVersion) {
-        const { setToast } = useUIStore.getState();
-        setToast({
-          message: 'Update installed successfully',
-          type: 'info'
-        });
-      }
-      localStorage.setItem('last_version', currentVersion);
-    };
-    checkVersion();
-  }, []);
-
   // Sync accounts to tray menu
   useEffect(() => {
     if (!window.electronAPI?.setTrayAccounts) return;

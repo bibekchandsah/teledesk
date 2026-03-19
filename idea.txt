@@ -6,6 +6,8 @@ cd desktop-client; npm run electron:dev
 npm -v; node -v; npm install; npx tsc -p tsconfig.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npx tsc -p tsconfig.electron.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 npm -v && node -v && npm install && npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.electron.json --noEmit
 npm -v; node -v; npm install; npx tsc -p tsconfig.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npx tsc -p tsconfig.electron.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm install --prefix backend-server; npm install --prefix desktop-client; npm run lint
+npm install --prefix desktop-client; npm run lint
 
 desktop-client/package.json
 "scripts": {
