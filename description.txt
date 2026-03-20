@@ -669,6 +669,17 @@ Both touchend and touchcancel stop the scroll loop
 
 touchstart on the bubble fires before the document-level touchstart in MessageContextMenu closes the menu, so menuWasOpenOnTapStart captures the true state. By the time touchend fires, the menu may already be closed by the outside listener, but we use the snapshot to decide: if it was open → close, if it was closed → open.
 
+Single tap on image/video/audio/file → opens preview (default behavior, nothing intercepted)
+Hold for 500ms on any message bubble → opens context menu
+Moving finger more than 10px cancels the long-press so scrolling still works
+Swipe left/right still triggers reply/forward as before
+Interactive elements (buttons, reaction pills) still ignore the long-press
+
+tap on the media itself opens preview, tap on the bubble background/padding opens context menu
+openBubbleMenuId now gets cleared back to null via onContextMenuClose whenever a menu closes — so it no longer stays permanently set after the first open
+The toggle logic uses only the bubble's own ctxMenu state (not openBubbleMenuId) — so each bubble correctly knows if its own menu is open
+Tapping another bubble while one is open: the document touchstart closes the first bubble's menu (via MessageContextMenu's listener), and the second bubble opens its own fresh menu
+
 
 <------------------------------------- file preview ------------------------------------------->
 Left side gets flex: 1; minWidth: 0 so it shrinks instead of pushing buttons off screen
@@ -694,13 +705,6 @@ The % display in the header stays in sync via the onTransformed callback
 The − / + / reset buttons in the header call zoomOut, zoomIn, resetTransform on the library ref
 Navigating to next/previous image resets zoom back to 100%
 
-Single tap on image/video/audio/file → opens preview (default behavior, nothing intercepted)
-Hold for 500ms on any message bubble → opens context menu
-Moving finger more than 10px cancels the long-press so scrolling still works
-Swipe left/right still triggers reply/forward as before
-Interactive elements (buttons, reaction pills) still ignore the long-press
 
-tap on the media itself opens preview, tap on the bubble background/padding opens context menu
-openBubbleMenuId now gets cleared back to null via onContextMenuClose whenever a menu closes — so it no longer stays permanently set after the first open
-The toggle logic uses only the bubble's own ctxMenu state (not openBubbleMenuId) — so each bubble correctly knows if its own menu is open
-Tapping another bubble while one is open: the document touchstart closes the first bubble's menu (via MessageContextMenu's listener), and the second bubble opens its own fresh menu
+<----------------------------------- chat list / new chat ------------------------>
+Now results only appear when the typed query matches the start of a user's name, email, or username — typing "bi" shows "Bibek" but not "Alibek". The backend uses query% (starts-with) and the frontend applies the same filter as a safety net.

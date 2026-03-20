@@ -7,6 +7,7 @@
 19. (fixed) toggle chat icon
 19. (fixed) add swapping effect for touch devices for reply (right to left) and forward (left to right)
 17. (fixed) for spoiler image/video show full screen icon in center instead of right top
+21. (fixed) for touch devices shows context menu on file click too
 
 to be implemented:
 
@@ -25,4 +26,3 @@ store chats in device and update accordingly when new events occurs and while us
 
 
 18. for mobile device applying custom theme not showing effect instantly 
-for touch devices shows context menu on file click too

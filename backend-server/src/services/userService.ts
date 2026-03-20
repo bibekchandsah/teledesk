@@ -123,12 +123,12 @@ export const getUserById = async (uid: string): Promise<User | null> => {
 };
 
 export const searchUsers = async (query: string, _requestingUid: string): Promise<User[]> => {
-  const q = `%${query.toLowerCase()}%`;
+  const q = `${query.toLowerCase()}%`;  // starts-with match only
   const { data } = await supabase
     .from('users')
     .select('*')
     .or(`name.ilike.${q},email.ilike.${q},username.ilike.${q}`)
-    .limit(20);
+    .limit(5); // 5  user search match list
 
   return ((data ?? []) as UserRow[]).map(rowToUser);
 };

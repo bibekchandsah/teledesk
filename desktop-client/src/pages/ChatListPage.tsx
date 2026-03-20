@@ -111,7 +111,15 @@ const ChatListPage: React.FC = () => {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       const res = await searchUsers(searchQuery);
-      if (res.success && res.data) setSearchResults(res.data);
+      if (res.success && res.data) {
+        const q = searchQuery.toLowerCase();
+        const filtered = res.data.filter(u =>
+          u.name?.toLowerCase().startsWith(q) ||
+          u.email?.toLowerCase().startsWith(q) ||
+          u.username?.toLowerCase().startsWith(q)
+        );
+        setSearchResults(filtered);
+      }
       setIsSearching(false);
     }, 400);
 
