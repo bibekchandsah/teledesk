@@ -632,19 +632,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const SWIPE_MAX = 80;
   const TAP_MOVE_LIMIT = 8;
 
-  // ─── Touch tap → context menu (most reliable: touchstart + touchend) ──────
+  // ─── Touch tap → context menu OR preview (depending on target) ───────────
   const tapStartPos = useRef<{ x: number; y: number } | null>(null);
   const tapCancelled = useRef(false);
   const menuWasOpenOnTapStart = useRef(false);
+  const TOUCH_TAP_MOVE_LIMIT = 10;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
     tapStartPos.current = { x: t.clientX, y: t.clientY };
     lastTouchPos.current = { x: t.clientX, y: t.clientY };
-    // Cancel tap if finger landed on an interactive element inside the bubble
-    const target = e.target as HTMLElement;
-    const isInteractive = !!target.closest('button, a, input, [role="button"], .emoji-reaction');
-    tapCancelled.current = isInteractive;
+    tapCancelled.current = false;
+    // Snapshot BEFORE any document-level touchstart listeners fire and close the menu
     menuWasOpenOnTapStart.current = ctxMenu !== null;
   };
 
@@ -654,23 +653,50 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     lastTouchPos.current = { x: t.clientX, y: t.clientY };
     const dx = t.clientX - tapStartPos.current.x;
     const dy = t.clientY - tapStartPos.current.y;
-    if (Math.abs(dx) > TAP_MOVE_LIMIT || Math.abs(dy) > TAP_MOVE_LIMIT) {
+    // Cancel tap if finger moved too much (scrolling)
+    if (Math.abs(dx) > TOUCH_TAP_MOVE_LIMIT || Math.abs(dy) > TOUCH_TAP_MOVE_LIMIT) {
       tapCancelled.current = true;
     }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!tapCancelled.current && tapStartPos.current && onDelete) {
+    if (tapCancelled.current || !tapStartPos.current) {
+      tapStartPos.current = null;
+      tapCancelled.current = false;
+      return;
+    }
+
+    const target = e.target as HTMLElement;
+    
+    // Check if tap was on interactive elements (buttons, reactions) — let them handle it
+    const isInteractive = !!target.closest('button, a, input, [role="button"], .emoji-reaction');
+    if (isInteractive) {
+      tapStartPos.current = null;
+      return;
+    }
+
+    // Check if tap was on media content (image, video, audio, file attachment)
+    const isMediaContent = !!target.closest('img, video, audio, .message-image, .message-video, .message-file, .voice-note-player, .message-call-bubble, .video-note-bubble');
+    
+    if (isMediaContent) {
+      // Tap on media → let default click handler open preview (do nothing here)
+      tapStartPos.current = null;
+      return;
+    }
+
+    // Tap on bubble background/text → toggle context menu
+    if (onDelete) {
       if (menuWasOpenOnTapStart.current) {
-        // Menu was open when finger went down → close it (toggle off)
+        // Was open when finger went down → close it
         setCtxMenu(null);
       } else {
-        // Menu was closed → open it
+        // Was closed → open it
         e.preventDefault();
         onContextMenuOpen?.();
         setCtxMenu({ x: lastTouchPos.current.x, y: lastTouchPos.current.y });
       }
     }
+
     tapStartPos.current = null;
     tapCancelled.current = false;
     menuWasOpenOnTapStart.current = false;
@@ -1210,10 +1236,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       case 'audio':
       case 'voice_note':
-        return <VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} messageDuration={message.duration} />;
+        return <div className="voice-note-player"><VoiceNotePlayer fileUrl={message.fileUrl} isOwn={isOwn} messageId={message.messageId} messageDuration={message.duration} /></div>;
 
       case 'video_note':
-        return <VideoNoteBubble message={message} />;
+        return <div className="video-note-bubble"><VideoNoteBubble message={message} /></div>;
 
       case 'file':
         return (

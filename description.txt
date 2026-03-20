@@ -667,6 +667,7 @@ The loop also re-evaluates the selection range on every frame as new messages sc
 The moment the finger moves back into the safe zone or lifts, the RAF loop is cancelled
 Both touchend and touchcancel stop the scroll loop
 
+touchstart on the bubble fires before the document-level touchstart in MessageContextMenu closes the menu, so menuWasOpenOnTapStart captures the true state. By the time touchend fires, the menu may already be closed by the outside listener, but we use the snapshot to decide: if it was open → close, if it was closed → open.
 
 
 <------------------------------------- file preview ------------------------------------------->
@@ -693,3 +694,10 @@ The % display in the header stays in sync via the onTransformed callback
 The − / + / reset buttons in the header call zoomOut, zoomIn, resetTransform on the library ref
 Navigating to next/previous image resets zoom back to 100%
 
+Single tap on image/video/audio/file → opens preview (default behavior, nothing intercepted)
+Hold for 500ms on any message bubble → opens context menu
+Moving finger more than 10px cancels the long-press so scrolling still works
+Swipe left/right still triggers reply/forward as before
+Interactive elements (buttons, reaction pills) still ignore the long-press
+
+tap on the media itself opens preview, tap on the bubble background/padding opens context menu
