@@ -5,8 +5,9 @@
 18. (fixed) remove the text "sent an image" for image files when send if no caption is there
 20. (fixed) responsive grid layout
 19. (fixed) toggle chat icon
-
 19. (fixed) add swapping effect for touch devices for reply (right to left) and forward (left to right)
+17. (fixed) for spoiler image/video show full screen icon in center instead of right top
+
 to be implemented:
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
@@ -23,5 +24,5 @@ store chats in device and update accordingly when new events occurs and while us
 16. for web version when user is in call and someone else call then it should show in popup window
 
 
-17. for spoiler image/video show full screen icon in center instead of right top
 18. for mobile device applying custom theme not showing effect instantly 
+for touch devices shows context menu on file click too

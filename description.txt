@@ -666,3 +666,30 @@ While drag-selecting, if the finger gets within 80px of the top or bottom edge o
 The loop also re-evaluates the selection range on every frame as new messages scroll into view, so the selection extends naturally just like mouse drag
 The moment the finger moves back into the safe zone or lifts, the RAF loop is cancelled
 Both touchend and touchcancel stop the scroll loop
+
+
+
+<------------------------------------- file preview ------------------------------------------->
+Left side gets flex: 1; minWidth: 0 so it shrinks instead of pushing buttons off screen
+On mobile (≤600px) filenames longer than 25 chars get truncated with …
+Right side buttons get flexShrink: 0 so copy, download, zoom, and close are always fully visible regardless of filename length
+
+Zoom controls (−, %, +, reset) now show on all screen sizes — removed the hide-mobile class that was hiding them
+Pinch-to-zoom: two fingers spreading apart zooms in, pinching together zooms out, range 0.5×–10× same as mouse wheel
+Single-finger pan works at any zoom level >1 on touch, same as mouse drag on desktop
+touchAction: 'none' on the image prevents the browser from intercepting touch events for its own scroll/zoom handling
+
+Now the image always lives inside a fixed-size min(90vw, 90vh) wrapper div. The scale() transform is on the wrapper, so the base size never changes. Going from 100% → 110% is now a smooth, consistent 10% scale increase with no jump.
+
+Dropped all manual zoom/pan/pinch state and event handlers (~60 lines gone)
+react-zoom-pan-pinch now handles everything: mouse wheel, click-drag pan, pinch-to-zoom on touch, double-tap to zoom — all with smooth built-in animations
+The % display in the header stays in sync via the onTransformed callback
+The − / + / reset buttons in the header call zoomOut, zoomIn, resetTransform on the library ref
+Navigating to next/previous image resets zoom back to 100%
+
+Dropped all manual zoom/pan/pinch state and event handlers (~60 lines gone)
+react-zoom-pan-pinch now handles everything: mouse wheel, click-drag pan, pinch-to-zoom on touch, double-tap to zoom — all with smooth built-in animations
+The % display in the header stays in sync via the onTransformed callback
+The − / + / reset buttons in the header call zoomOut, zoomIn, resetTransform on the library ref
+Navigating to next/previous image resets zoom back to 100%
+

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 // crypto.randomUUID() is available in Electron/Chromium without polyfill
 const genId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -741,11 +742,13 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
   const isCsv = message.fileName?.toLowerCase().endsWith('.csv');
   const isVoice = message.type === 'audio' || message.type === 'voice_note';
 
-  // Image zoom/pan state
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // Image zoom/pan — handled by react-zoom-pan-pinch
+  const transformRef = useRef<any>(null);
+  const resetZoom = () => {
+    transformRef.current?.resetTransform();
+    setZoomDisplay(100);
+  };
+  const [zoomDisplay, setZoomDisplay] = useState(100);
   
   // Text/CSV content state
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -768,33 +771,6 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
         });
     }
   }, [isText, isCsv, message.fileUrl]);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!isImage) return;
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.min(Math.max(prev * delta, 0.5), 10));
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isImage || zoom <= 1) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setOffset({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  const resetZoom = () => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  };
 
   const copyImage = async () => {
     if (!isImage || !message.fileUrl) return;
@@ -942,9 +918,6 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
 
   return (
     <div 
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
       style={{
         position: 'fixed',
         top: 0,
@@ -988,20 +961,26 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
         zIndex: 10
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ color: '#fff', minWidth: 0 }}>
-            <div className="filename-text" style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{message.fileName || (isImage ? 'Image' : isVideo ? 'Video' : isVoice ? 'Voice Note' : 'File')}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, marginRight: 8 }}>
+          <div style={{ color: '#fff', minWidth: 0, flex: 1 }}>
+            <div className="filename-text" style={{ fontSize: 16, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+              {(() => {
+                const name = message.fileName || (isImage ? 'Image' : isVideo ? 'Video' : isVoice ? 'Voice Note' : 'File');
+                const isMobile = window.innerWidth <= 600;
+                return isMobile && name.length > 25 ? name.slice(0, 25) + '…' : name;
+              })()}
+            </div>
             <div style={{ fontSize: 12, opacity: 0.6 }}>{message.senderName} • {formatTime(message.timestamp)}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           {isImage && (
             <>
-               <div className="hide-mobile" style={{ display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '4px 8px', gap: 12 }}>
-                <button onClick={() => setZoom(z => Math.max(z * 0.8, 0.5))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronDown size={18}/></button>
-                <span style={{ color: '#fff', fontSize: 13, minWidth: 40, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom(z => Math.min(z * 1.2, 10))} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronUp size={18}/></button>
-                <button onClick={resetZoom} style={{ ...iconBtnStyle, color: '#fff', padding: 4, opacity: zoom === 1 ? 0.5 : 1 }}><RefreshCw size={14}/></button>
+               <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '4px 8px', gap: 8 }}>
+                <button onClick={() => transformRef.current?.zoomOut(0.2)} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronDown size={18}/></button>
+                <span style={{ color: '#fff', fontSize: 13, minWidth: 36, textAlign: 'center' }}>{zoomDisplay}%</span>
+                <button onClick={() => transformRef.current?.zoomIn(0.2)} style={{ ...iconBtnStyle, color: '#fff', padding: 4 }}><ChevronUp size={18}/></button>
+                <button onClick={resetZoom} style={{ ...iconBtnStyle, color: '#fff', padding: 4, opacity: zoomDisplay === 100 ? 0.5 : 1 }}><RefreshCw size={14}/></button>
               </div>
               <button 
                 className="header-btn"
@@ -1084,7 +1063,6 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
 
       {/* Content */}
       <div 
-        onWheel={handleWheel}
         className="preview-content"
         style={{
           flex: 1,
@@ -1113,23 +1091,46 @@ const FilePreviewer: React.FC<{ messages: Message[]; initialIndex: number; onClo
         )}
         
         {isImage ? (
-          <img
-            src={message.fileUrl}
-            alt={message.fileName}
-            onMouseDown={handleMouseDown}
-            style={{
-              maxWidth: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
-              maxHeight: zoom > 1 ? 'none' : 'min(90vw, 90vh)',
-              transform: `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`,
-              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
-              transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-              objectFit: 'contain',
-              borderRadius: zoom > 1 ? 0 : 8,
-              boxShadow: zoom > 1 ? 'none' : '0 20px 50px rgba(0,0,0,0.5)',
-              animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-            }}
-            draggable={false}
-          />
+          <TransformWrapper
+            ref={transformRef}
+            initialScale={1}
+            minScale={0.5}
+            maxScale={10}
+            smooth
+            centerOnInit
+            onTransformed={(_, state) => setZoomDisplay(Math.round(state.scale * 100))}
+          >
+            <TransformComponent
+              wrapperStyle={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+              }}
+              contentStyle={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <img
+                src={message.fileUrl}
+                alt={message.fileName}
+                style={{
+                  maxWidth: 'min(90vw, 90vh)',
+                  maxHeight: 'min(90vw, 90vh)',
+                  objectFit: 'contain',
+                  borderRadius: 8,
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                  animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                  userSelect: 'none',
+                }}
+                draggable={false}
+              />
+            </TransformComponent>
+          </TransformWrapper>
         ) : isVoice ? (
           <div style={{
             display: 'flex',
