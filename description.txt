@@ -701,3 +701,6 @@ Swipe left/right still triggers reply/forward as before
 Interactive elements (buttons, reaction pills) still ignore the long-press
 
 tap on the media itself opens preview, tap on the bubble background/padding opens context menu
+openBubbleMenuId now gets cleared back to null via onContextMenuClose whenever a menu closes — so it no longer stays permanently set after the first open
+The toggle logic uses only the bubble's own ctxMenu state (not openBubbleMenuId) — so each bubble correctly knows if its own menu is open
+Tapping another bubble while one is open: the document touchstart closes the first bubble's menu (via MessageContextMenu's listener), and the second bubble opens its own fresh menu

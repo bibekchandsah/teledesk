@@ -4786,6 +4786,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     onMentionClick={handleMentionClick}
                     onContextMenuOpen={() => setOpenBubbleMenuId(msg.messageId)}
                     openBubbleMenuId={openBubbleMenuId}
+                    onContextMenuClose={() => setOpenBubbleMenuId(null)}
                   />
                   </div>
                 </div>

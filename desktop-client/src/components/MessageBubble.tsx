@@ -577,6 +577,7 @@ interface MessageBubbleProps {
   onMentionClick?: (text: string, type: 'username' | 'email') => void;
   isTouchDevice?: boolean;
   onContextMenuOpen?: () => void;
+  onContextMenuClose?: () => void;
   openBubbleMenuId?: string | null;
 }
 
@@ -611,6 +612,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onMentionClick,
   isTouchDevice = false,
   onContextMenuOpen,
+  onContextMenuClose,
   openBubbleMenuId,
 }) => {
   // ─── Context menu state ───────────────────────────────────────────────────
@@ -643,7 +645,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     tapStartPos.current = { x: t.clientX, y: t.clientY };
     lastTouchPos.current = { x: t.clientX, y: t.clientY };
     tapCancelled.current = false;
-    // Snapshot BEFORE any document-level touchstart listeners fire and close the menu
+    // Snapshot own menu state BEFORE document touchstart listeners can close it
     menuWasOpenOnTapStart.current = ctxMenu !== null;
   };
 
@@ -688,7 +690,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (onDelete) {
       if (menuWasOpenOnTapStart.current) {
         // Was open when finger went down → close it
-        setCtxMenu(null);
+        closeCtxMenu();
       } else {
         // Was closed → open it
         e.preventDefault();
@@ -801,8 +803,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   useEffect(() => {
     if (openBubbleMenuId !== undefined && openBubbleMenuId !== message.messageId) {
       setCtxMenu(null);
+      // no need to call onContextMenuClose here — the other bubble's open already handles parent state
     }
   }, [openBubbleMenuId, message.messageId]);
+
+  const closeCtxMenu = () => {
+    setCtxMenu(null);
+    onContextMenuClose?.();
+  };
 
   // Handle context menu
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -1750,7 +1758,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         message={message}
         x={ctxMenu.x}
         y={ctxMenu.y}
-        onClose={() => setCtxMenu(null)}
+        onClose={() => closeCtxMenu()}
         isOwn={isOwn}
         bookmarked={bookmarked}
         isPinned={isPinned}
