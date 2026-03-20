@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Download, X, RefreshCw, ChevronRight, Info, AlertCircle, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import PremiumToggle from './PremiumToggle';
 
 interface UpdateStatus {
   status: 'available' | 'no-update' | 'downloading' | 'downloaded' | 'error' | 'cancelled';
@@ -25,6 +26,7 @@ const UpdateBanner: React.FC = () => {
   const [showBanner, setShowBanner] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [justUpdated, setJustUpdated] = useState(false);
+  const [noUpdateNotice, setNoUpdateNotice] = useState<string | null>(null);
   const [autoDownload, setAutoDownload] = useState(() => {
     return localStorage.getItem('teledesk_auto_download') === 'true';
   });
@@ -56,8 +58,11 @@ const UpdateBanner: React.FC = () => {
       if (status.status === 'available' || status.status === 'downloading' || status.status === 'downloaded' || status.status === 'error') {
         setShowBanner(true);
       } else if (status.status === 'no-update' || status.status === 'cancelled') {
-        // If it was a manual check and no update, we might want to show a toast instead
-        // For auto-check, we just hide the banner
+        // Show a short toast only when manual no-update message is provided.
+        if (status.status === 'no-update' && status.message) {
+          setNoUpdateNotice(status.message);
+          setTimeout(() => setNoUpdateNotice(null), 5000);
+        }
         if (status.status === 'cancelled') {
           setShowBanner(false);
         }
@@ -79,23 +84,38 @@ const UpdateBanner: React.FC = () => {
     }
   }, [status, autoDownload]);
 
-  const toggleAutoDownload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = e.target.checked;
+  const toggleAutoDownload = (newVal: boolean) => {
     setAutoDownload(newVal);
     localStorage.setItem('teledesk_auto_download', String(newVal));
   };
 
-  if (!showBanner && !justUpdated) return null;
+  if (!showBanner && !justUpdated && !noUpdateNotice) return null;
+
+  if (noUpdateNotice && !showBanner) {
+    return (
+      <div style={{
+        position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+        background: 'var(--bg-secondary)', border: '1px solid color-mix(in srgb, var(--accent) 35%, var(--border))',
+        borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center',
+        gap: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', animation: 'slideUp 0.3s ease-out',
+        color: 'var(--text-primary)', fontSize: 14,
+      }}>
+        <Info size={18} color='var(--accent)' />
+        <span>{noUpdateNotice}</span>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }` }} />
+      </div>
+    );
+  }
 
   // "Update installed successfully" toast
   if (justUpdated && !showBanner) {
     return (
       <div style={{
         position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-        background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(34,197,94,0.4)',
+        background: 'var(--bg-secondary)', border: '1px solid color-mix(in srgb, #22c55e 40%, var(--border))',
         borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center',
-        gap: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', animation: 'slideUp 0.3s ease-out',
-        color: '#f8fafc', fontSize: 14,
+        gap: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', animation: 'slideUp 0.3s ease-out',
+        color: 'var(--text-primary)', fontSize: 14,
       }}>
         <CheckCircle2 size={18} color="#22c55e" />
         <span>Update installed successfully</span>
@@ -160,13 +180,12 @@ const UpdateBanner: React.FC = () => {
             <div className="content">
               <span className="title">Update Available: <strong>v{info?.version}</strong></span>
               <div className="auto-download-opt">
-                <input 
-                  type="checkbox" 
-                  id="auto-download-check"
+                <PremiumToggle
+                  label="Auto download"
+                  description="Download updates automatically"
                   checked={autoDownload}
                   onChange={toggleAutoDownload}
                 />
-                <label htmlFor="auto-download-check">Download updates automatically</label>
               </div>
             </div>
             <div className="actions">
@@ -212,13 +231,11 @@ const UpdateBanner: React.FC = () => {
                     <span>{formatSize(progress?.transferred || 0)} / {formatSize(progress?.total || 0)}</span>
                   </div>
                   <div className="auto-download-mini">
-                    <input 
-                      type="checkbox" 
-                      id="auto-download-check-mini"
+                    <PremiumToggle
                       checked={autoDownload}
                       onChange={toggleAutoDownload}
+                      label="Auto Download"
                     />
-                    <label htmlFor="auto-download-check-mini">Auto Download</label>
                   </div>
                 </div>
                 <div className="percentage-stat">{Math.round(progress?.percent || 0)}%</div>
@@ -265,9 +282,9 @@ const UpdateBanner: React.FC = () => {
         .update-banner-wrapper {
           width: 100%;
           padding: 8px 16px;
-          background: rgba(15, 23, 42, 0.8);
+          background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
           backdrop-filter: blur(12px);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid var(--border);
           z-index: 1000;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           animation: slideDown 0.4s ease-out;
@@ -285,12 +302,18 @@ const UpdateBanner: React.FC = () => {
           min-height: 48px;
         }
 
+        .update-banner.available {
+          min-height: 44px;
+          align-items: center;
+          gap: 12px;
+        }
+
         .icon-wrapper {
           width: 36px;
           height: 36px;
           border-radius: 10px;
-          background: rgba(59, 130, 246, 0.2);
-          color: #3b82f6;
+          background: color-mix(in srgb, var(--accent) 18%, transparent);
+          color: var(--accent);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -298,12 +321,12 @@ const UpdateBanner: React.FC = () => {
         }
 
         .icon-wrapper.success {
-          background: rgba(34, 197, 94, 0.2);
+          background: color-mix(in srgb, #22c55e 18%, transparent);
           color: #22c55e;
         }
 
         .icon-wrapper.failure {
-          background: rgba(239, 68, 68, 0.2);
+          background: color-mix(in srgb, #ef4444 18%, transparent);
           color: #ef4444;
         }
 
@@ -311,22 +334,25 @@ const UpdateBanner: React.FC = () => {
           display: flex;
           flex-direction: column;
           flex: 1;
+          min-width: 0;
         }
 
         .title {
           font-size: 14px;
           font-weight: 500;
-          color: #f8fafc;
+          color: var(--text-primary);
         }
 
         .subtitle {
           font-size: 12px;
-          color: #94a3b8;
+          color: var(--text-secondary);
         }
 
         .actions {
           display: flex;
           gap: 8px;
+          align-items: center;
+          flex-shrink: 0;
         }
 
         .btn-primary, .btn-secondary {
@@ -343,65 +369,58 @@ const UpdateBanner: React.FC = () => {
         }
 
         .btn-primary {
-          background: #3b82f6;
+          background: var(--accent);
           color: white;
         }
 
         .btn-primary:hover {
-          background: #2563eb;
+          background: var(--accent-hover);
           transform: translateY(-1px);
         }
 
         .btn-secondary {
-          background: rgba(255, 255, 255, 0.05);
-          color: #e2e8f0;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+          border: 1px solid var(--border);
         }
 
         .btn-secondary:hover {
-          background: rgba(255, 255, 255, 0.1);
+          background: color-mix(in srgb, var(--bg-secondary) 80%, var(--text-primary) 20%);
         }
 
         /* Downloading State Styling */
         .update-banner.downloading {
           flex-direction: column;
           align-items: stretch;
-          gap: 8px;
-          padding: 4px 0;
+          gap: 6px;
+          padding: 2px 0;
           position: relative;
         }
 
         .auto-download-opt {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-top: 4px;
-          font-size: 11px;
-          color: #94a3b8;
-          cursor: pointer;
-        }
-
-        .auto-download-opt input {
-          cursor: pointer;
-          accent-color: #3b82f6;
-        }
-
-        .auto-download-opt label {
-          cursor: pointer;
+          gap: 0;
+          margin-top: 2px;
+          min-height: 24px;
+          transform: scale(0.86);
+          transform-origin: left center;
+          max-width: 260px;
+          color: var(--text-secondary);
         }
 
         .auto-download-mini {
           display: flex;
           align-items: center;
-          gap: 4px;
-          margin-left: 4px;
-          padding-left: 8px;
-          border-left: 1px solid rgba(255, 255, 255, 0.1);
-          font-size: 10px;
-          font-weight: 500;
-          color: #94a3b8;
-          cursor: pointer;
+          gap: 0;
+          margin-left: 0;
+          padding-left: 10px;
+          border-left: 1px solid var(--border);
+          min-height: 24px;
+          color: var(--text-secondary);
           user-select: none;
+          transform: scale(0.82);
+          transform-origin: left center;
         }
 
         .auto-download-mini input {
@@ -420,7 +439,7 @@ const UpdateBanner: React.FC = () => {
         .download-content {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 3px;
           z-index: 1;
         }
 
@@ -428,52 +447,58 @@ const UpdateBanner: React.FC = () => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          min-height: 28px;
         }
 
         .status-info {
           display: flex;
           align-items: center;
-          gap: 8px;
-          font-size: 13px;
+          gap: 7px;
+          font-size: 12px;
           font-weight: 500;
-          color: #f8fafc;
+          color: var(--text-primary);
         }
 
         .percentage-stat {
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 700;
-          color: #3b82f6;
-          background: rgba(59, 130, 246, 0.1);
-          padding: 1px 6px;
+          color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 14%, transparent);
+          padding: 1px 5px;
           border-radius: 4px;
           margin-left: auto;
+          line-height: 1.3;
         }
 
         .stats-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          font-size: 11px;
-          color: #94a3b8;
+          font-size: 10px;
+          color: var(--text-secondary);
           width: 100%;
+          gap: 10px;
         }
 
         .stats-group {
           display: flex;
-          gap: 16px;
+          gap: 12px;
           align-items: center;
+          flex-wrap: wrap;
+          min-height: 24px;
         }
 
         .stat {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 3px;
+          white-space: nowrap;
         }
 
         .progress-bg {
           position: absolute;
           inset: -4px -8px;
-          background: rgba(255, 255, 255, 0.02);
+          background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
           border-radius: 12px;
           overflow: hidden;
           z-index: 0;
@@ -481,7 +506,7 @@ const UpdateBanner: React.FC = () => {
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+          background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
           opacity: 0.15;
           transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
@@ -495,9 +520,9 @@ const UpdateBanner: React.FC = () => {
         }
 
         .cancel-btn {
-          background: rgba(255, 255, 255, 0.05);
+          background: color-mix(in srgb, var(--bg-secondary) 80%, var(--text-primary) 20%);
           border: none;
-          color: #94a3b8;
+          color: var(--text-secondary);
           cursor: pointer;
           padding: 6px;
           border-radius: 6px;
@@ -511,8 +536,20 @@ const UpdateBanner: React.FC = () => {
 
         .cancel-btn:hover {
           color: #ef4444;
-          background: rgba(239, 68, 68, 0.15);
+          background: color-mix(in srgb, #ef4444 15%, transparent);
           transform: scale(1.05);
+        }
+
+        [data-theme='light'] .update-banner-wrapper {
+          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme='light'] .btn-primary {
+          color: #ffffff;
+        }
+
+        [data-theme='light'] .progress-fill {
+          opacity: 0.22;
         }
 
         .cancel-btn:active {

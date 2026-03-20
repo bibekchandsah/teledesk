@@ -35,7 +35,7 @@ const PremiumToggle: React.FC<PremiumToggleProps> = ({
           position: 'relative',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           flexShrink: 0,
-          border: '1px solid rgba(255, 255, 255, 0.05)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
           boxShadow: checked ? '0 0 15px rgba(99, 102, 241, 0.3)' : 'none',
         }}
       >

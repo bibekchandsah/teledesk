@@ -872,7 +872,10 @@ const checkForUpdates = async (manual = false): Promise<UpdateInfo | null> => {
     }
 
     if (manual) {
-      mainWindow?.webContents.send('updater:status', { status: 'no-update' });
+      mainWindow?.webContents.send('updater:status', {
+        status: 'no-update',
+        message: `You are aleady running in updated version v${currentVersion}`,
+      });
     }
     return null;
   } catch (error) {
