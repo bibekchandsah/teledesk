@@ -6,6 +6,7 @@
 20. (fixed) responsive grid layout
 19. (fixed) toggle chat icon
 
+19. (fixed) add swapping effect for touch devices for reply (right to left) and forward (left to right)
 to be implemented:
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
@@ -24,4 +25,3 @@ store chats in device and update accordingly when new events occurs and while us
 
 17. for spoiler image/video show full screen icon in center instead of right top
 18. for mobile device applying custom theme not showing effect instantly 
-19. add swapping effect for touch devices for reply and forward 

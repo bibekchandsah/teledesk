@@ -633,3 +633,36 @@ change versions in these files:
     backend-server/package.json (optional, if you want to keep the backend version in sync as well)
 
 
+<----------------------------------- Message Bubble -------------------------------------------------->
+Swipe right-to-left (≥60px) triggers onReply with the reply flash animation
+Swipe left-to-right (≥60px) triggers onForward
+The bubble visually follows the finger up to 80px, then snaps back with a smooth 0.2s ease transition on release
+touchAction: 'pan-y' is set so vertical scrolling still works normally
+
+Hold finger on any message bubble for 500ms → enters selection mode with that bubble selected (same as mouse drag-select)
+While still holding after the long-press fires, drag finger up or down → range-selects all bubbles between the anchor and current finger position, exactly like mouse drag
+Moving the finger more than 10px before the 500ms fires cancels the long-press so normal scrolling isn't disrupted
+If already in selection mode, long-press + drag extends the selection range from a new anchor point
+Tapping a bubble in selection mode still toggles it individually (existing behavior)
+e.preventDefault() is called during the drag phase to lock out scroll while selecting
+
+Single tap on a message bubble (touch only, finger moves <8px) now opens the context menu at the tap position — same menu as desktop right-click
+The hover emoji bar is suppressed entirely on touch devices since it's replaced by the context menu
+Swipe left/right still works as before — only triggers if the finger actually moves past the threshold
+Mouse users are completely unaffected, everything works exactly as before for them
+
+Tap detection now uses touchstart + touchend directly — fires instantly with zero delay
+e.preventDefault() on touchend blocks the browser's synthetic 300ms-delayed click from also firing
+Movement >8px in any direction cancels the tap so scrolling still works fine
+The swipe logic stays on pointer events as before, they just no longer handle the tap case
+Touch handlers are only attached when isTouchDevice is true
+
+Tap on a bubble with no menu open → opens it. Tap the same bubble again → closes it. Toggle behavior, exactly like you described.
+MessageContextMenu now also listens for touchstart on document to close when tapping anywhere outside the menu — previously only mousedown was handled, so on touch the menu would never close by tapping away.
+
+The handleTouchStart now checks if the finger landed on a button, a, input, or [role="button"] element — reaction pills are <button> so they're covered. When that's the case, tapCancelled is set to true immediately, so handleTouchEnd skips the context menu entirely and lets the button's own onClick fire normally.
+
+While drag-selecting, if the finger gets within 80px of the top or bottom edge of the scroll container, a requestAnimationFrame loop kicks in and scrolls at up to 12px/frame — faster the closer to the edge
+The loop also re-evaluates the selection range on every frame as new messages scroll into view, so the selection extends naturally just like mouse drag
+The moment the finger moves back into the safe zone or lifts, the RAF loop is cancelled
+Both touchend and touchcancel stop the scroll loop

@@ -3688,6 +3688,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     return el ? parseInt(el.dataset.msgIdx ?? '', 10) : null;
   };
 
+  const getMsgIdxFromPoint = (x: number, y: number): number | null => {
+    const el = document.elementFromPoint(x, y)?.closest('[data-msg-idx]') as HTMLElement | null;
+    return el ? parseInt(el.dataset.msgIdx ?? '', 10) : null;
+  };
+
   const handleMsgMouseDown = useCallback((e: React.MouseEvent) => {
     const idx = getMsgIdxFromTarget(e.target);
     if (idx === null) return;
@@ -3711,6 +3716,128 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
   const handleMsgMouseUp = useCallback(() => {
     dragAnchorIdx.current = null;
+  }, []);
+
+  // ─── Touch long-press drag-to-select ─────────────────────────────────────
+  const touchSelectAnchorIdx = useRef<number | null>(null);
+  const touchSelectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchSelectActive = useRef(false);
+  const touchSelectStartPos = useRef<{ x: number; y: number } | null>(null);
+  const touchAutoScrollRAF = useRef<number | null>(null);
+  const touchLastPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const LONG_PRESS_MS = 500;
+  const AUTO_SCROLL_ZONE = 80;
+  const AUTO_SCROLL_SPEED = 12;
+
+  const stopTouchAutoScroll = () => {
+    if (touchAutoScrollRAF.current !== null) {
+      cancelAnimationFrame(touchAutoScrollRAF.current);
+      touchAutoScrollRAF.current = null;
+    }
+  };
+
+  const startTouchAutoScroll = () => {
+    if (touchAutoScrollRAF.current !== null) return;
+    const tick = () => {
+      const container = scrollContainerRef.current;
+      if (!container || !touchSelectActive.current) { stopTouchAutoScroll(); return; }
+
+      const rect = container.getBoundingClientRect();
+      const y = touchLastPos.current.y;
+      const distFromTop = y - rect.top;
+      const distFromBottom = rect.bottom - y;
+
+      if (distFromTop < AUTO_SCROLL_ZONE) {
+        container.scrollTop -= AUTO_SCROLL_SPEED * (1 - distFromTop / AUTO_SCROLL_ZONE);
+      } else if (distFromBottom < AUTO_SCROLL_ZONE) {
+        container.scrollTop += AUTO_SCROLL_SPEED * (1 - distFromBottom / AUTO_SCROLL_ZONE);
+      }
+
+      // Re-evaluate selection after scroll shifts content
+      if (touchSelectAnchorIdx.current !== null) {
+        const idx = getMsgIdxFromPoint(touchLastPos.current.x, touchLastPos.current.y);
+        if (idx !== null) {
+          const lo = Math.min(touchSelectAnchorIdx.current, idx);
+          const hi = Math.max(touchSelectAnchorIdx.current, idx);
+          const ids = chatMessages.slice(lo, hi + 1).map((m) => m.messageId);
+          setSelectedIds(new Set(ids));
+        }
+      }
+
+      touchAutoScrollRAF.current = requestAnimationFrame(tick);
+    };
+    touchAutoScrollRAF.current = requestAnimationFrame(tick);
+  };
+
+  const handleMsgTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchSelectStartPos.current = { x: touch.clientX, y: touch.clientY };
+    touchLastPos.current = { x: touch.clientX, y: touch.clientY };
+    touchSelectActive.current = false;
+    const idx = getMsgIdxFromPoint(touch.clientX, touch.clientY);
+    if (idx === null) return;
+
+    if (selectionMode) {
+      touchSelectTimer.current = setTimeout(() => {
+        touchSelectActive.current = true;
+        touchSelectAnchorIdx.current = idx;
+      }, LONG_PRESS_MS);
+      return;
+    }
+
+    touchSelectTimer.current = setTimeout(() => {
+      touchSelectActive.current = true;
+      touchSelectAnchorIdx.current = idx;
+      setSelectionMode(true);
+      setSelectedIds(new Set([chatMessages[idx]?.messageId].filter(Boolean) as string[]));
+    }, LONG_PRESS_MS);
+  }, [selectionMode, chatMessages]);
+
+  const handleMsgTouchMove = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchLastPos.current = { x: touch.clientX, y: touch.clientY };
+
+    // Cancel long-press if finger moved too much before timer fires
+    if (!touchSelectActive.current && touchSelectStartPos.current) {
+      const dx = touch.clientX - touchSelectStartPos.current.x;
+      const dy = touch.clientY - touchSelectStartPos.current.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 10) {
+        if (touchSelectTimer.current) clearTimeout(touchSelectTimer.current);
+        touchSelectTimer.current = null;
+      }
+    }
+    if (!touchSelectActive.current || touchSelectAnchorIdx.current === null) return;
+    e.preventDefault(); // prevent scroll while drag-selecting
+
+    // Update selection based on current finger position
+    const idx = getMsgIdxFromPoint(touch.clientX, touch.clientY);
+    if (idx !== null) {
+      const lo = Math.min(touchSelectAnchorIdx.current, idx);
+      const hi = Math.max(touchSelectAnchorIdx.current, idx);
+      const ids = chatMessages.slice(lo, hi + 1).map((m) => m.messageId);
+      setSelectedIds(new Set(ids));
+    }
+
+    const el = scrollContainerRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const distFromTop = touch.clientY - rect.top;
+      const distFromBottom = rect.bottom - touch.clientY;
+      if (distFromTop < AUTO_SCROLL_ZONE || distFromBottom < AUTO_SCROLL_ZONE) {
+        startTouchAutoScroll();
+      } else {
+        stopTouchAutoScroll();
+      }
+    }
+  }, [chatMessages]);
+
+  const handleMsgTouchEnd = useCallback(() => {
+    if (touchSelectTimer.current) clearTimeout(touchSelectTimer.current);
+    touchSelectTimer.current = null;
+    touchSelectActive.current = false;
+    touchSelectAnchorIdx.current = null;
+    touchSelectStartPos.current = null;
+    stopTouchAutoScroll();
   }, []);
 
   const toggleSelectMessage = useCallback((messageId: string) => {
@@ -4415,6 +4542,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         onMouseDown={handleMsgMouseDown}
         onMouseMove={handleMsgMouseMove}
         onMouseUp={handleMsgMouseUp}
+        onTouchStart={handleMsgTouchStart}
+        onTouchMove={handleMsgTouchMove}
+        onTouchEnd={handleMsgTouchEnd}
+        onTouchCancel={handleMsgTouchEnd}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -4677,7 +4808,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           style={{
             position: 'absolute',
             right: 16,
-            bottom: 90,
+            bottom: 120,
             display: 'flex',
             flexDirection: 'column',
             gap: 6,

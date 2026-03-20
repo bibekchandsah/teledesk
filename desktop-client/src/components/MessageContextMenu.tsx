@@ -65,13 +65,17 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const close = (e: MouseEvent) => {
+    const close = (e: MouseEvent | TouchEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) {
         onClose();
       }
     };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('touchstart', close, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('touchstart', close);
+    };
   }, [onClose]);
 
   // Recalculate position when picker opens/closes

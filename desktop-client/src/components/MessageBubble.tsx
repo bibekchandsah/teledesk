@@ -617,6 +617,111 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [adjustedPos, setAdjustedPos] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // ─── Swipe + long-press gesture state (touch devices) ────────────────────
+  const swipeTouchStartX = useRef<number | null>(null);
+  const swipeTouchStartY = useRef<number | null>(null);
+  const swipeTranslateX = useRef<number>(0);
+  const bubbleWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeTriggered, setSwipeTriggered] = useState(false);
+  // Track last touch position for context menu placement
+  const lastTouchPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const SWIPE_THRESHOLD = 60;
+  const SWIPE_MAX = 80;
+  const TAP_MOVE_LIMIT = 8;
+
+  // ─── Touch tap → context menu (most reliable: touchstart + touchend) ──────
+  const tapStartPos = useRef<{ x: number; y: number } | null>(null);
+  const tapCancelled = useRef(false);
+  const menuWasOpenOnTapStart = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    tapStartPos.current = { x: t.clientX, y: t.clientY };
+    lastTouchPos.current = { x: t.clientX, y: t.clientY };
+    // Cancel tap if finger landed on an interactive element inside the bubble
+    const target = e.target as HTMLElement;
+    const isInteractive = !!target.closest('button, a, input, [role="button"], .emoji-reaction');
+    tapCancelled.current = isInteractive;
+    menuWasOpenOnTapStart.current = ctxMenu !== null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!tapStartPos.current) return;
+    const t = e.touches[0];
+    lastTouchPos.current = { x: t.clientX, y: t.clientY };
+    const dx = t.clientX - tapStartPos.current.x;
+    const dy = t.clientY - tapStartPos.current.y;
+    if (Math.abs(dx) > TAP_MOVE_LIMIT || Math.abs(dy) > TAP_MOVE_LIMIT) {
+      tapCancelled.current = true;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!tapCancelled.current && tapStartPos.current && onDelete) {
+      if (menuWasOpenOnTapStart.current) {
+        // Menu was open when finger went down → close it (toggle off)
+        setCtxMenu(null);
+      } else {
+        // Menu was closed → open it
+        e.preventDefault();
+        onContextMenuOpen?.();
+        setCtxMenu({ x: lastTouchPos.current.x, y: lastTouchPos.current.y });
+      }
+    }
+    tapStartPos.current = null;
+    tapCancelled.current = false;
+    menuWasOpenOnTapStart.current = false;
+  };
+
+  // ─── Swipe handlers (pointer events, touch only) ──────────────────────────
+  const handleSwipePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    swipeTouchStartX.current = e.clientX;
+    swipeTouchStartY.current = e.clientY;
+    swipeTranslateX.current = 0;
+    setSwipeTriggered(false);
+  };
+
+  const handleSwipePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch' || swipeTouchStartX.current === null || swipeTouchStartY.current === null) return;
+    const dx = e.clientX - swipeTouchStartX.current;
+    const dy = e.clientY - swipeTouchStartY.current;
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    const clamped = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, dx));
+    swipeTranslateX.current = clamped;
+    setSwipeOffset(clamped);
+  };
+
+  const handleSwipePointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch' || swipeTouchStartX.current === null || swipeTouchStartY.current === null) return;
+    const totalDx = e.clientX - swipeTouchStartX.current;
+    const totalDy = e.clientY - swipeTouchStartY.current;
+    const isTap = Math.abs(totalDx) < TAP_MOVE_LIMIT && Math.abs(totalDy) < TAP_MOVE_LIMIT;
+
+    if (!isTap) {
+      const dx = swipeTranslateX.current;
+      if (!swipeTriggered) {
+        if (dx < -SWIPE_THRESHOLD) {
+          setSwipeTriggered(true);
+          setReplyFlash(true);
+          setTimeout(() => setReplyFlash(false), 400);
+          onReply?.(message);
+        } else if (dx > SWIPE_THRESHOLD) {
+          setSwipeTriggered(true);
+          onForward?.(message);
+        }
+      }
+    }
+
+    swipeTouchStartX.current = null;
+    swipeTouchStartY.current = null;
+    swipeTranslateX.current = 0;
+    setSwipeOffset(0);
+  };
+
   // ─── Double-click reply flash ─────────────────────────────────────────────
   const [replyFlash, setReplyFlash] = useState(false);
   // ─── Bookmark state ───────────────────────────────────────────────────────
@@ -846,6 +951,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleMouseEnterBubble = () => {
   // const handleMouseEnterBubble = (e: React.MouseEvent) => {
     if (message.deleted) return;
+    if (isTouchDevice) return; // touch devices use tap → context menu instead
     
     // Calculate bar position relative to portal container
     // const bubble = e.currentTarget as HTMLElement;
@@ -1150,6 +1256,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       }}>{toast}</div>
     )}
     <div
+      ref={bubbleWrapperRef}
       className={`message-bubble-wrapper ${isOwn ? 'own' : 'other'}`}
       style={{
         display: 'flex',
@@ -1159,11 +1266,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         marginBottom: reactionEntries.length > 0 ? 8 : 4,
         padding: '0 16px',
         position: 'relative',
+        transform: swipeOffset !== 0 ? `translateX(${swipeOffset}px)` : undefined,
+        transition: swipeOffset === 0 ? 'transform 0.2s ease' : 'none',
+        touchAction: 'pan-y',
       }}
       onContextMenu={handleContextMenu}
       onDoubleClick={handleDoubleClick}
       onMouseEnter={handleMouseEnterBubble}
       onMouseLeave={handleMouseLeaveBubble}
+      onPointerDown={handleSwipePointerDown}
+      onPointerMove={handleSwipePointerMove}
+      onPointerUp={handleSwipePointerUp}
+      onPointerCancel={handleSwipePointerUp}
+      {...(isTouchDevice && {
+        onTouchStart: handleTouchStart,
+        onTouchMove: handleTouchMove,
+        onTouchEnd: handleTouchEnd,
+      })}
     >
       {!isOwn && showSender && (
         <UserAvatar name={senderName || 'User'} avatar={senderAvatar} size={28} />
