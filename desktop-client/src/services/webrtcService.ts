@@ -24,6 +24,7 @@ let remoteStreamCallback: ((stream: MediaStream) => void) | null = null;
 // Signaling targets — needed so startScreenShare can send renegotiation offers directly.
 let currentTargetUserId: string | null = null;
 let currentCallId: string | null = null;
+let hasReceivedInitialAnswer = false;
 
 export const hasPeer = (): boolean => currentPeer !== null && !(currentPeer as any).destroyed;
 
@@ -177,25 +178,13 @@ export const processRenegotiationOffer = async (
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
   
-  // Check if we're in a valid state to handle the offer
-  if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
-    console.warn('[WebRTC] Cannot process renegotiation offer in state:', pc.signalingState);
-    return;
-  }
-  
   try {
-    // Temporarily suppress simple-peer's negotiationneeded handler to prevent race conditions
-    const savedHandler = pc.onnegotiationneeded;
-    pc.onnegotiationneeded = null;
     
     // If we receive an offer while simple-peer is in a transition state,
     // we bypass its signal() method and handle the SDP directly on the PC.
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    
-    // Restore the handler after our operation completes
-    pc.onnegotiationneeded = savedHandler;
     
     sendAnswer(sendToUserId, callId, { type: 'answer', sdp: answer.sdp! });
 
@@ -227,18 +216,13 @@ export const processRenegotiationOffer = async (
     }
   } catch (err) {
     console.error('[WebRTC] processRenegotiationOffer failed:', err);
-    // Restore handler even if we failed
-    const savedHandler = pc.onnegotiationneeded;
-    if (!savedHandler) {
-      pc.onnegotiationneeded = (currentPeer as any)._onNegotiationNeeded?.bind(currentPeer) || null;
-    }
   }
 };
 
 /**
  * Attaches a direct RTCPeerConnection 'track' event listener that catches
- * renegotiation video tracks simple-peer's 'stream' event misses, and hooks
- * 'onunmute' for replaceTrack(null) → replaceTrack(newTrack) resume cycles.
+ * renegotiation tracks (both audio and video) simple-peer's 'stream' event misses,
+ * and hooks 'onunmute' for replaceTrack(null) → replaceTrack(newTrack) resume cycles.
  * Must be called for BOTH initiator and receiver peers.
  */
 function attachRenegotiationTrackListener(
@@ -249,7 +233,14 @@ function attachRenegotiationTrackListener(
   pc.addEventListener('track', (event: RTCTrackEvent) => {
     if (!firstRemoteStream) return; // initial stream not set yet — simple-peer handles it
     const track = event.track;
-    if (track.kind !== 'video') return;
+
+    // Immediately add the track if it arrived after the initial stream grouping
+    if (!firstRemoteStream.getTrackById(track.id)) {
+      firstRemoteStream.addTrack(track);
+      const clone = new MediaStream(firstRemoteStream.getTracks());
+      firstRemoteStream = clone;
+      if (remoteStreamCallback) remoteStreamCallback(clone);
+    }
 
     // Hook onunmute: fired when the remote peer calls replaceTrack(newTrack) after
     // a previous replaceTrack(null). No renegotiation happens for that, so this
@@ -379,6 +370,16 @@ export const createReceiverPeer = (
 
   currentPeer.on('stream', (remoteStream) => {
     if (!firstRemoteStream) {
+      // BRUTE FORCE TRACK GATHERING: simple-peer notoriously drops tracks in modern Chrome
+      // if they arrive asynchronously. We query the raw receivers to guarantee nothing is lost!
+      const pc: RTCPeerConnection = (currentPeer as any)._pc;
+      if (pc) {
+        const allTracks = pc.getReceivers().map(r => r.track).filter(Boolean) as MediaStreamTrack[];
+        allTracks.forEach(t => {
+          if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+        });
+      }
+      
       firstRemoteStream = remoteStream;
       // Attach onunmute to initial video tracks for replaceTrack resume cycles.
       remoteStream.getVideoTracks().forEach((track) => {
@@ -418,18 +419,23 @@ export const processRenegotiationAnswer = async (answer: RTCSessionDescriptionIn
   if (!currentPeer || (currentPeer as any).destroyed) return;
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
-  
-  // Check if we're in a valid state to handle the answer
-  if (pc.signalingState !== 'have-local-offer') {
-    console.warn('[WebRTC] Cannot process renegotiation answer in state:', pc.signalingState);
-    return;
-  }
-  
+
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('[WebRTC] Handled renegotiation answer successfully');
   } catch (err) {
     console.error('[WebRTC] processRenegotiationAnswer failed:', err);
+  }
+};
+
+/**
+ * Process an incoming answer (can be initial or renegotiation).
+ */
+export const processAnswer = (answer: RTCSessionDescriptionInit): void => {
+  if (!hasReceivedInitialAnswer) {
+    hasReceivedInitialAnswer = true;
+    processSignal(answer as unknown as import('simple-peer').SignalData);
+  } else {
+    processRenegotiationAnswer(answer);
   }
 };
 

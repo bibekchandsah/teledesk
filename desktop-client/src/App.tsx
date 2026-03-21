@@ -51,14 +51,13 @@ import AppLockScreen from './components/AppLockScreen';
 import AppLockPinModal from './components/modals/AppLockPinModal';
 import ToastProvider from './components/ToastProvider';
 import NetworkListener from './components/NetworkListener';
-import PopupBlockedNotification from './components/PopupBlockedNotification';
 import UpdateBanner from './components/UpdateBanner';
 
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId, appLockModal, setAppLockModal } = useUIStore();
-  const { activeCall, incomingCall, isCallInPopup, showPopupBlockedNotification } = useCallStore();
+  const { activeCall, incomingCall} = useCallStore();
   // const { activeCall, incomingCall } = useCallStore();
   const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
@@ -70,52 +69,6 @@ const AppInner: React.FC = () => {
   const isPopupWindow = location.pathname.startsWith('/popup');
   const isCallWindow = location.pathname.startsWith('/call-window');
   const isIncomingCallWindow = location.pathname.startsWith('/incoming-call');
-  
-  // Debug logging for call state
-  useEffect(() => {
-    if (activeCall) {
-      const willShow = !window.electronAPI?.openCallWindow && !isCallInPopup;
-      console.log('[App] ActiveCall state changed:', { 
-        callId: activeCall.callId, 
-        isCallInPopup, 
-        hasElectronAPI: !!window.electronAPI?.openCallWindow,
-        willShowCallScreen: willShow
-      });
-      
-      if (!willShow && activeCall) {
-        console.warn('[App] CallScreen will NOT render - isCallInPopup:', isCallInPopup, 'hasElectron:', !!window.electronAPI?.openCallWindow);
-      }
-    } else {
-      console.log('[App] activeCall is null, CallScreen will unmount');
-    }
-  }, [activeCall, isCallInPopup]);
-  
-  useEffect(() => {
-    if (incomingCall) {
-      console.log('[App] IncomingCall state changed:', { 
-        callId: incomingCall.callId, 
-        isCallInPopup, 
-        hasElectronAPI: !!window.electronAPI?.openIncomingCallWindow,
-        willShowModal: !window.electronAPI?.openIncomingCallWindow && !isCallInPopup
-      });
-    }
-  }, [incomingCall, isCallInPopup]);
-
-  // Handle popup blocked notification
-  const handleUseInAppCall = () => {
-    const { setIsCallInPopup, setShowPopupBlockedNotification } = useCallStore.getState();
-    
-    // Switch to in-app mode
-    setIsCallInPopup(false);
-    setShowPopupBlockedNotification(false);
-    
-    console.log('[App] User chose to use in-app call');
-  };
-
-  const handleDismissPopupNotification = () => {
-    const { setShowPopupBlockedNotification } = useCallStore.getState();
-    setShowPopupBlockedNotification(false);
-  };
   
   // App lock state - check immediately on mount, before any content renders
   const [appLockReady, setAppLockReady] = React.useState(false);
@@ -604,20 +557,8 @@ const AppInner: React.FC = () => {
           </div>
 
           {/* Overlays — shown only as fallback when not running in Electron or when popup is blocked */}
-          {activeCall && !window.electronAPI?.openCallWindow && !isCallInPopup && <CallScreen key={activeCall.callId} />}
-          {incomingCall && !window.electronAPI?.openIncomingCallWindow && !isCallInPopup && <IncomingCallModal key={incomingCall.callId} />}
-          {/* {activeCall && !window.electronAPI?.openCallWindow && <CallScreen key={activeCall.callId} />}
-          {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal key={incomingCall.callId} />} */}
-
-          {/* Popup blocked notification */}
-          {showPopupBlockedNotification && activeCall && (
-            <PopupBlockedNotification
-              callType={activeCall.type}
-              targetName={activeCall.receiverName || 'Contact'}
-              onUseInApp={handleUseInAppCall}
-              onDismiss={handleDismissPopupNotification}
-            />
-          )}
+          {activeCall && !window.electronAPI?.openCallWindow && <CallScreen />}
+          {incomingCall && !window.electronAPI?.openIncomingCallWindow && <IncomingCallModal />}
 
           {/* PIN Modal */}
           {pinModal && (

@@ -26,3 +26,16 @@ store chats in device and update accordingly when new events occurs and while us
 
 
 18. for mobile device applying custom theme not showing effect instantly 
+
+
+web to web has no audio
+
+
+
+
+fixed incoming modal to receive call in web & desktop
+fixed accepting call in web & desktop
+fixed desktop app ringing sound when call is received
+fixed incoming ringing sound in desktop app 
+fixed voice audio in desktop to web and web to desktop
+fixed video audio in desktop to web and web to desktop

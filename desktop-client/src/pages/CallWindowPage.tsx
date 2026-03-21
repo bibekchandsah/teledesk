@@ -3,7 +3,7 @@ import Sp from 'simple-peer';
 import type { Instance as SimplePeerInstance } from 'simple-peer';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const SimplePeer = ((Sp as any).default ?? Sp) as typeof Sp;
-import { WEBRTC_CONFIG } from '../config/webrtc';
+import { WEBRTC_CONFIG } from '@shared/constants/config';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import VideoStream from '../components/VideoStream';
 import UserAvatar from '../components/UserAvatar';
@@ -16,7 +16,7 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
 import { getUserById } from '../services/apiService';
-import { signalingLock } from '../utils/SignalingLock';
+import callAudioService from '../services/callAudioService';
 
 interface CallWindowInitData {
   callId: string;
@@ -124,6 +124,7 @@ const CallWindowPage: React.FC = () => {
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   // Queue ICE candidates that arrive before the peer is constructed
   const pendingSignalsRef = useRef<Array<import('simple-peer').SignalData>>([]);
+  const hasReceivedInitialAnswerRef = useRef(false);
   // Buffer peer-creation intent when OFFER/ACCEPT_CALL arrives before stream is ready
   const pendingPeerRef = useRef<{
     isInitiator: boolean;
@@ -152,8 +153,19 @@ const CallWindowPage: React.FC = () => {
       }
     });
     return unsub;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
+
+  // ─── Play incoming ringtone ───────────────────────────────────────────────
+  useEffect(() => {
+    const cd = callDataRef.current;
+    if (cd && !cd.isOutgoing && !isAccepted) {
+      callAudioService.playIncomingRingtone();
+    }
+    return () => {
+      callAudioService.stopIncomingRingtone();
+    };
+  }, [isAccepted]);
 
   // ─── Derived: 1-on-1 chat between the two call participants ────────────────
   const callChat = callData && currentUser
@@ -181,12 +193,7 @@ const CallWindowPage: React.FC = () => {
 
   // ─── IPC signal sender (routes socket events through main window) ──────────
   const sendSocketEvent = useCallback((event: string, data: unknown) => {
-    if (window.electronAPI) {
-      window.electronAPI.emitSocketFromCallWindow?.(event, data);
-    } else if (window.opener) {
-      // Web Popup: send to opener via postMessage
-      window.opener.postMessage({ type: 'call-window-socket-emit', event, data }, window.location.origin);
-    }
+    window.electronAPI?.emitSocketFromCallWindow?.(event, data);
   }, []);
 
   // ─── Capture local media stream ───────────────────────────────────────────
@@ -234,6 +241,8 @@ const CallWindowPage: React.FC = () => {
     setRemoteStream(null);
     setCallStatus('ended');
     pendingSignalsRef.current = [];
+    hasReceivedInitialAnswerRef.current = false;
+    callAudioService.stopAllRingtones();
   }, []);
 
   // ─── Create WebRTC initiator peer (caller side) ───────────────────────────
@@ -286,12 +295,6 @@ const CallWindowPage: React.FC = () => {
 
       peer.on('error', (err) => console.error('[CallWindow] Initiator peer error:', err));
       peer.on('close', () => console.log('[CallWindow] Initiator peer closed'));
-
-      const pc = (peer as any)._pc as RTCPeerConnection;
-      if (pc) {
-        pc.onconnectionstatechange = () => setConnectionState(pc.connectionState);
-        pc.oniceconnectionstatechange = () => setIceState(pc.iceConnectionState);
-      }
 
       peerRef.current = peer;
 
@@ -358,12 +361,6 @@ const CallWindowPage: React.FC = () => {
       peer.on('error', (err) => console.error('[CallWindow] Receiver peer error:', err));
       peer.on('close', () => console.log('[CallWindow] Receiver peer closed'));
 
-      const pc = (peer as any)._pc as RTCPeerConnection;
-      if (pc) {
-        pc.onconnectionstatechange = () => setConnectionState(pc.connectionState);
-        pc.oniceconnectionstatechange = () => setIceState(pc.iceConnectionState);
-      }
-
       peerRef.current = peer;
 
       // Signal the initial offer
@@ -429,13 +426,18 @@ const CallWindowPage: React.FC = () => {
       }
 
       if (event === SOCKET_EVENTS.ANSWER) {
-        const answerData = data as { answer: RTCSessionDescriptionInit };
+        const answerData = data as { answer: import('simple-peer').SignalData };
         if (peerRef.current && !(peerRef.current as unknown as { destroyed: boolean }).destroyed) {
-          const pc: RTCPeerConnection = (peerRef.current as unknown as { _pc: RTCPeerConnection })._pc;
-          if (pc) {
-            pc.setRemoteDescription(new RTCSessionDescription(answerData.answer)).catch((err) =>
-              console.error('[CallWindow] setRemoteDescription(answer) failed:', err),
-            );
+          if (!hasReceivedInitialAnswerRef.current) {
+            hasReceivedInitialAnswerRef.current = true;
+            peerRef.current.signal(answerData.answer);
+          } else {
+            const pc: RTCPeerConnection = (peerRef.current as unknown as { _pc: RTCPeerConnection })._pc;
+            if (pc) {
+              pc.setRemoteDescription(new RTCSessionDescription(answerData.answer as RTCSessionDescriptionInit)).catch((err) =>
+                console.error('[CallWindow] setRemoteDescription(answer) failed:', err),
+              );
+            }
           }
         }
         return;
@@ -454,14 +456,8 @@ const CallWindowPage: React.FC = () => {
 
       if (event === SOCKET_EVENTS.CALL_ENDED || event === SOCKET_EVENTS.CALL_REJECTED) {
         cleanup();
-        // Delay slightly to let cleanup() settle before IPC/Closure
-        setTimeout(() => {
-          if (window.electronAPI) {
-            window.electronAPI.hangupCallWindow?.();
-          } else {
-            window.close();
-          }
-        }, 200);
+        // Delay slightly to let cleanup() settle before IPC
+        setTimeout(() => window.electronAPI?.hangupCallWindow?.(), 200);
         return;
       }
 
@@ -488,41 +484,18 @@ const CallWindowPage: React.FC = () => {
 
   // ─── Mount: register IPC relay listener and immediately start capturing media ─────
   useEffect(() => {
-    const cd = callDataRef.current;
-
-    // Register socket relay listener (Electron IPC)
+    // Register socket relay listener  first, THEN signal ready so no events are missed
     const unsubSocket = window.electronAPI?.onRelayedSocketEvent?.((event, data) => {
       handleSocketEvent(event, data);
     });
 
-    // Register socket relay listener (Web postMessage)
-    const handleWebMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'relayed-socket-event') {
-        handleSocketEvent(event.data.event, event.data.data);
-      }
-    };
-    if (!window.electronAPI) {
-      window.addEventListener('message', handleWebMessage);
-    }
-
     // Signal that the renderer is ready — flushes buffered relay events from main
-    if (window.electronAPI) {
-      window.electronAPI.requestCallWindowReady?.();
-    } else if (window.opener) {
-      window.opener.postMessage({ type: 'call-window-ready' }, window.location.origin);
-    }
+    window.electronAPI?.requestCallWindowReady?.();
 
-    // MULTI-TAB SYNC: Dedicated call window always acquires the lock
+
+    // callData is already set from URL params — start capturing media now
+    const cd = callDataRef.current;
     if (cd) {
-      signalingLock.acquire(cd.callId);
-    }
-    const lockInterval = setInterval(() => {
-      if (cd) signalingLock.keepAlive(cd.callId);
-    }, 2000);
-
-    // callData is already set from URL params — start capturing media ONLY if outgoing
-    if (cd && cd.isOutgoing) {
       captureLocalStream(cd.callType)
         .then((stream) => {
           setLocalStream(stream);
@@ -535,9 +508,9 @@ const CallWindowPage: React.FC = () => {
               createInitiatorPeer(stream, pp.callId, pp.targetUserId);
             } else if (pp.offer) {
               createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
-              startTimer();
-              setCallStatus('active');
             }
+            startTimer();
+            setCallStatus('active');
           }
         })
         .catch((err) => {
@@ -547,48 +520,28 @@ const CallWindowPage: React.FC = () => {
           console.error('[CallWindow] Media error:', err);
           setMediaError(msg);
         });
-    } else if (cd && !cd.isOutgoing) {
-      // For incoming calls, pre-capture media to reduce delay when accepting
-      captureLocalStream(cd.callType)
-        .then((stream) => {
-          setLocalStream(stream);
-          localStreamRef.current = stream;
-          console.log('[CallWindow] Pre-captured media for incoming call');
-        })
-        .catch((err) => {
-          console.warn('[CallWindow] Pre-capture failed, will retry on accept:', err);
-        });
     }
 
     return () => {
       unsubSocket?.();
-      if (!window.electronAPI) {
-        window.removeEventListener('message', handleWebMessage);
-      }
-      clearInterval(lockInterval);
-      if (cd) signalingLock.release(cd.callId);
+      cleanup();
     };
-  }, [handleSocketEvent, currentUser?.uid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ─── Play remote stream through hidden <audio> element ───────────────────
+  // ─── Play remote stream through DOM <audio> element ───────────────────
   useEffect(() => {
-    if (!remoteStream) return;
-    if (!remoteAudioRef.current) {
-      const audio = new Audio();
-      audio.autoplay = true;
-      remoteAudioRef.current = audio;
-    }
+    if (!remoteStream || !remoteAudioRef.current) return;
     remoteAudioRef.current.srcObject = remoteStream;
     const savedSpeaker = localStorage.getItem('selectedSpeakerId');
-    if (savedSpeaker && typeof (remoteAudioRef.current as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function') {
-      (remoteAudioRef.current as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
-        .setSinkId(savedSpeaker)
-        .catch(() => {});
+    if (savedSpeaker && typeof (remoteAudioRef.current as any).setSinkId === 'function') {
+      (remoteAudioRef.current as any).setSinkId(savedSpeaker).catch(() => { });
     }
-    remoteAudioRef.current.play().catch(() => {});
-    return () => {
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
-    };
+    remoteAudioRef.current.play().catch((e) => {
+      if (e.name !== 'AbortError') {
+        console.error('[CallWindow] Audio autoplay failed:', e);
+      }
+    });
   }, [remoteStream]);
 
   // ─── Audio visualiser — analyses remote stream volume ────────────────────
@@ -598,11 +551,12 @@ const CallWindowPage: React.FC = () => {
 
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
-    audioCtx.resume().catch(() => {});
+    audioCtx.resume().catch(() => { });
     const source = audioCtx.createMediaStreamSource(remoteStream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
+    analyser.connect(audioCtx.destination);
     analyserRef.current = analyser;
     const data = new Uint8Array(analyser.frequencyBinCount);
     const tick = () => {
@@ -677,46 +631,25 @@ const CallWindowPage: React.FC = () => {
 
     const cd = callDataRef.current;
 
-    /** Helper to trigger manual renegotiation with optional ICE restart */
-    const triggerRenegotiation = async (restartIce = false) => {
-      const savedHandler = pc.onnegotiationneeded;
-      pc.onnegotiationneeded = null;
-      try {
-        const offer = await pc.createOffer({ iceRestart: restartIce });
-        await pc.setLocalDescription(offer);
-        if (cd) {
-          sendSocketEvent(SOCKET_EVENTS.OFFER, {
-            to: cd.targetUserId,
-            callId: cd.callId,
-            offer: { type: offer.type, sdp: offer.sdp },
-          });
-        }
-      } catch (e) {
-        console.error('[CallWindow] triggerRenegotiation failed:', e);
-      } finally {
-        setTimeout(() => { pc.onnegotiationneeded = savedHandler; }, 0);
-      }
-    };
-
     if (cd?.callType === 'video') {
       // ── Standard video call: toggle existing video track ──────────────────
       const newOff = !isVideoOff;
       setIsVideoOff(newOff);
       const tracks = localStreamRef.current?.getVideoTracks() ?? [];
       tracks.forEach((t) => { t.enabled = !newOff; });
-      
+
       const transceiver = pc.getTransceivers().find(
-        (t) => t.sender.track?.kind === 'video' || (t.sender.track === null && t.receiver.track?.kind === 'video'),
+        (t) =>
+          t.sender.track?.kind === 'video' ||
+          (t.sender.track === null && t.receiver.track?.kind === 'video'),
       );
-      
+
       if (transceiver) {
-        try {
-          await transceiver.sender.replaceTrack(newOff ? null : (tracks[0] ?? null));
-        } catch (err) {
-          console.error('[CallWindow] toggleVideo replaceTrack failed:', err);
-        }
+        await (newOff
+          ? transceiver.sender.replaceTrack(null)
+          : transceiver.sender.replaceTrack(tracks[0] ?? null)
+        ).catch((err) => console.error('[CallWindow] toggleVideo replaceTrack failed:', err));
       }
-      
       if (callStatus === 'active' && cd) {
         sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
           to: cd.targetUserId,
@@ -726,22 +659,39 @@ const CallWindowPage: React.FC = () => {
       }
     } else {
       // ── Voice call: upgrade to video / downgrade back ─────────────────────
+      const sendRenego = async () => {
+        const savedHandler = pc.onnegotiationneeded;
+        pc.onnegotiationneeded = null;
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          if (cd) {
+            sendSocketEvent(SOCKET_EVENTS.OFFER, {
+              to: cd.targetUserId,
+              callId: cd.callId,
+              offer: { type: offer.type, sdp: offer.sdp },
+            });
+          }
+        } catch (e) {
+          console.error('[CallWindow] voice-video renegotiate:', e);
+        } finally {
+          setTimeout(() => { pc.onnegotiationneeded = savedHandler; }, 0);
+        }
+      };
+
       if (isLocalVideoEnabled) {
-        // ── Disable camera (downgrade) ───────────────────────────────────────
+        // ── Disable camera ───────────────────────────────────────
         const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video');
         if (videoSender) {
           await videoSender.replaceTrack(null).catch((e) => console.error('[CallWindow] disableCallVideo:', e));
           const tc = pc.getTransceivers().find((t) => t.sender === videoSender);
-          if (tc) {
-            // Preserve receiving if remote is still sending
-            tc.direction = tc.direction === 'sendrecv' ? 'recvonly' : 'inactive';
-          }
+          if (tc) tc.direction = tc.direction === 'sendrecv' ? 'recvonly' : 'inactive';
         }
         if (localStreamRef.current) {
           localStreamRef.current.getVideoTracks().forEach((t) => { t.stop(); localStreamRef.current!.removeTrack(t); });
           setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
         }
-        await triggerRenegotiation();
+        await sendRenego();
         setIsLocalVideoEnabled(false);
         if (callStatus === 'active' && cd) {
           sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
@@ -751,13 +701,13 @@ const CallWindowPage: React.FC = () => {
           });
         }
       } else {
-        // ── Enable camera (upgrade) ──────────────────────────────────────────
+        // ── Enable camera ──────────────────────────────────────────
         try {
           const savedCamId = localStorage.getItem('selectedCameraId');
           const videoConstraint: MediaTrackConstraints = savedCamId
-            ? { deviceId: { ideal: savedCamId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { width: { ideal: 1280 }, height: { ideal: 720 } };
-            
+            ? { deviceId: { ideal: savedCamId }, width: 1280, height: 720 }
+            : { width: 1280, height: 720 };
+
           const camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraint });
           const videoTrack = camStream.getVideoTracks()[0];
           if (!videoTrack) return;
@@ -773,18 +723,34 @@ const CallWindowPage: React.FC = () => {
           );
 
           if (existingTc) {
-            await existingTc.sender.replaceTrack(videoTrack);
-            const dir = existingTc.direction;
-            if (dir === 'recvonly' || dir === 'inactive') {
-              existingTc.direction = dir === 'recvonly' ? 'sendrecv' : 'sendonly';
-              await triggerRenegotiation();
-            }
+            // Reuse existing transceiver: just replace the track and update direction
+            await existingTc.sender.replaceTrack(videoTrack).catch((e) => console.error('[CallWindow] enableCallVideo replaceTrack:', e));
+            if (existingTc.direction === 'recvonly') existingTc.direction = 'sendrecv';
+            if (existingTc.direction === 'inactive') existingTc.direction = 'sendonly';
+            await sendRenego();
           } else {
-            // New transceiver
+            // New transceiver: suppress simple-peer's handler, addTrack, then renegotiate
+            const savedHandler = pc.onnegotiationneeded;
+            pc.onnegotiationneeded = null;
             pc.addTrack(videoTrack, localStreamRef.current!);
-            await triggerRenegotiation();
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              if (cd) {
+                sendSocketEvent(SOCKET_EVENTS.OFFER, {
+                  to: cd.targetUserId,
+                  callId: cd.callId,
+                  offer: { type: offer.type, sdp: offer.sdp },
+                });
+              }
+            } catch (e) {
+              console.error('[CallWindow] enableCallVideo addTrack:', e);
+            } finally {
+              setTimeout(() => { pc.onnegotiationneeded = savedHandler; }, 0);
+            }
           }
-          
+
+
           setIsLocalVideoEnabled(true);
           if (callStatus === 'active' && cd) {
             sendSocketEvent(SOCKET_EVENTS.CALL_VIDEO_CHANGED, {
@@ -793,8 +759,9 @@ const CallWindowPage: React.FC = () => {
               isVideoOff: false,
             });
           }
-        } catch (e) {
-          console.error('[CallWindow] enableCallVideo failed:', e);
+        }
+        catch (e) {
+          console.error('[CallWindow] enableCallVideo:', e);
         }
       }
     }
@@ -813,38 +780,12 @@ const CallWindowPage: React.FC = () => {
   };
 
   // ─── Incoming call: user taps Accept ──────────────────────────────────────
-  const handleAcceptCall = async () => {
+  const handleAcceptCall = () => {
     const cd = callDataRef.current;
-    if (!cd || isAccepted) return;
+    if (!cd) return;
+    sendSocketEvent(SOCKET_EVENTS.ACCEPT_CALL, { callId: cd.callId, callerId: cd.targetUserId });
+    window.electronAPI?.sendWindowEvent?.('incoming-accepted');
     setIsAccepted(true);
-
-    try {
-      let stream = localStreamRef.current;
-      if (!stream) {
-        stream = await captureLocalStream(cd.callType);
-        setLocalStream(stream);
-        localStreamRef.current = stream;
-      }
-
-      sendSocketEvent(SOCKET_EVENTS.ACCEPT_CALL, { 
-        callId: cd.callId, 
-        callerId: cd.targetUserId,
-        acceptorId: currentUser?.uid 
-      });
-      window.electronAPI?.sendWindowEvent?.('incoming-accepted');
-
-      // If we already have a pending offer, create receiver peer now
-      const pp = pendingPeerRef.current;
-      if (pp && pp.offer && stream) {
-        pendingPeerRef.current = null;
-        createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
-        startTimer();
-        setCallStatus('active');
-      }
-    } catch (err: any) {
-      console.error('[CallWindow] handleAcceptCall media error:', err);
-      setMediaError(err?.message || 'Could not access camera/microphone.');
-    }
   };
 
   // ─── Incoming call: user taps Decline ────────────────────────────────────
@@ -1193,7 +1134,10 @@ const CallWindowPage: React.FC = () => {
         overflow: 'hidden',
       }}
     >
-      {/* ── Media area ───────────────────────────────────────────── */}
+      {/* ── Hidden DOM Audio Element for Remote Stream ────────────── */}
+      <audio ref={remoteAudioRef} autoPlay muted style={{ display: 'none' }} />
+
+      {/* ── Video / audio area ─────────────────────────────────────── */}
       <div
         style={{
           flex: 1,
@@ -1214,11 +1158,14 @@ const CallWindowPage: React.FC = () => {
               const rightStream = gridSwapped ? remoteStream : localStream;
               const leftLabel   = gridSwapped ? 'You'        : displayName;
               const rightLabel  = gridSwapped ? displayName : 'You';
+              const leftMirror  = gridSwapped;
+              const rightMirror = !gridSwapped;
               return (
                 <>
                   <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
-                    <VideoStream stream={leftStream} label={leftLabel} muted={gridSwapped} mirror={gridSwapped}
-                      objectFit="contain" style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                    <VideoStream stream={leftStream} label={leftLabel} muted={true} mirror={leftMirror}
+                    objectFit="contain"
+                    style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                     <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{leftLabel}</div>
                   </div>
                   <div
@@ -1233,8 +1180,9 @@ const CallWindowPage: React.FC = () => {
                     >⇄</button>
                   </div>
                   <div style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#000' }}>
-                    <VideoStream stream={rightStream} label={rightLabel} muted={!gridSwapped} mirror={!gridSwapped}
-                      objectFit="contain" style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                    <VideoStream stream={rightStream} label={rightLabel} muted={true} mirror={rightMirror}
+                    objectFit="contain"
+                    style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                     <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{rightLabel}</div>
                   </div>
                 </>
@@ -1279,9 +1227,9 @@ const CallWindowPage: React.FC = () => {
           <>
             <VideoStream
               stream={localIsMain ? localStream : remoteStream}
-              label={localIsMain ? 'You' : displayName}
-              muted={localIsMain}
-              mirror={localIsMain}
+            label={localIsMain ? 'You' : displayName}
+            muted={true}
+            mirror={localIsMain}
               objectFit="contain"
               style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }}
             />
@@ -1368,8 +1316,12 @@ const CallWindowPage: React.FC = () => {
                   style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor }}
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
-                    <VideoStream stream={localIsMain ? remoteStream : localStream} muted={!localIsMain} mirror={!localIsMain}
-                      label={localIsMain ? displayName : 'You'} style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
+                    <VideoStream
+                    stream={localIsMain ? remoteStream : localStream}
+                    muted={true}
+                    mirror={!localIsMain}
+                    label={localIsMain ? displayName : 'You'}
+                    style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
                   </div>
                   <div onMouseEnter={() => setShowPipMenu(true)} onMouseLeave={() => setShowPipMenu(false)}
                     onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}

@@ -8,10 +8,9 @@ import { Phone } from 'lucide-react';
 import callAudioService from '../services/callAudioService';
 
 const IncomingCallModal: React.FC = () => {
-  const { incomingCall, remoteStream } = useCallStore();
+  const { incomingCall } = useCallStore();
   const { acceptIncomingCall, rejectIncomingCall } = useCallContext();
   const { nicknames } = useChatStore();
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Play incoming ringtone when modal appears
   useEffect(() => {
@@ -25,27 +24,6 @@ const IncomingCallModal: React.FC = () => {
     };
   }, [incomingCall]);
 
-  // Handle remote audio playback for voice calls
-  useEffect(() => {
-    if (!remoteStream) return;
-    
-    if (!remoteAudioRef.current) {
-      const audio = new Audio();
-      audio.autoplay = true;
-      remoteAudioRef.current = audio;
-    }
-    
-    remoteAudioRef.current.srcObject = remoteStream;
-    remoteAudioRef.current.play().catch((err) => {
-      console.warn('[IncomingCallModal] Failed to play remote audio:', err);
-    });
-
-    return () => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = null;
-      }
-    };
-  }, [remoteStream]);
 
   if (!incomingCall) return null;
 
@@ -54,20 +32,8 @@ const IncomingCallModal: React.FC = () => {
   const handleAccept = async () => {
     // Stop ringtone immediately when accepting
     callAudioService.stopIncomingRingtone();
-    
-    try {
-      const stream = await getLocalStream(incomingCall.type);
-      console.log('[IncomingCallModal] Captured stream for accept:', {
-        hasAudio: stream.getAudioTracks().length > 0,
-        hasVideo: stream.getVideoTracks().length > 0,
-        callType: incomingCall.type
-      });
-      acceptIncomingCall(stream);
-    } catch (error) {
-      console.error('[IncomingCallModal] Failed to get local stream:', error);
-      // Fallback with empty stream
-      acceptIncomingCall(new MediaStream());
-    }
+    const stream = await getLocalStream(incomingCall.type).catch(() => new MediaStream());
+    acceptIncomingCall(stream);
   };
 
   const handleReject = () => {

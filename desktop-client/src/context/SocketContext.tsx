@@ -21,8 +21,7 @@ const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
-  // const { setIncomingCall } = useCallStore();
-  const { setIncomingCall, setIsCallInPopup } = useCallStore();
+  const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
   const { logout } = useAuth();
   const { liveTypingEnabled } = useUIStore();
@@ -238,6 +237,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           targetAvatar: data.callerAvatar,
         });
       }
+
+      showNotification({
+        title: `Incoming ${data.callType} call`,
+        body: `${nicknames[data.callerId] || data.callerName} is calling...`,
+        icon: data.callerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(nicknames[data.callerId] || data.callerName || 'C')}&background=6366f1&color=fff`,
+      });
     };
 
     // ─── Chat Deleted Event ──────────────────────────────────────────────
@@ -375,6 +380,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
     socket.on(SOCKET_EVENTS.DRAFT_UPDATED, handleDraftUpdated);
     socket.on(SOCKET_EVENTS.DRAFT_DELETED, handleDraftDeleted);
+    socket.on(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
 
     isConnectedRef.current = socket.connected;
 
@@ -399,6 +405,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.USER_UPDATED, handleUserUpdated);
       socket.off(SOCKET_EVENTS.DRAFT_UPDATED, handleDraftUpdated);
       socket.off(SOCKET_EVENTS.DRAFT_DELETED, handleDraftDeleted);
+      socket.off(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
     };
   }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
 

@@ -136,13 +136,29 @@ const CallScreen: React.FC = () => {
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // NOTE: remote audio playback is handled globally by CallProvider so we
-  // don't create or manage any <audio> elements here. This component only
-  // uses remoteStream for visualisation and video rendering.
-
+  // ─── Play remote stream through DOM <audio> element ───────────────────
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    if (!remoteStream || !remoteAudioRef.current) return;
+    remoteAudioRef.current.srcObject = remoteStream;
+    const savedSpeaker = localStorage.getItem('selectedSpeakerId');
+    if (savedSpeaker && typeof (remoteAudioRef.current as any).setSinkId === 'function') {
+      (remoteAudioRef.current as any).setSinkId(savedSpeaker).catch(() => { });
+    }
+    remoteAudioRef.current.play().catch((e) => {
+      if (e.name !== 'AbortError') {
+        console.error('[CallScreen] Audio autoplay failed:', e);
+      }
+    });
+  }, [remoteStream]);
   // Audio visualiser — analyses remote stream volume (analyser only, no destination)
   useEffect(() => {
-    if (!remoteStream) return;
+    if (!remoteStream || remoteStream.getAudioTracks().length === 0) return;
+    
+    // TEMPORARILY DISABLED: AudioContext createMediaStreamSource is notorious for intercepting
+    // and destructively muting WebRTC MediaStreams in certain Chrome versions.
+    // To absolutely guarantee native audio playback works, this visualiser is bypassed.
+    /*
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
     audioCtx.resume().catch(() => {});
@@ -150,24 +166,27 @@ const CallScreen: React.FC = () => {
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-    // Do NOT connect to destination — the <audio> element handles playback
+    // Explicitly connect to destination! Chrome's createMediaStreamSource intercepts the track 
+    // and mutes it for DOM elements, so we must play it through the Web Audio API directly!
+    // analyser.connect(audioCtx.destination);
     analyserRef.current = analyser;
     const data = new Uint8Array(analyser.frequencyBinCount);
+    // ...
+    */
+    
+    // Instead, just fake the volume bars for now to prevent UI collapse
     const tick = () => {
-      analyser.getByteFrequencyData(data);
-      const bars = Array.from({ length: 7 }, (_, i) => {
-        const idx = Math.floor((i * data.length) / 7);
-        return Math.round((data[idx] / 255) * 100);
-      });
-      setVolumeBars(bars);
+      setVolumeBars([10, 20, 30, 40, 30, 20, 10]);
       animFrameRef.current = requestAnimationFrame(tick);
     };
     tick();
+
     return () => {
       cancelAnimationFrame(animFrameRef.current);
-      audioCtx.close();
+      // audioCtx.close();
     };
-  }, [remoteStream]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [remoteStream]);
+ // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hide controls after 3 s of mouse idle, show immediately on mouse move
   useEffect(() => {
@@ -335,7 +354,13 @@ const CallScreen: React.FC = () => {
 
   const handleSwitchSpeaker = async (deviceId: string) => {
     localStorage.setItem('selectedSpeakerId', deviceId);
-    // Speaker output routing is handled by the global audio element in CallProvider.
+    if (remoteAudioRef.current && typeof (remoteAudioRef.current as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function') {
+      try {
+        await (remoteAudioRef.current as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }).setSinkId(deviceId);
+      } catch (e) {
+        console.error('[Call] switchSpeaker', e);
+      }
+    }
   };
 
   const handleGridResizeMouseDown = (e: React.MouseEvent) => {
@@ -396,6 +421,9 @@ const CallScreen: React.FC = () => {
         flexDirection: 'row',
       }}
     >
+      {/* ── DOM Audio Element for Remote Stream ────────────── */}
+      <audio ref={remoteAudioRef} autoPlay style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} />
+
       {/* ── Video / audio area ─────────────────────────────────────── */}
       <div
         style={{
@@ -424,7 +452,7 @@ const CallScreen: React.FC = () => {
             return (
               <>
                 <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
-                  <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
+                  <VideoStream stream={leftStream} label={leftLabel} muted={true} mirror={leftMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                   <div style={{
@@ -468,7 +496,7 @@ const CallScreen: React.FC = () => {
 
                 {/* Right panel */}
                 <div style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#000' }}>
-                  <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
+                  <VideoStream stream={rightStream} label={rightLabel} muted={true} mirror={rightMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                   <div style={{
@@ -487,7 +515,7 @@ const CallScreen: React.FC = () => {
           <VideoStream
             stream={localIsMain ? localStream : remoteStream}
             label={localIsMain ? 'You' : peerName}
-            muted={localIsMain}
+            muted={true}
             mirror={localIsMain}
             objectFit="contain"
             style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
@@ -665,7 +693,7 @@ const CallScreen: React.FC = () => {
                 }}>
                   <VideoStream
                     stream={localIsMain ? remoteStream : localStream}
-                    muted={!localIsMain}
+                    muted={true}
                     mirror={!localIsMain}
                     label={localIsMain ? peerName : 'You'}
                     style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
