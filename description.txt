@@ -816,6 +816,27 @@ comprehensive environment configuration system for both your frontend (desktop-c
 
 
 
+<------------------------------------ automatic token refresh --------------------------------->
+Backend:
+    Added /api/auth/refresh-token endpoint that generates fresh tokens
+    Validates user still exists before issuing new token
+Frontend:
+    Added refreshAccountToken() function to request new tokens
+    Updated switchToAccount() to automatically refresh expired tokens
+    Tokens are refreshed transparently in the background
+User Experience:
+    Users can stay logged in for weeks/months
+    When switching accounts, expired tokens are automatically refreshed
+    Only requires re-login if account is deleted or refresh fails
+    Seamless experience like Gmail/Facebook
+The system now works like this:
+    User logs in → Token stored
+    After 1 hour, token expires
+    User switches account → System detects expired token
+    System automatically requests fresh token from backend
+    New token stored and used
+    Account switch completes seamlessly
+
 
 <---------------- idea -------------------------->
 use own r2 bucket 10GB for more secure data

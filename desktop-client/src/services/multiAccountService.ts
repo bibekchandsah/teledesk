@@ -1,13 +1,44 @@
-import { firebaseAuth, setCachedToken } from './firebaseService';
-import { signInWithCustomToken } from 'firebase/auth';
+import { firebaseAuth, setCachedToken, signInWithCustomToken } from './firebaseService';
 import { StoredAccount } from '../store/multiAccountStore';
 import { multiAccountAuthService } from './multiAccountAuthService';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 /**
+ * Refresh the access token for an account by requesting a new custom token from backend
+ * This allows long-term sessions without forcing re-login
+ */
+export const refreshAccountToken = async (uid: string, oldToken: string): Promise<string> => {
+  try {
+    console.log('[MultiAccount] Refreshing token for account:', uid);
+    
+    // Request a new custom token from backend using the old token
+    const response = await fetch(`${API_BASE}/api/auth/refresh-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${oldToken}`
+      },
+      body: JSON.stringify({ uid })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to refresh token');
+    }
+    
+    const data = await response.json();
+    console.log('[MultiAccount] Token refreshed successfully');
+    return data.token;
+  } catch (error) {
+    console.error('[MultiAccount] Token refresh failed:', error);
+    throw error;
+  }
+};
+
+/**
  * Switch to a different account using stored token
  * This allows seamless switching without re-entering password
+ * Automatically refreshes expired tokens
  */
 export const switchToAccount = async (account: StoredAccount): Promise<boolean> => {
   try {
@@ -21,22 +52,38 @@ export const switchToAccount = async (account: StoredAccount): Promise<boolean> 
       throw new Error('Account not found in storage');
     }
     
+    let accessToken = targetAccount.accessToken;
+    
     // Check if token is still valid by trying to use it
-    // If it's expired, we need to re-authenticate
     try {
-      const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
       const response = await fetch(`${API_BASE}/api/users/me`, {
         headers: {
-          'Authorization': `Bearer ${targetAccount.accessToken}`
+          'Authorization': `Bearer ${accessToken}`
         }
       });
       
       if (!response.ok) {
-        console.warn('[MultiAccount] Stored token is invalid or expired');
-        throw new Error('Token expired - need to re-authenticate');
+        console.warn('[MultiAccount] Stored token is expired, attempting refresh...');
+        
+        // Try to refresh the token
+        try {
+          accessToken = await refreshAccountToken(targetAccount.uid, accessToken);
+          
+          // Update the stored token
+          await multiAccountAuthService.addOrUpdateAccount({
+            ...targetAccount,
+            accessToken,
+            lastUsed: new Date().toISOString()
+          });
+          
+          console.log('[MultiAccount] Token refreshed and updated in storage');
+        } catch (refreshError) {
+          console.error('[MultiAccount] Token refresh failed:', refreshError);
+          throw new Error('Token expired - please log in again');
+        }
+      } else {
+        console.log('[MultiAccount] Token is valid');
       }
-      
-      console.log('[MultiAccount] Token is valid');
     } catch (error) {
       console.error('[MultiAccount] Token validation failed:', error);
       throw new Error('Token expired - please log in again');
@@ -46,7 +93,7 @@ export const switchToAccount = async (account: StoredAccount): Promise<boolean> 
     await multiAccountAuthService.setActiveAccount(targetAccount.uid);
     
     // Set the cached token for API calls
-    setCachedToken(targetAccount.accessToken);
+    setCachedToken(accessToken);
     
     console.log(`[MultiAccount] Successfully switched to account: ${account.email}`);
     return true;
@@ -54,19 +101,6 @@ export const switchToAccount = async (account: StoredAccount): Promise<boolean> 
     console.error('[MultiAccount] Failed to switch account:', error);
     throw error;
   }
-};
-
-/**
- * Get current Firebase refresh token (for storage)
- * Note: This is a workaround since Firebase doesn't expose refresh tokens directly
- */
-export const getCurrentRefreshToken = async (): Promise<string> => {
-  const user = firebaseAuth.currentUser;
-  if (!user) throw new Error('No user logged in');
-  
-  // Firebase manages refresh tokens internally
-  // We'll use the UID as a placeholder and rely on Firebase's persistence
-  return user.uid;
 };
 
 /**

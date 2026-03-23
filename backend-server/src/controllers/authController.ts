@@ -34,6 +34,45 @@ export const generateCustomToken = async (req: Request, res: Response): Promise<
 };
 
 /**
+ * Refresh the access token for the authenticated user
+ * This allows long-term sessions without forcing re-login
+ */
+export const refreshToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const uid = req.user?.uid;
+    
+    if (!uid) {
+      res.status(401).json({ success: false, error: 'Not authenticated' });
+      return;
+    }
+
+    // Verify the user still exists
+    try {
+      await auth.getUser(uid);
+    } catch (error) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Generate a fresh custom token
+    const customToken = await auth.createCustomToken(uid);
+    
+    logger.info(`Refreshed token for user: ${uid}`);
+    
+    res.json({
+      success: true,
+      data: { token: customToken, uid },
+    });
+  } catch (error) {
+    logger.error(`Failed to refresh token: ${(error as Error).message}`);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to refresh token',
+    });
+  }
+};
+
+/**
  * Switch to another account
  * Validates the target account and generates a custom token
  */

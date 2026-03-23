@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/authMiddleware';
-import { generateCustomToken, switchAccount } from '../controllers/authController';
+import { generateCustomToken, switchAccount, refreshToken } from '../controllers/authController';
 import { 
   initiateDesktopGoogleLogin, 
   handleDesktopGoogleCallback,
@@ -13,6 +13,7 @@ const router = Router();
 // Standard Auth
 router.post('/custom-token', authenticateToken, generateCustomToken);
 router.post('/switch-account', authenticateToken, switchAccount);
+router.post('/refresh-token', authenticateToken, refreshToken);
 
 // Desktop OAuth (System Browser Flow)
 router.get('/desktop/google', initiateDesktopGoogleLogin);
