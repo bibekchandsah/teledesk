@@ -3,10 +3,6 @@
   "version": "1.0.1",
   "description": "TeleDesk - Desktop Messaging & Video Calling App",
   "private": true,
-  "workspaces": [
-    "desktop-client",
-    "backend-server"
-  ],
   "scripts": {
     "install:all": "npm install --prefix backend-server && npm install --prefix desktop-client",
     "dev:backend": "npm run dev --prefix backend-server",
@@ -21,6 +17,7 @@
     "electron-builder": "^26.8.1"
   }
 }
+
 
 
 

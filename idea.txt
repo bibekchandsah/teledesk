@@ -3,7 +3,11 @@ Copy-Item desktop-client/.env.example desktop-client/.env
 
 cd desktop-client; npm install
 cd backend-server; rm package-lock.json
-cd backend-server; npm install
+cd backend-server; npm install || 
+npm install --package-lock-only
+Get-Content .npmrc -ErrorAction SilentlyContinue
+rm -r -force node_modules
+npm install
 npx tsc -p tsconfig.electron.json --noEmit
 
 cd backend-server; npm run dev
