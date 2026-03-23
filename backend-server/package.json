@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "cross-env NODE_ENV=production tsc",
-    "start": "cross-env NODE_ENV=production node dist/backend-server/src/server.js",
+    "start": "NODE_ENV=production node dist/backend-server/src/server.js",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
