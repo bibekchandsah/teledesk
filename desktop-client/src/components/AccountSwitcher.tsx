@@ -94,7 +94,8 @@ export const AccountSwitcher: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Reload the page to reinitialize with new account
-      window.location.href = '/';
+      // Use window.location.reload() instead of href for Electron compatibility
+      window.location.reload();
     } catch (error) {
       console.error('Failed to switch account:', error);
 
@@ -184,12 +185,24 @@ export const AccountSwitcher: React.FC = () => {
       await logout(true); // true = switching account, keeps account list
 
       // Navigate to login page with add account flag
-      window.location.href = '/login?add=true';
+      // Use window.location.reload() for Electron compatibility
+      if (window.electronAPI) {
+        // In Electron, we need to navigate differently
+        window.location.hash = '#/login?add=true';
+        window.location.reload();
+      } else {
+        window.location.href = '/login?add=true';
+      }
     } catch (error) {
       console.error('Failed to logout for adding account:', error);
       setAddingAccount(false);
       // Still redirect even if logout fails
-      window.location.href = '/login?add=true';
+      if (window.electronAPI) {
+        window.location.hash = '#/login?add=true';
+        window.location.reload();
+      } else {
+        window.location.href = '/login?add=true';
+      }
     }
   };
 
