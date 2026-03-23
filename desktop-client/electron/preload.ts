@@ -169,6 +169,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('shared-auth-update', handler);
     return () => ipcRenderer.off('shared-auth-update', handler);
   },
+
+  // Multi-account storage
+  saveMultiAccounts: (accountsData: any): Promise<boolean> => ipcRenderer.invoke('save-multi-accounts', accountsData),
+  loadMultiAccounts: (): Promise<any> => ipcRenderer.invoke('load-multi-accounts'),
+  clearMultiAccounts: (): Promise<boolean> => ipcRenderer.invoke('clear-multi-accounts'),
+  onMultiAccountUpdate: (cb: (accountsData: any) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, accountsData: any) => cb(accountsData);
+    ipcRenderer.on('multi-account-update', handler);
+    return () => ipcRenderer.off('multi-account-update', handler);
+  },
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -275,6 +285,12 @@ export interface ElectronAPI {
   loadSharedAuth: () => Promise<any>;
   clearSharedAuth: () => Promise<boolean>;
   onSharedAuthUpdate: (cb: (authData: any) => void) => () => void;
+
+  // Multi-account storage
+  saveMultiAccounts: (accountsData: any) => Promise<boolean>;
+  loadMultiAccounts: () => Promise<any>;
+  clearMultiAccounts: () => Promise<boolean>;
+  onMultiAccountUpdate: (cb: (accountsData: any) => void) => () => void;
 }
 
 declare global {

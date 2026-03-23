@@ -172,6 +172,14 @@ export const AccountSwitcher: React.FC = () => {
 
     setAddingAccount(true);
     try {
+      // Clear active account temporarily so auto-restore doesn't happen
+      const { multiAccountAuthService } = await import('../services/multiAccountAuthService');
+      const storage = await multiAccountAuthService.loadAccounts();
+      if (storage) {
+        storage.activeAccountUid = null; // Clear active account
+        await multiAccountAuthService.saveAccounts(storage);
+      }
+      
       // Log out current user first so they can add a different account
       await logout(true); // true = switching account, keeps account list
 

@@ -21,6 +21,7 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useMultiAccountStore } from '../store/multiAccountStore';
 import { sharedAuthService, SharedAuthData } from '../services/sharedAuthService';
+import { multiAccountAuthService, AccountData } from '../services/multiAccountAuthService';
 import TwoFactorVerifyModal from '../components/modals/TwoFactorVerifyModal';
 
 interface AuthContextValue {
@@ -45,43 +46,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { setUserProfile } = useChatStore();
   const { addAccount, setActiveAccount } = useMultiAccountStore();
 
-  // Initialize auth on mount - check shared auth first, then Firebase
+  // Initialize auth on mount - check multi-account storage first
   useEffect(() => {
     console.log('[Auth] Initializing authentication...');
     
     const initializeAuth = async () => {
       try {
-        // First, try to restore from shared auth storage
-        console.log('[Auth] Checking shared auth storage...');
-        const sharedAuth = await sharedAuthService.loadAuthData();
+        // First, try to restore from multi-account storage
+        console.log('[Auth] Checking multi-account storage...');
+        const activeAccount = await multiAccountAuthService.getActiveAccount();
+        const allAccounts = await multiAccountAuthService.getAllAccounts();
         
-        if (sharedAuth && sharedAuth.isAuthenticated && sharedAuth.currentUser) {
-          console.log('[Auth] Found valid shared auth data, restoring user profile...');
+        // Sync accounts to Zustand store for UI
+        if (allAccounts && allAccounts.length > 0) {
+          console.log('[Auth] Syncing', allAccounts.length, 'accounts to Zustand store');
+          allAccounts.forEach(account => {
+            addAccount({
+              uid: account.uid,
+              email: account.email,
+              name: account.name,
+              avatar: account.avatar,
+              refreshToken: account.uid, // Use uid as placeholder
+              lastUsed: account.lastUsed,
+            });
+          });
+          
+          if (activeAccount) {
+            setActiveAccount(activeAccount.uid);
+          }
+        }
+        
+        if (activeAccount) {
+          console.log('[Auth] Found active account, restoring user profile...', activeAccount.email);
           
           // Set the cached token for API calls
-          if (sharedAuth.firebaseUser?.accessToken) {
-            setCachedToken(sharedAuth.firebaseUser.accessToken);
-            console.log('[Auth] Cached token set from shared storage');
-          }
+          setCachedToken(activeAccount.accessToken);
+          console.log('[Auth] Cached token set from multi-account storage');
           
           // Restore user profile immediately for better UX
-          setCurrentUser(sharedAuth.currentUser);
-          setUserProfile(sharedAuth.currentUser);
+          const userProfile = {
+            uid: activeAccount.uid,
+            name: activeAccount.name,
+            email: activeAccount.email,
+            avatar: activeAccount.avatar,
+            createdAt: new Date().toISOString(),
+            lastSeen: new Date().toISOString(),
+            onlineStatus: 'online' as const,
+          };
+          
+          setCurrentUser(userProfile);
+          setUserProfile(userProfile);
           setLoading(false);
           
           // Try to initialize socket with the cached token
           try {
-            if (sharedAuth.firebaseUser?.accessToken) {
-              initSocket(sharedAuth.firebaseUser.accessToken);
-              console.log('[Auth] Socket initialized with cached token');
-            }
+            initSocket(activeAccount.accessToken);
+            console.log('[Auth] Socket initialized with cached token');
           } catch (socketError) {
             console.warn('[Auth] Failed to initialize socket:', socketError);
           }
           
-          console.log('[Auth] User profile restored from shared storage');
+          console.log('[Auth] User profile restored from multi-account storage');
         } else {
-          console.log('[Auth] No valid shared auth data found');
+          console.log('[Auth] No active account found - user may be adding new account');
           setLoading(false);
         }
       } catch (error) {
@@ -92,34 +119,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initializeAuth();
 
-    // Listen for auth updates from other instances
-    const unsubscribeSharedAuth = sharedAuthService.onAuthUpdate((sharedAuth) => {
-      console.log('[SharedAuth] Received auth update from another instance:', sharedAuth);
+    // Listen for account updates from other instances
+    const unsubscribeMultiAccount = multiAccountAuthService.onAccountUpdate(async (accountsData) => {
+      console.log('[MultiAccountAuth] Received account update from another instance');
       
-      if (sharedAuth && sharedAuth.isAuthenticated && sharedAuth.currentUser) {
-        console.log('[SharedAuth] Applying auth update from another instance');
-        // Only update if we don't already have a user (avoid conflicts)
-        const currentAuthState = useAuthStore.getState();
-        if (!currentAuthState.currentUser) {
-          // Set cached token
-          if (sharedAuth.firebaseUser?.accessToken) {
-            setCachedToken(sharedAuth.firebaseUser.accessToken);
+      if (accountsData && accountsData.accounts && accountsData.accounts.length > 0) {
+        // Sync accounts to Zustand store
+        console.log('[Auth] Syncing', accountsData.accounts.length, 'accounts to Zustand store');
+        accountsData.accounts.forEach(account => {
+          addAccount({
+            uid: account.uid,
+            email: account.email,
+            name: account.name,
+            avatar: account.avatar,
+            refreshToken: account.uid,
+            lastUsed: account.lastUsed,
+          });
+        });
+        
+        if (accountsData.activeAccountUid) {
+          const activeAccount = accountsData.accounts.find(a => a.uid === accountsData.activeAccountUid);
+          
+          if (activeAccount) {
+            console.log('[MultiAccountAuth] Applying account update:', activeAccount.email);
+            
+            // Update Zustand store
+            setActiveAccount(activeAccount.uid);
+            
+            // Only update if we don't already have this user active
+            const currentAuthState = useAuthStore.getState();
+            if (!currentAuthState.currentUser || currentAuthState.currentUser.uid !== activeAccount.uid) {
+              // Set cached token
+              setCachedToken(activeAccount.accessToken);
+              
+              const userProfile = {
+                uid: activeAccount.uid,
+                name: activeAccount.name,
+                email: activeAccount.email,
+                avatar: activeAccount.avatar,
+                createdAt: new Date().toISOString(),
+                lastSeen: new Date().toISOString(),
+                onlineStatus: 'online' as const,
+              };
+              
+              setCurrentUser(userProfile);
+              setUserProfile(userProfile);
+              setLoading(false);
+              
+              // Reinitialize socket with new token
+              disconnectSocket();
+              initSocket(activeAccount.accessToken);
+            }
           }
-          setCurrentUser(sharedAuth.currentUser);
-          setUserProfile(sharedAuth.currentUser);
-          setLoading(false);
         }
-      } else if (sharedAuth === null) {
-        console.log('[SharedAuth] Received logout from another instance');
+      } else if (accountsData === null || (accountsData.accounts && accountsData.accounts.length === 0)) {
+        console.log('[MultiAccountAuth] Received logout from another instance');
         setCachedToken(null);
         setCurrentUser(null);
         disconnectSocket();
         clearAllKeys();
+      } else if (accountsData && !accountsData.activeAccountUid) {
+        console.log('[MultiAccountAuth] No active account - user may be adding new account');
+        // Don't clear current user, just don't auto-restore
       }
     });
 
-    return unsubscribeSharedAuth;
-  }, [setCurrentUser, setUserProfile, setLoading]);
+    return unsubscribeMultiAccount;
+  }, [setCurrentUser, setUserProfile, setLoading, addAccount, setActiveAccount]);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
@@ -193,27 +259,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile(immediateProfile);
     setLoading(false);
 
-    // Save to shared storage immediately
+    // Get token for storage
+    const token = await fbUser.getIdToken();
+    
+    // Save to multi-account storage immediately
+    const accountData: AccountData = {
+      uid: fbUser.uid,
+      email: fbUser.email || '',
+      name: displayName,
+      avatar: fbUser.photoURL || '',
+      accessToken: token,
+      lastUsed: new Date().toISOString(),
+    };
+    
+    console.log('[Auth] Saving account to multi-account storage');
+    await multiAccountAuthService.addOrUpdateAccount(accountData);
+    
+    // Also save to legacy shared auth for backward compatibility
     const sharedAuthData: SharedAuthData = {
       firebaseUser: {
         uid: fbUser.uid,
         email: fbUser.email,
         displayName: fbUser.displayName,
         photoURL: fbUser.photoURL,
-        accessToken: await fbUser.getIdToken(),
+        accessToken: token,
       },
       currentUser: immediateProfile,
       isAuthenticated: true,
       lastUpdated: new Date().toISOString(),
     };
-    
-    console.log('[Auth] Saving shared auth data');
     await sharedAuthService.saveAuthData(sharedAuthData);
 
     // ── Step 2: Background sync ──
     (async () => {
       try {
-        const token = await fbUser.getIdToken();
         initSocket(token);
         requestNotificationPermission().catch(() => {});
 
@@ -256,14 +335,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           setActiveAccount(userProfile.uid);
 
-          // Update shared storage with complete profile
+          // Update multi-account storage with complete profile
+          const freshToken = await fbUser.getIdToken();
+          const updatedAccountData: AccountData = {
+            uid: userProfile.uid,
+            email: userProfile.email,
+            name: userProfile.name,
+            avatar: userProfile.avatar,
+            accessToken: freshToken,
+            lastUsed: new Date().toISOString(),
+          };
+          await multiAccountAuthService.addOrUpdateAccount(updatedAccountData);
+          
+          // Update legacy shared auth
           const updatedSharedAuthData: SharedAuthData = {
             firebaseUser: {
               uid: fbUser.uid,
               email: fbUser.email,
               displayName: fbUser.displayName,
               photoURL: fbUser.photoURL,
-              accessToken: token,
+              accessToken: freshToken,
             },
             currentUser: userProfile,
             isAuthenticated: true,
@@ -384,13 +475,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Mark this as a manual logout
       isManualLoginRef.current = true;
       
+      const currentUser = useAuthStore.getState().currentUser;
+      
       await signOutUser();
       setCachedToken(null); // Clear cached token
       disconnectSocket();
       clearAllKeys();
       storeLogout();
       
-      // Clear shared auth storage
+      // Remove current account from multi-account storage
+      if (currentUser && !switchingAccount) {
+        await multiAccountAuthService.removeAccount(currentUser.uid);
+      }
+      
+      // Clear legacy shared auth storage
       await sharedAuthService.clearAuthData();
       
       // Don't clear multi-account store when switching accounts

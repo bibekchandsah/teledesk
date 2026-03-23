@@ -671,8 +671,9 @@ const createTray = () => {
 
 // Shared authentication storage for multiple instances
 const sharedAuthFile = path.join(sharedUserData, 'shared-auth.json');
+const multiAccountsFile = path.join(sharedUserData, 'multi-accounts.json');
 
-// Save shared auth data
+// Save shared auth data (legacy - kept for backward compatibility)
 ipcMain.handle('save-shared-auth', async (_event, authData) => {
   try {
     fs.writeFileSync(sharedAuthFile, JSON.stringify(authData, null, 2));
@@ -689,7 +690,7 @@ ipcMain.handle('save-shared-auth', async (_event, authData) => {
   }
 });
 
-// Load shared auth data
+// Load shared auth data (legacy - kept for backward compatibility)
 ipcMain.handle('load-shared-auth', async () => {
   try {
     if (fs.existsSync(sharedAuthFile)) {
@@ -703,7 +704,7 @@ ipcMain.handle('load-shared-auth', async () => {
   }
 });
 
-// Clear shared auth data
+// Clear shared auth data (legacy - kept for backward compatibility)
 ipcMain.handle('clear-shared-auth', async (_event) => {
   try {
     if (fs.existsSync(sharedAuthFile)) {
@@ -718,6 +719,54 @@ ipcMain.handle('clear-shared-auth', async (_event) => {
     return true;
   } catch (error) {
     console.error('[IPC] Failed to clear shared auth:', error);
+    return false;
+  }
+});
+
+// Multi-account storage handlers
+ipcMain.handle('save-multi-accounts', async (_event, accountsData) => {
+  try {
+    fs.writeFileSync(multiAccountsFile, JSON.stringify(accountsData, null, 2));
+    // Notify all other instances about the account update
+    BrowserWindow.getAllWindows().forEach(window => {
+      if (window && !window.isDestroyed() && window.webContents !== _event.sender) {
+        window.webContents.send('multi-account-update', accountsData);
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('[IPC] Failed to save multi-accounts:', error);
+    return false;
+  }
+});
+
+ipcMain.handle('load-multi-accounts', async () => {
+  try {
+    if (fs.existsSync(multiAccountsFile)) {
+      const data = fs.readFileSync(multiAccountsFile, 'utf8');
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    console.error('[IPC] Failed to load multi-accounts:', error);
+    return null;
+  }
+});
+
+ipcMain.handle('clear-multi-accounts', async (_event) => {
+  try {
+    if (fs.existsSync(multiAccountsFile)) {
+      fs.unlinkSync(multiAccountsFile);
+    }
+    // Notify all other instances about the clear
+    BrowserWindow.getAllWindows().forEach(window => {
+      if (window && !window.isDestroyed() && window.webContents !== _event.sender) {
+        window.webContents.send('multi-account-update', null);
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('[IPC] Failed to clear multi-accounts:', error);
     return false;
   }
 });

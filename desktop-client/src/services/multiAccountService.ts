@@ -1,50 +1,36 @@
-import { firebaseAuth } from './firebaseService';
+import { firebaseAuth, setCachedToken } from './firebaseService';
 import { signInWithCustomToken } from 'firebase/auth';
 import { StoredAccount } from '../store/multiAccountStore';
+import { multiAccountAuthService } from './multiAccountAuthService';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 /**
- * Switch to a different account using custom token
+ * Switch to a different account using stored token
  * This allows seamless switching without re-entering password
  */
 export const switchToAccount = async (account: StoredAccount): Promise<boolean> => {
   try {
-    // Get current user's ID token
-    const currentUser = firebaseAuth.currentUser;
-    if (!currentUser) {
-      throw new Error('No user logged in');
+    console.log('[MultiAccount] Switching to account:', account.email);
+    
+    // Get the account data from multi-account storage
+    const allAccounts = await multiAccountAuthService.getAllAccounts();
+    const targetAccount = allAccounts.find(a => a.uid === account.uid);
+    
+    if (!targetAccount) {
+      throw new Error('Account not found in storage');
     }
-
-    const idToken = await currentUser.getIdToken();
-
-    // Request custom token for target account from backend
-    const response = await fetch(`${API_BASE}/api/auth/switch-account`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        targetUid: account.uid,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to switch account');
-    }
-
-    const data = await response.json();
-    const { customToken } = data.data;
-
-    // Sign in with custom token (this switches the account)
-    await signInWithCustomToken(firebaseAuth, customToken);
-
-    console.log(`Successfully switched to account: ${account.email}`);
+    
+    // Set the account as active
+    await multiAccountAuthService.setActiveAccount(targetAccount.uid);
+    
+    // Set the cached token for API calls
+    setCachedToken(targetAccount.accessToken);
+    
+    console.log(`[MultiAccount] Successfully switched to account: ${account.email}`);
     return true;
   } catch (error) {
-    console.error('Failed to switch account:', error);
+    console.error('[MultiAccount] Failed to switch account:', error);
     throw error;
   }
 };
