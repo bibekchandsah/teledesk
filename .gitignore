@@ -3,9 +3,15 @@ node_modules/
 dist/
 dist-electron/
 release/
-.env
 logs/
 *.log
+
+# Environment files (keep .env.example, .env.development, .env.production)
+.env
+.env.local
+.env*.local
+.env.development
+.env.production
 
 # Build output
 build/

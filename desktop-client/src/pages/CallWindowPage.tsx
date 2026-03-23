@@ -3,7 +3,7 @@ import Sp from 'simple-peer';
 import type { Instance as SimplePeerInstance } from 'simple-peer';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const SimplePeer = ((Sp as any).default ?? Sp) as typeof Sp;
-import { WEBRTC_CONFIG } from '@shared/constants/config';
+import { WEBRTC_CONFIG } from '../config/webrtc';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import VideoStream from '../components/VideoStream';
 import UserAvatar from '../components/UserAvatar';
@@ -41,6 +41,12 @@ function parseCallWindowData(): CallWindowInitData | null {
 type CallStatus = 'ringing' | 'active' | 'ended';
 
 const ICE_SERVERS = [...WEBRTC_CONFIG.ICE_SERVERS] as RTCIceServer[];
+const PEER_CONFIG = {
+  iceServers: ICE_SERVERS,
+  iceTransportPolicy: WEBRTC_CONFIG.ICE_TRANSPORT_POLICY,
+  bundlePolicy: WEBRTC_CONFIG.BUNDLE_POLICY,
+  rtcpMuxPolicy: WEBRTC_CONFIG.RTCP_MUX_POLICY,
+};
 
 // ─── PiP drag/resize helpers ──────────────────────────────────────────────────
 const BORDER_ZONE = 12;
@@ -254,7 +260,7 @@ const CallWindowPage: React.FC = () => {
         initiator: true,
         stream,
         trickle: true,
-        config: { iceServers: ICE_SERVERS },
+        config: PEER_CONFIG,
       });
 
       peer.on('signal', (data) => {
@@ -319,7 +325,7 @@ const CallWindowPage: React.FC = () => {
         initiator: false,
         stream,
         trickle: true,
-        config: { iceServers: ICE_SERVERS },
+        config: PEER_CONFIG,
       });
 
       peer.on('signal', (data) => {
@@ -532,12 +538,15 @@ const CallWindowPage: React.FC = () => {
   // ─── Play remote stream through DOM <audio> element ───────────────────
   useEffect(() => {
     if (!remoteStream || !remoteAudioRef.current) return;
-    remoteAudioRef.current.srcObject = remoteStream;
+    const audioEl = remoteAudioRef.current;
+    audioEl.srcObject = remoteStream;
+    audioEl.muted = false; // CRITICAL: ensure remote audio is NOT muted
+    audioEl.volume = 1.0;
     const savedSpeaker = localStorage.getItem('selectedSpeakerId');
-    if (savedSpeaker && typeof (remoteAudioRef.current as any).setSinkId === 'function') {
-      (remoteAudioRef.current as any).setSinkId(savedSpeaker).catch(() => { });
+    if (savedSpeaker && typeof (audioEl as any).setSinkId === 'function') {
+      (audioEl as any).setSinkId(savedSpeaker).catch(() => { });
     }
-    remoteAudioRef.current.play().catch((e) => {
+    audioEl.play().catch((e) => {
       if (e.name !== 'AbortError') {
         console.error('[CallWindow] Audio autoplay failed:', e);
       }
@@ -556,7 +565,8 @@ const CallWindowPage: React.FC = () => {
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 64;
     source.connect(analyser);
-    analyser.connect(audioCtx.destination);
+    // DO NOT connect to destination — that would duplicate audio playback!
+    // The DOM <audio> element handles playback; this is visualization only.
     analyserRef.current = analyser;
     const data = new Uint8Array(analyser.frequencyBinCount);
     const tick = () => {
@@ -1112,13 +1122,6 @@ const CallWindowPage: React.FC = () => {
           </div>
         </div>
 
-        <style>{`
-          @keyframes callPulse {
-            0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 0.6; }
-            70%  { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-            100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-          }
-        `}</style>
       </div>
     );
   }
@@ -1135,7 +1138,7 @@ const CallWindowPage: React.FC = () => {
       }}
     >
       {/* ── Hidden DOM Audio Element for Remote Stream ────────────── */}
-      <audio ref={remoteAudioRef} autoPlay muted style={{ display: 'none' }} />
+      <audio ref={remoteAudioRef} autoPlay muted={false} style={{ display: 'none' }} />
 
       {/* ── Video / audio area ─────────────────────────────────────── */}
       <div
@@ -1158,12 +1161,14 @@ const CallWindowPage: React.FC = () => {
               const rightStream = gridSwapped ? remoteStream : localStream;
               const leftLabel   = gridSwapped ? 'You'        : displayName;
               const rightLabel  = gridSwapped ? displayName : 'You';
+              const leftMuted   = gridSwapped; // Mute local, unmute remote
+              const rightMuted  = !gridSwapped;
               const leftMirror  = gridSwapped;
               const rightMirror = !gridSwapped;
               return (
                 <>
                   <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
-                    <VideoStream stream={leftStream} label={leftLabel} muted={true} mirror={leftMirror}
+                    <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                     <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{leftLabel}</div>
@@ -1180,7 +1185,7 @@ const CallWindowPage: React.FC = () => {
                     >⇄</button>
                   </div>
                   <div style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#000' }}>
-                    <VideoStream stream={rightStream} label={rightLabel} muted={true} mirror={rightMirror}
+                    <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
                     <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{rightLabel}</div>
@@ -1228,7 +1233,7 @@ const CallWindowPage: React.FC = () => {
             <VideoStream
               stream={localIsMain ? localStream : remoteStream}
             label={localIsMain ? 'You' : displayName}
-            muted={true}
+            muted={localIsMain} // Only mute if showing local stream
             mirror={localIsMain}
               objectFit="contain"
               style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }}
@@ -1318,7 +1323,7 @@ const CallWindowPage: React.FC = () => {
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream
                     stream={localIsMain ? remoteStream : localStream}
-                    muted={true}
+                    muted={!localIsMain} // Mute local stream in PiP, unmute remote
                     mirror={!localIsMain}
                     label={localIsMain ? displayName : 'You'}
                     style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
@@ -1510,17 +1515,6 @@ const CallWindowPage: React.FC = () => {
           onCancel={() => setShowScreenPicker(false)}
         />
       )}
-
-      <style>{`
-        @keyframes callPulse {
-          0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 0.6; }
-          70%  { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-          100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        * { box-sizing: border-box; }
-        body { margin: 0; overflow: hidden; }
-      `}</style>
     </div>
   );
 };

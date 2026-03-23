@@ -1,7 +1,6 @@
 import { S3Client } from '@aws-sdk/client-s3';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// Environment variables are loaded in server.ts
 
 // Cloudflare R2 is S3-compatible. The endpoint is:
 // https://<ACCOUNT_ID>.r2.cloudflarestorage.com

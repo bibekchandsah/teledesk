@@ -125,6 +125,18 @@ Outgoing Call Ringtones:
     Mute Support: Respects mute settings
     Performance: Minimal resource usage with preloaded audio
 
+No Sound in Compiled EXE
+Problem: Ringtone sounds worked in development but not in the compiled executable.
+Root Cause:
+    Hardcoded absolute paths (/assets/sounds/) don't work in Electron's file:// protocol
+    Sound files weren't being loaded with the correct relative paths in production builds
+Solution:
+    Created assetPaths.ts utility to handle path resolution for different environments
+    Updated callAudioService.ts to use dynamic path resolution
+    Added fallback beep sounds using Web Audio API when MP3 files fail to load
+    Added comprehensive error handling and logging for debugging
+    Ensured sound files are properly included in the build process
+
 <------------------- Audio/Video call window logic ---------------------------->
 Workbox Navigation Route Error - Added proper navigation fallback configuration to handle /call-window routes in PWA mode
 WebRTC InvalidStateError - Fixed race conditions in renegotiation by adding state validation and temporarily suppressing simple-peer's handlers during manual operations
@@ -144,6 +156,20 @@ Media Stream Issues - Enhanced media capture timing with pre-capture for incomin
     Ringtones work reliably in all scenarios
     No memory leaks or orphaned call states
 The fixes maintain full compatibility with both Electron and web environments while significantly improving the reliability and user experience of the call system.
+
+(fixed) The "ΓÇô" you're seeing is a character encoding issue. It's the UTF-8 byte sequence for an em dash (—) that's being incorrectly interpreted or displayed.
+
+1. CSS Keyframes Showing as Text (ΓÇô issue)
+Problem: CSS keyframes defined in inline <style> tags were appearing as text instead of being applied as CSS animations.
+Root Cause:
+    Character encoding issue where "ΓÇô" was corrupted UTF-8 for an em dash (—)
+    Inline <style> tags in JSX components weren't being processed correctly in some cases
+Solution:
+    Fixed the character encoding issue by replacing "ΓÇô" with proper em dash "—"
+    Moved all keyframe animations to the global CSS file (global.css)
+    Added missing keyframes: callPulse, pulseRing, scaleUp, fadeInOut, shimmer, modalFadeIn, emojiPop
+    Removed problematic inline <style> tags from components
+    Created a utility function (cssUtils.ts) for safe CSS injection when needed
 
 <------------------- Dev tools ---------------------------->
 When VITE_ALLOW_DEVTOOLS=true → blur overlay disabled, right-click allowed, shortcuts allowed
@@ -708,3 +734,91 @@ Navigating to next/previous image resets zoom back to 100%
 
 <----------------------------------- chat list / new chat ------------------------>
 Now results only appear when the typed query matches the start of a user's name, email, or username — typing "bi" shows "Bibek" but not "Alibek". The backend uses query% (starts-with) and the frontend applies the same filter as a safety net.
+
+
+
+
+
+
+
+
+
+<---------------------------------- multiple instances -------------------------->
+Now you can run multiple instances. The changes I made:
+    Commented out app.requestSingleInstanceLock() - this was preventing multiple instances
+    Removed the conditional wrapper that would quit if the lock wasn't obtained
+    Commented out the second-instance event handler since it won't fire anymore
+Now you can:
+    Run npm run electron:dev multiple times in different terminals
+    Open the built app multiple times from the file system
+    Each instance will run independently with its own port (Vite will auto-increment: 5173, 5174, 5175, etc.)
+The app will now behave like VS Code or Chrome where you can have multiple windows/instances running simultaneously. Each instance will have its own separate state and can be used independently.
+
+Now each instance will have its own isolated data directory, preventing the file lock errors. The changes:
+    Each instance gets a unique ID based on timestamp + random string
+    Each instance stores its data in AppData/Roaming/teledesk-desktop/instances/{instanceId}/
+    This prevents conflicts with cache, IndexedDB, session storage, etc.
+Now you can run multiple instances without those "File currently in use" errors. Each instance will:
+    Have its own cache
+    Have its own IndexedDB
+    Have its own window state
+    Run completely independently
+
+
+
+<------------------------- env files ---------------------------->
+✅ Created environment-specific configuration system:
+    .env.development - Auto-loaded during development (localhost, DevTools ON)
+    .env.production - Auto-loaded during builds (Railway backend, DevTools OFF)
+    .env.local - Optional personal overrides (highest priority, not in git)
+✅ Updated Electron main process to intelligently load the correct env file based on NODE_ENV
+✅ Fixed multiple instance support - each instance gets its own isolated data directory (no more file lock errors!)
+✅ Updated .gitignore to protect .env.local while keeping .env.development and .env.production in version control
+✅ Created comprehensive documentation:
+    ENV_SETUP.md - Complete configuration guide
+    QUICK_START.md - Quick reference for developers
+    ENVIRONMENT_SETUP_COMPLETE.md - Migration summary
+How to Use
+    Development:
+        npm run electron:dev
+        # Automatically uses .env.development (localhost backend, DevTools enabled)
+    Production Build:
+        npm run electron:build  
+        # Automatically uses .env.production (Railway backend, DevTools disabled)
+    Personal Testing: Create .env.local to override any setting without modifying committed files.
+
+comprehensive environment configuration system for both your frontend (desktop-client) and backend (backend-server):
+    ✅ Frontend (Desktop Client)
+        Environment-specific files: .env.development (localhost, DevTools ON) and .env.production (Railway, DevTools OFF)
+        Multiple instance support: Removed single instance lock, each gets isolated data directory
+        Smart environment loading: Automatically loads correct env file based on NODE_ENV
+        No more file conflicts: Each instance uses separate userData directory
+    ✅ Backend (Server)
+        Environment-specific files: .env.development (localhost:3001, multiple CORS) and .env.production (Railway URL)
+        Centralized env loading: Smart loading in server.ts with proper priority
+        Cross-platform scripts: Added cross-env for consistent NODE_ENV setting
+        Multiple frontend support: CORS configured for ports 5173, 5174, 5175
+    ✅ Key Features
+        Auto-detection: Environment automatically detected by npm script
+        Personal overrides: .env.local files for testing (not committed)
+        Team consistency: Committed env files ensure everyone has same setup
+        Multiple instances: Run multiple desktop clients simultaneously
+        Production ready: Proper security settings for production builds
+    ✅ Usage
+        # Development (auto-loads .env.development)
+        npm run dev          # Backend
+        npm run electron:dev # Frontend
+
+        # Production (auto-loads .env.production)  
+        npm run build        # Both
+        npm start           # Backend
+        npm run electron:build # Frontend
+
+
+
+
+<---------------- idea -------------------------->
+use own r2 bucket 10GB for more secure data
+restart in deploy isn't working, it's not restarting when clicked restart
+
+

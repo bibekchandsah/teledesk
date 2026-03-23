@@ -216,14 +216,6 @@ const IncomingCallWindowPage: React.FC = () => {
           {callData.callType === 'video' ? <Video size={24} /> : <Phone size={24} />}
         </button>
       </div>
-
-      <style>{`
-        @keyframes pulseRing {
-          0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 0.6; }
-          70%  { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-          100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
-        }
-      `}</style>
     </div>
   );
 };

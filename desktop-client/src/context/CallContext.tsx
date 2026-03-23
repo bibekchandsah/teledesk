@@ -26,7 +26,7 @@ interface CallContextValue {
     targetName: string,
     callType: 'video' | 'voice',
     targetAvatar?: string,
-  ) => void;
+  ) => Promise<void>;
   acceptIncomingCall: (localStream: MediaStream) => void;
   rejectIncomingCall: () => void;
   endActiveCall: () => void;
@@ -156,7 +156,36 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Non-Electron fallback: create peer in this renderer
         startCallTimer();
         const stream = localStreamRef.current;
-        if (!stream) return;
+        if (!stream) {
+          console.error('[Call] handleCallAccepted: localStream not ready yet, waiting...');
+          // Stream not ready yet — wait for it with a timeout
+          const checkStream = setInterval(() => {
+            const s = localStreamRef.current;
+            if (s) {
+              clearInterval(checkStream);
+              setCallTarget(activeCallRef.current!.receiverId, data.callId);
+              createInitiatorPeer(
+                s,
+                data.callId,
+                activeCallRef.current!.receiverId,
+                (remoteStream) => { setRemoteStream(remoteStream); },
+                (err) => {
+                  console.error('[Call] Peer error:', err);
+                  endCallCleanup();
+                },
+              );
+            }
+          }, 100);
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            clearInterval(checkStream);
+            if (!localStreamRef.current) {
+              console.error('[Call] Stream capture timeout');
+              endCallCleanup();
+            }
+          }, 5000);
+          return;
+        }
         setCallTarget(activeCallRef.current!.receiverId, data.callId);
         createInitiatorPeer(
           stream,
@@ -378,12 +407,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // --------- startCall ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  const startCall = (
+  const startCall = async (
     targetUserId: string,
     targetName: string,
     callType: 'video' | 'voice',
     targetAvatar?: string,
-  ): void => {
+  ): Promise<void> => {
     if (!currentUser) return;
     const callId = `${currentUser.uid}_${targetUserId}_${Date.now()}`;
     const socket = getSocket();
@@ -405,14 +434,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Start playing outgoing ringtone for the caller
     callAudioService.playOutgoingRingtone();
 
-    socket?.emit(SOCKET_EVENTS.CALL_USER, {
-      targetUserId,
-      callType,
-      callId,
-      callerName: currentUser.name,
-      callerAvatar: currentUser.avatar,
-    });
-
     if (isElectron()) {
       // Electron: open the call window – it captures its own stream and handles WebRTC
       window.electronAPI!.openCallWindow!({
@@ -423,16 +444,35 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetName: nicknames[targetUserId] || targetName,
         targetAvatar,
       });
+      
+      // Emit CALL_USER immediately for Electron (window handles media)
+      socket?.emit(SOCKET_EVENTS.CALL_USER, {
+        targetUserId,
+        callType,
+        callId,
+        callerName: currentUser.name,
+        callerAvatar: currentUser.avatar,
+      });
     } else {
-        getLocalStream(callType)
-          .then((stream) => {
-            localStreamRef.current = stream;
-            setLocalStream(stream);
-          })
-          .catch((err) => {
-            console.error('[Call] getLocalStream failed:', err);
-            endCallCleanup();
-          });
+      // Non-Electron: capture stream FIRST, then emit CALL_USER
+      try {
+        const stream = await getLocalStream(callType);
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        
+        // Now that we have the stream, emit CALL_USER
+        socket?.emit(SOCKET_EVENTS.CALL_USER, {
+          targetUserId,
+          callType,
+          callId,
+          callerName: currentUser.name,
+          callerAvatar: currentUser.avatar,
+        });
+      } catch (err) {
+        console.error('[Call] getLocalStream failed:', err);
+        endCallCleanup();
+        return;
+      }
     }
 
     // Auto-cancel after 30 s if receiver doesn't answer
@@ -559,7 +599,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 const noOpCallContext: CallContextValue = {
-  startCall: () => { },
+  startCall: async () => { },
   acceptIncomingCall: () => { },
   rejectIncomingCall: () => { },
   endActiveCall: () => { },

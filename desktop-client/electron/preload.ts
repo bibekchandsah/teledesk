@@ -159,6 +159,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('updater:status', handler);
     return () => ipcRenderer.off('updater:status', handler);
   },
+
+  // Shared authentication for multiple instances
+  saveSharedAuth: (authData: any): Promise<boolean> => ipcRenderer.invoke('save-shared-auth', authData),
+  loadSharedAuth: (): Promise<any> => ipcRenderer.invoke('load-shared-auth'),
+  clearSharedAuth: (): Promise<boolean> => ipcRenderer.invoke('clear-shared-auth'),
+  onSharedAuthUpdate: (cb: (authData: any) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, authData: any) => cb(authData);
+    ipcRenderer.on('shared-auth-update', handler);
+    return () => ipcRenderer.off('shared-auth-update', handler);
+  },
 });
 
 // ─── TypeScript type declarations ─────────────────────────────────────────
@@ -259,6 +269,12 @@ export interface ElectronAPI {
   cancelDownload: () => void;
   quitAndInstall: () => void;
   onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void;
+
+  // Shared authentication for multiple instances
+  saveSharedAuth: (authData: any) => Promise<boolean>;
+  loadSharedAuth: () => Promise<any>;
+  clearSharedAuth: () => Promise<boolean>;
+  onSharedAuthUpdate: (cb: (authData: any) => void) => () => void;
 }
 
 declare global {

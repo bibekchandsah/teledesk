@@ -16,6 +16,8 @@ import {
   sendPasswordResetEmail,
   deleteUser,
   signInWithCustomToken as firebaseSignInWithCustomToken,
+  setPersistence,
+  browserLocalPersistence,
 } from 'firebase/auth';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Message, Chat } from '@shared/types';
@@ -31,6 +33,12 @@ const firebaseConfig = {
 
 const app: FirebaseApp = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(app);
+
+// Configure Firebase Auth persistence for Electron
+// This ensures authentication state persists across app restarts
+setPersistence(firebaseAuth, browserLocalPersistence).catch((error) => {
+  console.warn('[Firebase] Failed to set persistence:', error);
+});
 
 // ─── Supabase Realtime Client (anon key – read-only subscriptions) ─────────
 // The anon key is safe to expose; actual writes always go through the backend
@@ -105,10 +113,31 @@ export const onAuthChange = (
   return onAuthStateChanged(firebaseAuth, callback);
 };
 
+// Store the last valid token for use when Firebase auth isn't available
+let cachedToken: string | null = null;
+
 export const getIdToken = async (): Promise<string | null> => {
   const user = firebaseAuth.currentUser;
-  if (!user) return null;
-  return user.getIdToken();
+  if (user) {
+    try {
+      const token = await user.getIdToken();
+      cachedToken = token; // Cache the token
+      return token;
+    } catch (error) {
+      console.error('[Firebase] Failed to get ID token:', error);
+    }
+  }
+  // If no Firebase user or error, return cached token
+  if (cachedToken) {
+    console.log('[Firebase] No current user, using cached token');
+  }
+  return cachedToken;
+};
+
+// Set cached token (called from AuthContext when restoring from shared auth)
+export const setCachedToken = (token: string | null): void => {
+  cachedToken = token;
+  console.log('[Firebase] Cached token updated:', token ? 'token set' : 'token cleared');
 };
 
 export const reauthenticate = async (): Promise<{ success: boolean; error?: string }> => {

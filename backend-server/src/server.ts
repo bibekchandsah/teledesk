@@ -1,4 +1,24 @@
-import 'dotenv/config';
+// Environment-specific configuration loading
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment-specific .env file
+const nodeEnv = process.env.NODE_ENV || 'development';
+const envFile = `.env.${nodeEnv}`;
+const envPath = path.resolve(process.cwd(), envFile);
+
+// Try to load environment-specific file first
+dotenv.config({ path: envPath });
+
+// Also try .env.local for overrides
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+// Fallback to .env
+dotenv.config();
+
+console.log(`[Backend] Environment: ${nodeEnv}`);
+console.log(`[Backend] Loaded env from: ${envFile}`);
+
 import express from 'express';
 import http from 'http';
 import cors from 'cors';

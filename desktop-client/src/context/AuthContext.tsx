@@ -10,6 +10,8 @@ import {
   getUserProfile,
   upsertUserProfile,
   signInWithCustomToken,
+  firebaseAuth,
+  setCachedToken,
 } from '../services/firebaseService';
 import { syncUserProfile, get2FAStatus } from '../services/apiService';
 import { initSocket, disconnectSocket } from '../services/socketService';
@@ -18,6 +20,7 @@ import { requestNotificationPermission } from '../services/notificationService';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useMultiAccountStore } from '../store/multiAccountStore';
+import { sharedAuthService, SharedAuthData } from '../services/sharedAuthService';
 import TwoFactorVerifyModal from '../components/modals/TwoFactorVerifyModal';
 
 interface AuthContextValue {
@@ -42,8 +45,85 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { setUserProfile } = useChatStore();
   const { addAccount, setActiveAccount } = useMultiAccountStore();
 
+  // Initialize auth on mount - check shared auth first, then Firebase
+  useEffect(() => {
+    console.log('[Auth] Initializing authentication...');
+    
+    const initializeAuth = async () => {
+      try {
+        // First, try to restore from shared auth storage
+        console.log('[Auth] Checking shared auth storage...');
+        const sharedAuth = await sharedAuthService.loadAuthData();
+        
+        if (sharedAuth && sharedAuth.isAuthenticated && sharedAuth.currentUser) {
+          console.log('[Auth] Found valid shared auth data, restoring user profile...');
+          
+          // Set the cached token for API calls
+          if (sharedAuth.firebaseUser?.accessToken) {
+            setCachedToken(sharedAuth.firebaseUser.accessToken);
+            console.log('[Auth] Cached token set from shared storage');
+          }
+          
+          // Restore user profile immediately for better UX
+          setCurrentUser(sharedAuth.currentUser);
+          setUserProfile(sharedAuth.currentUser);
+          setLoading(false);
+          
+          // Try to initialize socket with the cached token
+          try {
+            if (sharedAuth.firebaseUser?.accessToken) {
+              initSocket(sharedAuth.firebaseUser.accessToken);
+              console.log('[Auth] Socket initialized with cached token');
+            }
+          } catch (socketError) {
+            console.warn('[Auth] Failed to initialize socket:', socketError);
+          }
+          
+          console.log('[Auth] User profile restored from shared storage');
+        } else {
+          console.log('[Auth] No valid shared auth data found');
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('[Auth] Failed to initialize auth:', error);
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth updates from other instances
+    const unsubscribeSharedAuth = sharedAuthService.onAuthUpdate((sharedAuth) => {
+      console.log('[SharedAuth] Received auth update from another instance:', sharedAuth);
+      
+      if (sharedAuth && sharedAuth.isAuthenticated && sharedAuth.currentUser) {
+        console.log('[SharedAuth] Applying auth update from another instance');
+        // Only update if we don't already have a user (avoid conflicts)
+        const currentAuthState = useAuthStore.getState();
+        if (!currentAuthState.currentUser) {
+          // Set cached token
+          if (sharedAuth.firebaseUser?.accessToken) {
+            setCachedToken(sharedAuth.firebaseUser.accessToken);
+          }
+          setCurrentUser(sharedAuth.currentUser);
+          setUserProfile(sharedAuth.currentUser);
+          setLoading(false);
+        }
+      } else if (sharedAuth === null) {
+        console.log('[SharedAuth] Received logout from another instance');
+        setCachedToken(null);
+        setCurrentUser(null);
+        disconnectSocket();
+        clearAllKeys();
+      }
+    });
+
+    return unsubscribeSharedAuth;
+  }, [setCurrentUser, setUserProfile, setLoading]);
+
   useEffect(() => {
     const unsubscribe = onAuthChange(async (fbUser) => {
+      console.log('[Firebase] Auth state changed:', fbUser ? 'User logged in' : 'User logged out');
       setFirebaseUser(fbUser);
 
       if (fbUser) {
@@ -71,12 +151,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isManualLoginRef.current = false;
         }
 
-        // No 2FA or page reload - proceed with normal login
+        // Firebase user is available - proceed with login
         await completeLogin(fbUser);
       } else {
-        setCurrentUser(null);
-        disconnectSocket();
-        clearAllKeys();
+        // User logged out - only clear if this is a manual logout AND we have a current user
+        const currentUser = useAuthStore.getState().currentUser;
+        
+        // Don't clear auth if:
+        // 1. We don't have a current user (startup state)
+        // 2. This is not a manual logout (isManualLoginRef is false)
+        if (currentUser && isManualLoginRef.current) {
+          console.log('[Firebase] Manual logout detected, clearing shared auth');
+          setCurrentUser(null);
+          disconnectSocket();
+          clearAllKeys();
+          await sharedAuthService.clearAuthData();
+          isManualLoginRef.current = false; // Reset flag
+        } else {
+          console.log('[Firebase] Ignoring logout - likely startup auth state or no current user');
+        }
       }
     });
 
@@ -99,6 +192,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(immediateProfile);
     setUserProfile(immediateProfile);
     setLoading(false);
+
+    // Save to shared storage immediately
+    const sharedAuthData: SharedAuthData = {
+      firebaseUser: {
+        uid: fbUser.uid,
+        email: fbUser.email,
+        displayName: fbUser.displayName,
+        photoURL: fbUser.photoURL,
+        accessToken: await fbUser.getIdToken(),
+      },
+      currentUser: immediateProfile,
+      isAuthenticated: true,
+      lastUpdated: new Date().toISOString(),
+    };
+    
+    console.log('[Auth] Saving shared auth data');
+    await sharedAuthService.saveAuthData(sharedAuthData);
 
     // ── Step 2: Background sync ──
     (async () => {
@@ -145,6 +255,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastUsed: new Date().toISOString(),
           });
           setActiveAccount(userProfile.uid);
+
+          // Update shared storage with complete profile
+          const updatedSharedAuthData: SharedAuthData = {
+            firebaseUser: {
+              uid: fbUser.uid,
+              email: fbUser.email,
+              displayName: fbUser.displayName,
+              photoURL: fbUser.photoURL,
+              accessToken: token,
+            },
+            currentUser: userProfile,
+            isAuthenticated: true,
+            lastUpdated: new Date().toISOString(),
+          };
+          await sharedAuthService.saveAuthData(updatedSharedAuthData);
         }
         
         if (pendingDisplayNameRef.current) {
@@ -256,10 +381,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async (switchingAccount = false): Promise<void> => {
     try {
+      // Mark this as a manual logout
+      isManualLoginRef.current = true;
+      
       await signOutUser();
+      setCachedToken(null); // Clear cached token
       disconnectSocket();
       clearAllKeys();
       storeLogout();
+      
+      // Clear shared auth storage
+      await sharedAuthService.clearAuthData();
       
       // Don't clear multi-account store when switching accounts
       if (!switchingAccount) {
@@ -268,6 +400,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.error('[Auth] Logout error:', err);
+      // Reset flag on error
+      isManualLoginRef.current = false;
     }
   };
 

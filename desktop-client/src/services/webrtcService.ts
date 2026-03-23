@@ -281,7 +281,12 @@ export const createInitiatorPeer = (
     initiator: true,
     stream,
     trickle: true,
-    config: { iceServers: [...WEBRTC_CONFIG.ICE_SERVERS] as RTCIceServer[] },
+    config: { 
+      iceServers: [...WEBRTC_CONFIG.ICE_SERVERS] as RTCIceServer[],
+      iceTransportPolicy: WEBRTC_CONFIG.ICE_TRANSPORT_POLICY,
+      bundlePolicy: WEBRTC_CONFIG.BUNDLE_POLICY,
+      rtcpMuxPolicy: WEBRTC_CONFIG.RTCP_MUX_POLICY,
+    },
   });
 
   currentPeer.on('signal', (data) => {
@@ -346,7 +351,12 @@ export const createReceiverPeer = (
     initiator: false,
     stream,
     trickle: true,
-    config: { iceServers: [...WEBRTC_CONFIG.ICE_SERVERS] as RTCIceServer[] },
+    config: { 
+      iceServers: [...WEBRTC_CONFIG.ICE_SERVERS] as RTCIceServer[],
+      iceTransportPolicy: WEBRTC_CONFIG.ICE_TRANSPORT_POLICY,
+      bundlePolicy: WEBRTC_CONFIG.BUNDLE_POLICY,
+      rtcpMuxPolicy: WEBRTC_CONFIG.RTCP_MUX_POLICY,
+    },
   });
 
   // Attach after simple-peer has set up its own listeners (next tick).

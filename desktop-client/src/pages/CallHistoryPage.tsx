@@ -66,14 +66,15 @@ const CallHistoryPage: React.FC = () => {
       const result = await getCallLogs(limit, before);
 
       if (result.success && result.data) {
+        const logs = result.data;
         if (before) {
-          setCallLogs((prev) => [...prev, ...result.data]);
+          setCallLogs((prev) => [...prev, ...logs]);
         } else {
-          setCallLogs(result.data);
+          setCallLogs(logs);
         }
         
         // If we got fewer than the limit, there are no more logs
-        if (result.data.length < limit) {
+        if (logs.length < limit) {
           setHasMore(false);
         } else {
           setHasMore(true);

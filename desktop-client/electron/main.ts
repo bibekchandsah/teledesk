@@ -26,7 +26,20 @@ let isQuitting = false;
 // --------- Load Environment Variables ------------------------------------------------------------------------------------------------------------------------------
 const loadEnv = () => {
   try {
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    
+    // Determine which env file to load based on environment
+    const envFileName = isDev ? '.env.development' : '.env.production';
+    
     const possiblePaths = [
+      path.join(process.cwd(), envFileName),
+      path.join(path.dirname(process.execPath), envFileName),
+      path.join(app.getAppPath(), envFileName),
+      // Also try .env.local as override (highest priority)
+      path.join(process.cwd(), '.env.local'),
+      path.join(path.dirname(process.execPath), '.env.local'),
+      path.join(app.getAppPath(), '.env.local'),
+      // Fallback to .env
       path.join(process.cwd(), '.env'),
       path.join(path.dirname(process.execPath), '.env'),
       path.join(app.getAppPath(), '.env'),
@@ -41,12 +54,13 @@ const loadEnv = () => {
             const [key, ...valueParts] = trimmed.split('=');
             const value = valueParts.join('=').trim();
             const cleanValue = value.replace(/^["']|["']$/g, '');
-            process.env[key.trim()] = cleanValue;
+            // Don't override if already set (allows .env.local to override)
+            if (key.trim() && !(key.trim() in process.env)) {
+              process.env[key.trim()] = cleanValue;
+            }
           }
         });
         console.log('[Main] Loaded .env from:', envPath);
-        // Break after first found .env to avoid overrides if multiple exist
-        break;
       }
     }
   } catch (e) {
@@ -133,7 +147,27 @@ const getExpectedUpdateFilePath = () => {
 };
 
 // --------- Window state persistence ---------------------------------------------------------------------------------------------------------------------------------------
-const userDataPath = app.getPath('userData');
+// Set up userData paths for multiple instances
+// - Shared data (auth, settings): baseUserData/shared/
+// - Instance data (cache, temp): baseUserData/instances/{instanceId}/
+const instanceId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+const baseUserData = app.getPath('userData');
+const sharedUserData = path.join(baseUserData, 'shared');
+const instanceUserData = path.join(baseUserData, 'instances', instanceId);
+
+// Create directories if they don't exist
+if (!fs.existsSync(sharedUserData)) {
+  fs.mkdirSync(sharedUserData, { recursive: true });
+}
+if (!fs.existsSync(instanceUserData)) {
+  fs.mkdirSync(instanceUserData, { recursive: true });
+}
+
+// Set instance-specific userData for cache/temp files
+app.setPath('userData', instanceUserData);
+
+// But use shared directory for persistent data like window state
+const userDataPath = sharedUserData;
 const windowStateFile = path.join(userDataPath, 'window-state.json');
 
 interface WindowState {
@@ -206,41 +240,54 @@ const VITE_DEV_SERVER_URL = 'http://localhost:5173';
 
 // Load .env file manually ΓÇö Vite-prefixed vars are renderer-only and never reach the main process
 const loadEnvFile = () => {
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+  const envFileName = isDev ? '.env.development' : '.env.production';
+  
   // In dev: .env is in desktop-client/.env
   // __dirname in compiled code is: desktop-client/dist-electron
   // So we need to go up one level: ../
-  const envPath = isDev 
-    ? path.join(__dirname, '../.env')  // from dist-electron/main.js ΓåÆ desktop-client/.env
-    : path.join(app.getAppPath(), '.env');
+  const envPaths = isDev 
+    ? [
+        path.join(__dirname, `../${envFileName}`),  // .env.development
+        path.join(__dirname, '../.env.local'),       // .env.local override
+        path.join(__dirname, '../.env'),             // fallback
+      ]
+    : [
+        path.join(app.getAppPath(), envFileName),    // .env.production
+        path.join(app.getAppPath(), '.env.local'),   // .env.local override
+        path.join(app.getAppPath(), '.env'),         // fallback
+      ];
   
   try {
-    if (fs.existsSync(envPath)) {
-      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eqIdx = trimmed.indexOf('=');
-        if (eqIdx === -1) continue;
-        const key = trimmed.slice(0, eqIdx).trim();
-        let val = trimmed.slice(eqIdx + 1).trim();
-        // Remove quotes if present
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-          val = val.slice(1, -1);
+    for (const envPath of envPaths) {
+      if (fs.existsSync(envPath)) {
+        const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx === -1) continue;
+          const key = trimmed.slice(0, eqIdx).trim();
+          let val = trimmed.slice(eqIdx + 1).trim();
+          // Remove quotes if present
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          // Don't override if already set
+          if (key && !(key in process.env)) {
+            process.env[key] = val;
+          }
         }
-        if (key && !(key in process.env)) {
-          process.env[key] = val;
-        }
+        console.log('[Env] Loaded from:', envPath);
       }
-      console.log('[Env] Loaded from:', envPath);
-      console.log('[Env] ALLOW_DEVTOOLS =', JSON.stringify(process.env.ALLOW_DEVTOOLS));
-    } else {
-      console.warn('[Env] File not found:', envPath);
     }
+    console.log('[Env] ALLOW_DEVTOOLS =', JSON.stringify(process.env.ALLOW_DEVTOOLS));
   } catch (err) {
     console.error('[Env] Failed to load:', err);
   }
 };
 loadEnvFile();
+
 
 // ALLOW_DEVTOOLS=true in .env enables DevTools and right-click (for development)
 const allowDevTools = process.env.ALLOW_DEVTOOLS === 'true';
@@ -281,15 +328,17 @@ const handleDeepLink = (url: string) => {
 };
 
 // Handle deep links when app is already running
-app.on('second-instance', (event, commandLine) => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-  // Windows/Linux: handle deep link from command line
-  const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL}://`));
-  if (url) handleDeepLink(url);
-});
+// Note: With multiple instances allowed, this event won't fire
+// Each instance will handle its own deep links via 'open-url' or command line args
+// app.on('second-instance', (event, commandLine) => {
+//   if (mainWindow) {
+//     if (mainWindow.isMinimized()) mainWindow.restore();
+//     mainWindow.focus();
+//   }
+//   // Windows/Linux: handle deep link from command line
+//   const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+//   if (url) handleDeepLink(url);
+// });
 
 // macOS: Handle deep link
 app.on('open-url', (event, url) => {
@@ -333,6 +382,8 @@ const createWindow = () => {
       nodeIntegration: false,
       sandbox: false,
       webSecurity: true,
+      // Remove partition to use default session for Firebase auth persistence
+      // partition: 'persist:shared', 
     },
   });
 
@@ -617,6 +668,59 @@ const createTray = () => {
 };
 
 // --------- IPC Handlers ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+// Shared authentication storage for multiple instances
+const sharedAuthFile = path.join(sharedUserData, 'shared-auth.json');
+
+// Save shared auth data
+ipcMain.handle('save-shared-auth', async (_event, authData) => {
+  try {
+    fs.writeFileSync(sharedAuthFile, JSON.stringify(authData, null, 2));
+    // Notify all other instances about the auth update
+    BrowserWindow.getAllWindows().forEach(window => {
+      if (window && !window.isDestroyed() && window.webContents !== _event.sender) {
+        window.webContents.send('shared-auth-update', authData);
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('[IPC] Failed to save shared auth:', error);
+    return false;
+  }
+});
+
+// Load shared auth data
+ipcMain.handle('load-shared-auth', async () => {
+  try {
+    if (fs.existsSync(sharedAuthFile)) {
+      const data = fs.readFileSync(sharedAuthFile, 'utf8');
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    console.error('[IPC] Failed to load shared auth:', error);
+    return null;
+  }
+});
+
+// Clear shared auth data
+ipcMain.handle('clear-shared-auth', async (_event) => {
+  try {
+    if (fs.existsSync(sharedAuthFile)) {
+      fs.unlinkSync(sharedAuthFile);
+    }
+    // Notify all other instances about the auth clear
+    BrowserWindow.getAllWindows().forEach(window => {
+      if (window && !window.isDestroyed() && window.webContents !== _event.sender) {
+        window.webContents.send('shared-auth-update', null);
+      }
+    });
+    return true;
+  } catch (error) {
+    console.error('[IPC] Failed to clear shared auth:', error);
+    return false;
+  }
+});
 
 // Desktop Notifications
 ipcMain.on(
@@ -1170,7 +1274,7 @@ const createCallWindow = (initData: CallInitData) => {
     height: 680,
     minWidth: 640,
     minHeight: 480,
-    title: `${peerName} ΓÇô ${callLabel}`,
+    title: `${peerName} — ${callLabel}`,
     backgroundColor: '#0f172a',
     show: false,
     alwaysOnTop: true,
@@ -1292,12 +1396,16 @@ ipcMain.on('call:force-close', () => {
 
 
 // --------- App Lifecycle ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const gotTheLock = app.requestSingleInstanceLock();
+// Allow multiple instances (like VS Code, browsers)
+// Note: userData path is set earlier in the file to give each instance its own directory
 
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.whenReady().then(() => {
+// Comment out single instance lock to enable multiple windows
+// const gotTheLock = app.requestSingleInstanceLock();
+// if (!gotTheLock) {
+//   app.quit();
+// } else {
+
+app.whenReady().then(() => {
   // Remove native menu bar (File/Edit/View/Window/Help)
   Menu.setApplicationMenu(null);
 
@@ -1309,6 +1417,22 @@ if (!gotTheLock) {
     'display-capture', 'audiocapture', 'audioCapture',
     'videocapture', 'videoCapture', 'mediaDevices',
   ];
+  
+  // Configure shared session for authentication persistence across instances
+  const sharedSession = session.fromPartition('persist:shared', {
+    cache: false // Don't cache in shared session to avoid conflicts
+  });
+  
+  // Set up shared session for authentication
+  sharedSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowedPermissions.includes(permission));
+  });
+
+  sharedSession.setPermissionCheckHandler((_webContents, permission) => {
+    return allowedPermissions.includes(permission);
+  });
+
+  // Configure default session (instance-specific) for cache
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(allowedPermissions.includes(permission));
   });
@@ -1334,7 +1458,18 @@ if (!gotTheLock) {
   // Allow getUserMedia / enumerateDevices unconditionally in the renderer
   session.defaultSession.setDevicePermissionHandler(() => true);
 
-  // Configure session for Firebase OAuth - remove CORS headers
+  // Configure shared session for Firebase OAuth - remove CORS headers
+  sharedSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    
+    // Remove restrictive COOP/COEP headers that block OAuth popups
+    delete responseHeaders['cross-origin-opener-policy'];
+    delete responseHeaders['cross-origin-embedder-policy'];
+    
+    callback({ responseHeaders });
+  });
+
+  // Configure default session for Firebase OAuth - remove CORS headers
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = { ...details.responseHeaders };
     
@@ -1383,4 +1518,4 @@ app.on('before-quit', () => {
     tray = null;
   }
 });
-}
+// Closing brace removed - no longer needed since we removed the single instance lock wrapper

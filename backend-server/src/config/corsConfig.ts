@@ -1,8 +1,6 @@
 import { CorsOptions } from 'cors';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
+// Environment variables are loaded in server.ts
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
   : ['http://localhost:5173', 'http://localhost:3000', 'http://10.5.234.63:5173'];

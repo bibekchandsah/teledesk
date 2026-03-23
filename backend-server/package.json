@@ -4,9 +4,9 @@
   "description": "Backend server for TeleDesk messaging app",
   "main": "dist/backend-server/src/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
-    "start": "node dist/backend-server/src/server.js",
+    "dev": "cross-env NODE_ENV=development ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "cross-env NODE_ENV=production tsc",
+    "start": "cross-env NODE_ENV=production node dist/backend-server/src/server.js",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
@@ -46,6 +46,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.26.1",
     "@typescript-eslint/parser": "^8.26.1",
+    "cross-env": "^10.1.0",
     "eslint": "^9.22.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"
