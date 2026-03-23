@@ -1,6 +1,10 @@
 Copy-Item backend-server/.env.example backend-server/.env
 Copy-Item desktop-client/.env.example desktop-client/.env
 
+cd desktop-client; npm install
+cd backend-server; npm install
+npx tsc -p tsconfig.electron.json --noEmit
+
 cd backend-server; npm run dev
 cd desktop-client; npm run electron:dev
 npm -v; node -v; npm install; npx tsc -p tsconfig.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npx tsc -p tsconfig.electron.json --noEmit; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

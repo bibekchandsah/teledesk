@@ -5,6 +5,11 @@ WORKDIR /app/backend-server
 
 # Install backend dependencies using backend lockfile only
 COPY backend-server/package*.json ./
+
+RUN npm install --package-lock-only && \
+    diff -q package-lock.json backend-server/package-lock.json || \
+    (echo "❌ Lock file out of sync. Run npm install locally from backend directory and commit the updated lock file." && exit 1)
+
 RUN npm ci
 
 # Copy shared folder and backend source

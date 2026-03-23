@@ -431,14 +431,66 @@ const handleDeepLink = (url: string) => {
 
 // Deep link handling strategy:
 // - We DON'T use single instance lock (to allow multiple windows for multi-account)
-// - On Windows, when a deep link is clicked:
-//   1. If no instance running: starts app with URL in process.argv
-//   2. If instance(s) running: Windows tries to start new instance with URL in process.argv
-// - We detect deep links in process.argv and handle them, then continue running
-// - This allows both multiple instances AND deep link handling
+// - Instead, when a deep link starts a new instance, we immediately try to send
+//   the token to an existing instance and quit before creating any windows
+// - This allows both OAuth to work smoothly AND multiple manual instances
 
-// Note: This means clicking a deep link might open a new instance instead of
-// focusing an existing one, but that's acceptable for the multi-account use case
+// Check if this instance was started by a deep link
+const deepLinkUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+
+if (deepLinkUrl) {
+  console.log('[DeepLink] This instance was started by a deep link:', deepLinkUrl);
+  
+  // Extract token from URL
+  try {
+    const url = new URL(deepLinkUrl);
+    const token = url.searchParams.get('token');
+    
+    if (token) {
+      console.log('[DeepLink] Extracted token, attempting to send to existing instance...');
+      
+      // Try to send to existing instance's OAuth server
+      // We need to do this BEFORE app.whenReady() to prevent window creation
+      const http = require('http');
+      
+      const sendToExisting = () => {
+        return new Promise((resolve) => {
+          const req = http.get(`http://localhost:48292/auth/callback?token=${token}`, (res: any) => {
+            console.log('[DeepLink] Successfully sent token to existing instance (status:', res.statusCode, ')');
+            if (res.statusCode === 200) {
+              resolve(true);
+            } else {
+              resolve(false);
+            }
+          });
+          
+          req.on('error', (err: any) => {
+            console.log('[DeepLink] No existing instance found:', err.message);
+            resolve(false);
+          });
+          
+          req.setTimeout(1000, () => {
+            req.destroy();
+            console.log('[DeepLink] Connection timeout, no existing instance');
+            resolve(false);
+          });
+        });
+      };
+      
+      // Wait for the connection attempt
+      sendToExisting().then((sent) => {
+        if (sent) {
+          console.log('[DeepLink] Token sent successfully, quitting this instance');
+          app.quit();
+        } else {
+          console.log('[DeepLink] Will process token in this instance');
+        }
+      });
+    }
+  } catch (error) {
+    console.error('[DeepLink] Failed to parse deep link URL:', error);
+  }
+}
 
 // macOS: Handle deep link
 app.on('open-url', (event, url) => {

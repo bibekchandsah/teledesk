@@ -85,17 +85,19 @@ export const AccountSwitcher: React.FC = () => {
 
       // Try seamless account switching first
       try {
-        // IMPORTANT: Sign out from Firebase first to clear its session
+        const { switchToAccount } = await import('../services/multiAccountService');
+        console.log('[AccountSwitcher] Attempting seamless switch from', activeAccountUid, 'to', uid);
+        
+        // This will throw an error if token is expired
+        await switchToAccount(account);
+
+        // Token is valid - now sign out from Firebase to clear its session
         // Otherwise Firebase will auto-restore the previous account
-        console.log('[AccountSwitcher] Signing out from Firebase before switch');
+        console.log('[AccountSwitcher] Token valid, signing out from Firebase before switch');
         await logout(true); // true = switching account
         
         // Small delay to ensure Firebase signout completes
         await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const { switchToAccount } = await import('../services/multiAccountService');
-        console.log('[AccountSwitcher] Attempting seamless switch from', activeAccountUid, 'to', uid);
-        await switchToAccount(account);
 
         // Set as active account in Zustand store
         setActiveAccount(uid);
@@ -127,10 +129,12 @@ export const AccountSwitcher: React.FC = () => {
         setSwitching(false);
         
         // Show error modal explaining the situation
+        console.log('[AccountSwitcher] Setting error modal state to show expired token message');
         setErrorModal({
           isOpen: true,
           message: 'Your session for this account has expired. You will be redirected to log in again.',
         });
+        console.log('[AccountSwitcher] Error modal state set:', { isOpen: true });
         
         // Store the account info for redirect
         (window as any).__pendingAccountSwitch = {
@@ -203,9 +207,27 @@ export const AccountSwitcher: React.FC = () => {
       const { account, uid } = pendingSwitch;
       delete (window as any).__pendingAccountSwitch;
       
+      // Remove the expired account from storage
+      // User will need to re-add it with fresh credentials
+      const { multiAccountAuthService } = await import('../services/multiAccountAuthService');
+      await multiAccountAuthService.removeAccount(uid);
+      
+      // Also remove from Zustand store
+      removeAccount(uid);
+      
+      // Clear the active account so auto-restore doesn't happen
+      const storage = await multiAccountAuthService.loadAccounts();
+      if (storage) {
+        storage.activeAccountUid = null; // Clear active account to prevent auto-restore
+        await multiAccountAuthService.saveAccounts(storage);
+      }
+      
+      // Logout current user
       await logout(true);
-      setActiveAccount(uid);
-      window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
+      
+      // Redirect to login page
+      // The user will log in and it will be added as a fresh account
+      window.location.href = '/login';
     }
   };
 

@@ -826,3 +826,4 @@ restart in deploy isn't working, it's not restarting when clicked restart
 
 login with google
 chat during call 
+account selection delete icon not trigger
