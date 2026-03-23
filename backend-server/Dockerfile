@@ -3,13 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app/backend-server
 
-# Install backend dependencies using backend lockfile only
+# Copy package files
 COPY backend-server/package*.json ./
 
-RUN npm install --package-lock-only && \
-    diff -q package-lock.json backend-server/package-lock.json || \
-    (echo "❌ Lock file out of sync. Run npm install locally from backend directory and commit the updated lock file." && exit 1)
-
+# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
 # Copy shared folder and backend source
