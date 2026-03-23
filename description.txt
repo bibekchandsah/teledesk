@@ -822,3 +822,7 @@ use own r2 bucket 10GB for more secure data
 restart in deploy isn't working, it's not restarting when clicked restart
 
 
+
+
+login with google
+chat during call 

@@ -21,6 +21,27 @@ export const switchToAccount = async (account: StoredAccount): Promise<boolean> 
       throw new Error('Account not found in storage');
     }
     
+    // Check if token is still valid by trying to use it
+    // If it's expired, we need to re-authenticate
+    try {
+      const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_BASE}/api/users/me`, {
+        headers: {
+          'Authorization': `Bearer ${targetAccount.accessToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        console.warn('[MultiAccount] Stored token is invalid or expired');
+        throw new Error('Token expired - need to re-authenticate');
+      }
+      
+      console.log('[MultiAccount] Token is valid');
+    } catch (error) {
+      console.error('[MultiAccount] Token validation failed:', error);
+      throw new Error('Token expired - please log in again');
+    }
+    
     // Set the account as active
     await multiAccountAuthService.setActiveAccount(targetAccount.uid);
     

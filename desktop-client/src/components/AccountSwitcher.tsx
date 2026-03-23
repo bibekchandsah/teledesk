@@ -83,19 +83,61 @@ export const AccountSwitcher: React.FC = () => {
       `;
       document.body.appendChild(overlay);
 
-      // Use seamless account switching (like Gmail)
-      const { switchToAccount } = await import('../services/multiAccountService');
-      await switchToAccount(account);
+      // Try seamless account switching first
+      try {
+        // IMPORTANT: Sign out from Firebase first to clear its session
+        // Otherwise Firebase will auto-restore the previous account
+        console.log('[AccountSwitcher] Signing out from Firebase before switch');
+        await logout(true); // true = switching account
+        
+        // Small delay to ensure Firebase signout completes
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        const { switchToAccount } = await import('../services/multiAccountService');
+        console.log('[AccountSwitcher] Attempting seamless switch from', activeAccountUid, 'to', uid);
+        await switchToAccount(account);
 
-      // Set as active account
-      setActiveAccount(uid);
+        // Set as active account in Zustand store
+        setActiveAccount(uid);
 
-      // Small delay to ensure state is saved
-      await new Promise(resolve => setTimeout(resolve, 500));
+        // Verify the active account was set in storage before reload
+        const { multiAccountAuthService } = await import('../services/multiAccountAuthService');
+        const verification = await multiAccountAuthService.getActiveAccount();
+        console.log('[AccountSwitcher] Verification - active account:', verification?.uid);
+        
+        if (verification?.uid !== uid) {
+          throw new Error('Failed to set active account in storage');
+        }
 
-      // Reload the page to reinitialize with new account
-      // Use window.location.reload() instead of href for Electron compatibility
-      window.location.reload();
+        // Longer delay to ensure state is fully saved
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        console.log('[AccountSwitcher] Reloading to switch to account:', account.email);
+        
+        // Reload the page to reinitialize with new account
+        window.location.reload();
+      } catch (tokenError) {
+        // Token is expired or invalid - need to re-authenticate
+        console.warn('[AccountSwitcher] Seamless switch failed, redirecting to login:', tokenError);
+        
+        // Remove overlay
+        const overlay = document.getElementById('account-switching-overlay');
+        if (overlay) overlay.remove();
+        
+        setSwitching(false);
+        
+        // Show error modal explaining the situation
+        setErrorModal({
+          isOpen: true,
+          message: 'Your session for this account has expired. You will be redirected to log in again.',
+        });
+        
+        // Store the account info for redirect
+        (window as any).__pendingAccountSwitch = {
+          account,
+          uid,
+        };
+      }
     } catch (error) {
       console.error('Failed to switch account:', error);
 
@@ -105,16 +147,15 @@ export const AccountSwitcher: React.FC = () => {
 
       setSwitching(false);
 
-      // Show premium error modal
+      // Show error modal
       setErrorModal({
         isOpen: true,
-        message: 'Unable to switch accounts seamlessly. You will be redirected to the login page to complete the switch.',
+        message: 'Unable to switch accounts. You will be redirected to the login page.',
       });
 
-      // Wait for user to acknowledge before redirecting
+      // Store the account info for redirect
       const account = accounts.find((a) => a.uid === uid);
       if (account) {
-        // Store the redirect info for after modal closes
         (window as any).__pendingAccountSwitch = {
           account,
           uid,

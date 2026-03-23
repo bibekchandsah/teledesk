@@ -12,10 +12,84 @@
   desktopCapturer,
   clipboard,
   screen,
+  protocol,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { execFileSync, spawn } from 'child_process';
+import http from 'http';
+
+// --------- Local OAuth Callback Server (Fallback for dev mode) --------------------------------
+let oauthCallbackServer: http.Server | null = null;
+const OAUTH_CALLBACK_PORT = 48292; // Random high port
+
+const startOAuthCallbackServer = () => {
+  if (oauthCallbackServer) return;
+  
+  oauthCallbackServer = http.createServer((req, res) => {
+    const url = new URL(req.url || '', `http://localhost:${OAUTH_CALLBACK_PORT}`);
+    
+    if (url.pathname === '/auth/callback') {
+      const token = url.searchParams.get('token');
+      
+      if (token) {
+        console.log('[OAuth Server] Received token via HTTP callback');
+        
+        // Send token to renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('auth:external-token', token);
+          mainWindow.show();
+          mainWindow.focus();
+        }
+        
+        // Send success response
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`
+          <html>
+            <head>
+              <title>Authentication Successful</title>
+              <style>
+                body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #1a1a2e; color: white; }
+                .container { text-align: center; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <h2>✓ Authentication Successful!</h2>
+                <p>You can close this tab and return to TeleDesk.</p>
+              </div>
+              <script>
+                setTimeout(() => { window.close(); }, 2000);
+              </script>
+            </body>
+          </html>
+        `);
+      } else {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('No token provided');
+      }
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+    }
+  });
+  
+  oauthCallbackServer.listen(OAUTH_CALLBACK_PORT, 'localhost', () => {
+    console.log(`[OAuth Server] Listening on http://localhost:${OAUTH_CALLBACK_PORT}/auth/callback`);
+  });
+  
+  oauthCallbackServer.on('error', (err) => {
+    console.error('[OAuth Server] Error:', err);
+  });
+};
+
+const stopOAuthCallbackServer = () => {
+  if (oauthCallbackServer) {
+    oauthCallbackServer.close();
+    oauthCallbackServer = null;
+    console.log('[OAuth Server] Stopped');
+  }
+};
 
 // --------- Keep reference to prevent garbage collection ---------------------------------------------------------------------------
 let mainWindow: BrowserWindow | null = null;
@@ -301,12 +375,29 @@ if (process.platform === 'win32') {
 
 // --------- Deep Linking / Custom Protocol ------------------------------------------------------------------------------------------------------------------------
 const PROTOCOL = 'teledesk';
+console.log('[Main] Registering protocol:', PROTOCOL);
+console.log('[Main] Process defaultApp:', process.defaultApp);
+console.log('[Main] Process argv:', process.argv);
+
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    const result = app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+    console.log('[Main] Protocol registered (dev mode) with execPath:', process.execPath);
+    console.log('[Main] Protocol registration result:', result);
   }
 } else {
-  app.setAsDefaultProtocolClient(PROTOCOL);
+  const result = app.setAsDefaultProtocolClient(PROTOCOL);
+  console.log('[Main] Protocol registered (production mode)');
+  console.log('[Main] Protocol registration result:', result);
+}
+
+// Check if protocol is registered
+const isDefaultProtocol = app.isDefaultProtocolClient(PROTOCOL);
+console.log('[Main] Is default protocol client for', PROTOCOL + ':', isDefaultProtocol);
+
+if (!isDefaultProtocol) {
+  console.warn('[Main] WARNING: Protocol not registered! Deep links will not work.');
+  console.warn('[Main] In dev mode, you may need to run the built .exe once to register the protocol.');
 }
 
 const handleDeepLink = (url: string) => {
@@ -314,31 +405,40 @@ const handleDeepLink = (url: string) => {
   console.log('[DeepLink] Received URL:', url);
   try {
     const parsedUrl = new URL(url);
+    console.log('[DeepLink] Protocol:', parsedUrl.protocol);
+    console.log('[DeepLink] Hostname:', parsedUrl.hostname);
+    
     if (parsedUrl.protocol === `${PROTOCOL}:` && parsedUrl.hostname === 'auth') {
       const token = parsedUrl.searchParams.get('token');
+      console.log('[DeepLink] Token found:', token ? `yes (${token.length} chars)` : 'no');
+      
       if (token && mainWindow) {
+        console.log('[DeepLink] Sending token to renderer via IPC');
         mainWindow.webContents.send('auth:external-token', token);
         mainWindow.show();
         mainWindow.focus();
+        console.log('[DeepLink] Token sent successfully, window shown and focused');
+      } else {
+        console.warn('[DeepLink] Missing token or mainWindow:', { hasToken: !!token, hasMainWindow: !!mainWindow });
       }
+    } else {
+      console.log('[DeepLink] URL does not match auth protocol');
     }
   } catch (e) {
     console.error('[DeepLink] Failed to parse URL:', e);
   }
 };
 
-// Handle deep links when app is already running
-// Note: With multiple instances allowed, this event won't fire
-// Each instance will handle its own deep links via 'open-url' or command line args
-// app.on('second-instance', (event, commandLine) => {
-//   if (mainWindow) {
-//     if (mainWindow.isMinimized()) mainWindow.restore();
-//     mainWindow.focus();
-//   }
-//   // Windows/Linux: handle deep link from command line
-//   const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL}://`));
-//   if (url) handleDeepLink(url);
-// });
+// Deep link handling strategy:
+// - We DON'T use single instance lock (to allow multiple windows for multi-account)
+// - On Windows, when a deep link is clicked:
+//   1. If no instance running: starts app with URL in process.argv
+//   2. If instance(s) running: Windows tries to start new instance with URL in process.argv
+// - We detect deep links in process.argv and handle them, then continue running
+// - This allows both multiple instances AND deep link handling
+
+// Note: This means clicking a deep link might open a new instance instead of
+// focusing an existing one, but that's acceptable for the multi-account use case
 
 // macOS: Handle deep link
 app.on('open-url', (event, url) => {
@@ -1459,6 +1559,9 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
   registerWindowsAUMID();
+  
+  // Start local OAuth callback server (fallback for dev mode when deep links don't work)
+  startOAuthCallbackServer();
 
   // Grant camera & microphone permissions for the renderer
   const allowedPermissions = [
@@ -1550,6 +1653,44 @@ app.whenReady().then(() => {
     // tray icon optional in dev
   }
 
+  // Handle deep link from command line args (Windows/Linux)
+  // This handles the case when the app is launched via deep link
+  console.log('[DeepLink] Checking command line args:', process.argv);
+  
+  // Check all args for deep link (not just the ones starting with protocol)
+  // Sometimes the URL might be passed differently
+  let deepLinkUrl = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+  
+  // Also check if any arg contains the protocol (might be part of a longer string)
+  if (!deepLinkUrl) {
+    for (const arg of process.argv) {
+      if (arg.includes(`${PROTOCOL}://`)) {
+        // Extract the URL from the arg
+        const match = arg.match(new RegExp(`${PROTOCOL}://[^\\s'"]+`));
+        if (match) {
+          deepLinkUrl = match[0];
+          console.log('[DeepLink] Extracted deep link from arg:', deepLinkUrl);
+          break;
+        }
+      }
+    }
+  }
+  
+  if (deepLinkUrl) {
+    console.log('[DeepLink] Found deep link in command line args:', deepLinkUrl);
+    // Wait for window to be ready before handling deep link
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[DeepLink] Processing deep link after window ready');
+        handleDeepLink(deepLinkUrl!);
+      } else {
+        console.warn('[DeepLink] Main window not ready, cannot process deep link');
+      }
+    }, 3000); // Increased timeout to ensure window and renderer are fully ready
+  } else {
+    console.log('[DeepLink] No deep link found in command line args');
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -1561,6 +1702,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  // Stop OAuth callback server
+  stopOAuthCallbackServer();
   // Only destroy tray if it hasn't been destroyed already
   if (tray && !tray.isDestroyed()) {
     tray.destroy();

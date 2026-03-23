@@ -140,26 +140,56 @@ async function getOrCreateFirebaseUser(uid: string, email: string, name: string,
 }
 
 function sendAuthSuccessResponse(res: Response, customToken: string) {
-  const redirectUrl = `teledesk://auth?token=${customToken}`;
+  const deepLinkUrl = `teledesk://auth?token=${customToken}`;
+  const httpCallbackUrl = `http://localhost:48292/auth/callback?token=${customToken}`;
+  
+  // Set headers to allow inline scripts and connections to localhost (bypass CSP)
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://localhost:48292");
+  res.setHeader('Content-Type', 'text/html');
+  
   res.send(`
     <html>
       <head>
         <title>Authenticating...</title>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://localhost:48292">
         <style>
           body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #1a1a2e; color: white; }
           .container { text-align: center; }
           a { color: #6366f1; text-decoration: none; font-weight: bold; }
+          .status { margin-top: 20px; font-size: 14px; color: #888; }
         </style>
       </head>
       <body>
         <div class="container">
           <h2>Authentication Successful!</h2>
-          <p>You can close this tab and return to TeleDesk.</p>
-          <p>If you aren't redirected automatically, <a href="${redirectUrl}">click here</a>.</p>
+          <p>Redirecting to TeleDesk...</p>
+          <p class="status" id="status">Attempting to connect...</p>
+          <p style="font-size: 12px; color: #888; margin-top: 20px;">If you aren't redirected automatically, <a href="${deepLinkUrl}" id="manualLink">click here</a>.</p>
         </div>
         <script>
-          window.location.href = "${redirectUrl}";
-          setTimeout(() => { window.close(); }, 3000);
+          const status = document.getElementById('status');
+          const manualLink = document.getElementById('manualLink');
+          
+          // Try deep link first (works in production)
+          status.textContent = 'Trying deep link...';
+          window.location.href = "${deepLinkUrl}";
+          
+          // Fallback to HTTP callback after 1 second (works in dev mode)
+          setTimeout(() => {
+            status.textContent = 'Trying HTTP callback...';
+            fetch("${httpCallbackUrl}")
+              .then(() => {
+                status.textContent = '✓ Connected! You can close this tab.';
+                document.querySelector('.container h2').textContent = '✓ Authentication Successful!';
+                setTimeout(() => { window.close(); }, 2000);
+              })
+              .catch((err) => {
+                console.error('HTTP callback failed:', err);
+                status.textContent = '⚠ Please click the link above to continue';
+                manualLink.style.fontSize = '16px';
+                manualLink.style.fontWeight = 'bold';
+              });
+          }, 1000);
         </script>
       </body>
     </html>

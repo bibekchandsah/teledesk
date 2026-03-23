@@ -375,28 +375,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Handle external auth tokens (Deep Linking)
   useEffect(() => {
     if (window.electronAPI) {
+      console.log('[Auth] Setting up deep link listener for external OAuth tokens');
       const cleanup = window.electronAPI.onAuthExternalToken(async (token: string) => {
-        console.log('[Auth] Received external auth token');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('[Auth] 🎉 RECEIVED EXTERNAL AUTH TOKEN VIA DEEP LINK!');
+        console.log('[Auth] Token length:', token?.length || 0);
+        console.log('[Auth] Token preview:', token?.substring(0, 50) + '...');
+        console.log('[Auth] Current loading state:', useAuthStore.getState().isLoading);
+        console.log('[Auth] Current user:', useAuthStore.getState().currentUser?.email || 'none');
+        console.log('═══════════════════════════════════════════════════════');
+        
         try {
           setLoading(true);
           setError(null);
           isManualLoginRef.current = true; // Mark as manual login
           
+          console.log('[Auth] Starting Firebase sign-in with custom token...');
           const startSignIn = Date.now();
           await signInWithCustomToken(token);
-          console.log(`[Auth] Firebase sign-in finished in ${Date.now() - startSignIn}ms`);
+          console.log(`[Auth] ✓ Firebase sign-in finished in ${Date.now() - startSignIn}ms`);
           
           // The onAuthChange effect will handle the rest of the sync.
           // For deletion re-auth, simply signing in with the fresh token is enough
           // to update the "recent login" requirement.
         } catch (err) {
-          console.error('[Auth] External token login failed:', err);
+          console.error('[Auth] ✗ External token login failed:', err);
           setLoading(false);
           setError((err as Error).message);
           isManualLoginRef.current = false; // Reset on error
         }
       });
       return cleanup;
+    } else {
+      console.log('[Auth] Not in Electron, skipping deep link listener setup');
     }
   }, [setLoading, setError]);
 
@@ -410,6 +421,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (window.electronAPI) {
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
         await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/google`);
+        // Don't clear loading here - the deep link callback will handle it
+        // But set a timeout to clear loading if callback never arrives
+        setTimeout(() => {
+          if (useAuthStore.getState().isLoading && !useAuthStore.getState().currentUser) {
+            console.warn('[Auth] Google OAuth timeout - clearing loading state');
+            setLoading(false);
+            setError('Authentication timed out. Please try again.');
+            isManualLoginRef.current = false;
+          }
+        }, 60000); // 60 second timeout
         return;
       }
 
@@ -431,6 +452,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (window.electronAPI) {
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
         await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/github`);
+        // Don't clear loading here - the deep link callback will handle it
+        // But set a timeout to clear loading if callback never arrives
+        setTimeout(() => {
+          if (useAuthStore.getState().isLoading && !useAuthStore.getState().currentUser) {
+            console.warn('[Auth] GitHub OAuth timeout - clearing loading state');
+            setLoading(false);
+            setError('Authentication timed out. Please try again.');
+            isManualLoginRef.current = false;
+          }
+        }, 60000); // 60 second timeout
         return;
       }
 
