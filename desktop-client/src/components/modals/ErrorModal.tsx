@@ -16,7 +16,7 @@ const ErrorModal: React.FC<ErrorModalProps> = ({
   message,
   buttonText = 'OK',
 }) => {
-  console.log('[ErrorModal] Render called with isOpen:', isOpen, 'message:', message);
+  // console.log('[ErrorModal] Render called with isOpen:', isOpen, 'message:', message);
   
   if (!isOpen) return null;
 

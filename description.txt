@@ -837,6 +837,13 @@ The system now works like this:
     New token stored and used
     Account switch completes seamlessly
 
+Firebase ID tokens expire after exactly 1 hour. The app was storing the token at login time and reusing it, but never refreshing it proactively. When it expired, the backend rejected requests and the app kicked the user to the login screen.
+Three changes were made:
+    firebaseService.ts — added refreshIdToken() which calls getIdToken(true) (force refresh) to get a brand new token from Firebase.
+    AuthContext.tsx — added a timer that runs every 50 minutes while the user is logged in. It silently refreshes the token and updates the stored copy in multi-account storage, so the user never hits the 1-hour wall.
+    apiService.ts — added a retry mechanism: if any API call gets a 401 (token just expired mid-session), it force-refreshes the token and retries the request once automatically, instead of failing.
+This mirrors how Google/Gmail handles it — the session stays alive indefinitely as long as the user is active, and only expires on manual sign-out or account revocation.
+
 
 <---------------- idea -------------------------->
 use own r2 bucket 10GB for more secure data

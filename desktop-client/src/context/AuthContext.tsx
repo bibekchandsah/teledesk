@@ -12,6 +12,7 @@ import {
   signInWithCustomToken,
   firebaseAuth,
   setCachedToken,
+  refreshIdToken,
 } from '../services/firebaseService';
 import { syncUserProfile, get2FAStatus } from '../services/apiService';
 import { initSocket, disconnectSocket } from '../services/socketService';
@@ -241,6 +242,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return unsubscribe;
   }, [setCurrentUser, setLoading, setError]);
+
+  // Proactively refresh the Firebase token every 50 minutes so it never expires
+  // while the user is actively using the app. Firebase tokens last 1 hour.
+  useEffect(() => {
+    const REFRESH_INTERVAL = 50 * 60 * 1000; // 50 minutes
+
+    const interval = setInterval(async () => {
+      const currentUser = useAuthStore.getState().currentUser;
+      if (!currentUser) return; // Not logged in, nothing to refresh
+
+      const freshToken = await refreshIdToken();
+      if (!freshToken) return;
+
+      // Update the stored token so account switching and socket reconnects use the fresh one
+      try {
+        const stored = await multiAccountAuthService.getActiveAccount();
+        if (stored) {
+          await multiAccountAuthService.addOrUpdateAccount({ ...stored, accessToken: freshToken });
+        }
+      } catch (e) {
+        console.warn('[Auth] Failed to update stored token after refresh:', e);
+      }
+    }, REFRESH_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Complete login after 2FA verification (or if 2FA not enabled)
   const completeLogin = async (fbUser: FirebaseUser) => {

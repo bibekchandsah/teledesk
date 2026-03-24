@@ -1,4 +1,4 @@
-import { getIdToken } from './firebaseService';
+import { getIdToken, refreshIdToken } from './firebaseService';
 import { ApiResponse } from '@shared/types';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -18,25 +18,30 @@ const authFetch = async <T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
+  let response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
 
-  // Handle 401 Unauthorized - specifically session revocation
+  // If we get a 401 that isn't a session revocation, try once with a force-refreshed token
   if (response.status === 401) {
     try {
       const errorData = await response.clone().json();
       if (errorData.error === 'SESSION_REVOKED') {
         console.warn('[API] Session revoked. Forcing logout...');
-        // Force redirect to login page with revocation message
-        // Using window.location.href ensures a full page reload and clean state
         const message = encodeURIComponent(errorData.message || 'Your session has been revoked from another device.');
         window.location.href = `/login?logout=true&revoked=true&message=${message}`;
         return errorData as ApiResponse<T>;
       }
     } catch (e) {
-      // Ignore parse errors for clone
+      // Ignore parse errors
+    }
+
+    // Token may have just expired — force-refresh and retry once
+    const freshToken = await refreshIdToken();
+    if (freshToken) {
+      headers['Authorization'] = `Bearer ${freshToken}`;
+      response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
     }
   }
 

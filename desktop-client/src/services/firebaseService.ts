@@ -120,11 +120,13 @@ export const getIdToken = async (): Promise<string | null> => {
   const user = firebaseAuth.currentUser;
   if (user) {
     try {
-      const token = await user.getIdToken();
-      cachedToken = token; // Cache the token
+      // forceRefresh: false lets Firebase auto-refresh when the token is near expiry
+      const token = await user.getIdToken(false);
+      cachedToken = token; // Cache the fresh token
       return token;
     } catch (error) {
       console.error('[Firebase] Failed to get ID token:', error);
+      // Fall through to cached token
     }
   }
   // If no Firebase user or error, return cached token
@@ -132,6 +134,24 @@ export const getIdToken = async (): Promise<string | null> => {
     console.log('[Firebase] No current user, using cached token');
   }
   return cachedToken;
+};
+
+/**
+ * Proactively refresh the Firebase ID token and update the cached value.
+ * Call this on a timer (e.g. every 50 min) so the stored token never goes stale.
+ */
+export const refreshIdToken = async (): Promise<string | null> => {
+  const user = firebaseAuth.currentUser;
+  if (!user) return null;
+  try {
+    const token = await user.getIdToken(true); // force refresh
+    cachedToken = token;
+    console.log('[Firebase] Token proactively refreshed');
+    return token;
+  } catch (error) {
+    console.error('[Firebase] Proactive token refresh failed:', error);
+    return null;
+  }
 };
 
 // Set cached token (called from AuthContext when restoring from shared auth)
