@@ -41,6 +41,7 @@ interface ChatState {
   setTyping: (chatId: string, userId: string, userName: string, isTyping: boolean) => void;
   setLiveTypingText: (chatId: string, userId: string, userName: string, text: string) => void;
   setUserOnline: (userId: string, online: boolean, showActiveStatus?: boolean) => void;
+  clearOnlineUsers: () => void;
   setUserProfile: (user: User) => void;
   setUserShowActiveStatus: (userId: string, showActiveStatus: boolean) => void;
   setUserShowMessageStatus: (userId: string, showMessageStatus: boolean) => void;
@@ -230,6 +231,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : {};
       return { onlineUsers: updated, ...profileUpdate };
     }),
+
+  clearOnlineUsers: () => set({ onlineUsers: new Set() }),
 
   setUserProfile: (user) =>
     set((state) => ({

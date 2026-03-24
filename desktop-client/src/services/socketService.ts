@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import { Message } from '@shared/types';
 import { APP_CONFIG } from '@shared/constants/config';
+import { useChatStore } from '../store/chatStore';
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
@@ -60,6 +61,8 @@ export const getSocket = (): Socket | null => socket;
 export const disconnectSocket = (): void => {
   socket?.disconnect();
   socket = null;
+  // Clear stale presence data so the new account starts with a clean slate
+  useChatStore.getState().clearOnlineUsers();
 };
 
 // ─── Room Management ──────────────────────────────────────────────────────

@@ -487,6 +487,10 @@ read logic:
     Double tick (delivered) — two overlapping slim checkmarks, dimmed
     Double tick (read) — same shape, solid #363ef1 or #6b00ff blue
 
+AccountSwitching:
+    The onlineUsers set in the chat store was never cleared when switching accounts. So when Account A's socket disconnected and Account B's socket connected, the server correctly sent fresh USER_ONLINE events for all currently online users — but the old stale set from Account A was still sitting there, causing the UI to show incorrect presence (either showing someone as online who isn't, or missing the green dot for someone who is).
+    
+    The fix: disconnectSocket() now calls clearOnlineUsers() which resets the set to empty. When the new account's socket connects, the server backfills all currently online users fresh, and the UI reflects the correct state.
 
 
 <-------------------------- typing indicator improvements -------------------------->
