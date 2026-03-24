@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { Mic, MicOff, Video, VideoOff, Phone, MessageCircle, ChevronUp, LayoutGrid, Monitor, MonitorOff, Rows2, Columns2 } from 'lucide-react';
 
@@ -41,8 +41,9 @@ const truncateLabel = (label: string): string => {
 const DeviceMenu: React.FC<{
   sections: MenuSection[];
   pos: MenuPos;
+  width: number;
   onClose: () => void;
-}> = ({ sections, pos, onClose }) => {
+}> = ({ sections, pos, width, onClose }) => {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ const DeviceMenu: React.FC<{
         position: 'fixed',
         bottom: pos.bottom,
         left: pos.left,
-        width: 280,
+        width: width,
         backgroundColor: '#1e293b',
         border: '1px solid rgba(255,255,255,0.12)',
         borderRadius: 10,
@@ -132,7 +133,9 @@ const ControlGroup: React.FC<{
   anchorRef?: React.RefObject<HTMLElement>;
   menu?: React.ReactNode;
   onChevron?: () => void;
-}> = ({ children, chevron, menu, onChevron }) => (
+  isSmall?: boolean;
+  isVerySmall?: boolean;
+}> = ({ children, chevron, menu, onChevron, isSmall, isVerySmall }) => (
   <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
     {children}
     {chevron && (
@@ -141,8 +144,8 @@ const ControlGroup: React.FC<{
         title="Choose device"
         style={{
           position: 'absolute',
-          bottom: -2,
-          right: -10,
+          bottom: isVerySmall ? 0 : isSmall ? -1 : -2,
+          right: isVerySmall ? -4 : isSmall ? -6 : -10,
           width: 20,
           height: 20,
           borderRadius: '50%',
@@ -191,8 +194,23 @@ const CallControls: React.FC<CallControlsProps> = ({
   const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
   const [micMenuPos, setMicMenuPos] = useState<MenuPos | null>(null);
   const [camMenuPos, setCamMenuPos] = useState<MenuPos | null>(null);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const micBtnRef = useRef<HTMLDivElement>(null);
   const camBtnRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const isSmall = windowWidth < 600;
+  const isVerySmall = windowWidth < 450;
+  const btnSize = isVerySmall ? 40 : isSmall ? 44 : 52;
+  const gap = isVerySmall ? 8 : isSmall ? 12 : 20;
+  const padding = isVerySmall ? '10px 14px' : isSmall ? '12px 20px' : '16px 32px';
+  const iconSize = isVerySmall ? 18 : isSmall ? 20 : 22;
+  const endCallSize = isVerySmall ? 44 : isSmall ? 50 : 60;
 
   useEffect(() => {
     const load = async () => {
@@ -211,9 +229,9 @@ const CallControls: React.FC<CallControlsProps> = ({
     if (micMenuPos) { setMicMenuPos(null); return; }
     const rect = micBtnRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const menuWidth = 280;
-    const rawLeft = rect.left + rect.width / 2 - menuWidth / 2;
-    const left = Math.max(8, Math.min(rawLeft, window.innerWidth - menuWidth - 8));
+    const mWidth = isVerySmall ? 240 : 280;
+    const rawLeft = rect.left + rect.width / 2 - mWidth / 2;
+    const left = Math.max(8, Math.min(rawLeft, windowWidth - mWidth - 8));
     setCamMenuPos(null);
     setMicMenuPos({ bottom: window.innerHeight - rect.top + 10, left });
   };
@@ -222,9 +240,9 @@ const CallControls: React.FC<CallControlsProps> = ({
     if (camMenuPos) { setCamMenuPos(null); return; }
     const rect = camBtnRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const menuWidth = 280;
-    const rawLeft = rect.left + rect.width / 2 - menuWidth / 2;
-    const left = Math.max(8, Math.min(rawLeft, window.innerWidth - menuWidth - 8));
+    const mWidth = isVerySmall ? 240 : 280;
+    const rawLeft = rect.left + rect.width / 2 - mWidth / 2;
+    const left = Math.max(8, Math.min(rawLeft, windowWidth - mWidth - 8));
     setMicMenuPos(null);
     setCamMenuPos({ bottom: window.innerHeight - rect.top + 10, left });
   };
@@ -257,8 +275,8 @@ const CallControls: React.FC<CallControlsProps> = ({
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 20,
-        padding: '16px 32px',
+        gap: gap,
+        padding: padding,
         backgroundColor: 'rgba(0,0,0,0.6)',
         borderRadius: 50,
       }}
@@ -267,6 +285,8 @@ const CallControls: React.FC<CallControlsProps> = ({
       <ControlGroup
         chevron={(micDevices.length > 1 || speakerDevices.length > 0) && !!onSwitchMic}
         onChevron={openMicMenu}
+        isSmall={isSmall}
+        isVerySmall={isVerySmall}
         menu={micMenuPos && (
           <DeviceMenu
             sections={[
@@ -284,6 +304,7 @@ const CallControls: React.FC<CallControlsProps> = ({
               }] : []),
             ]}
             pos={micMenuPos}
+            width={isVerySmall ? 240 : 280}
             onClose={() => setMicMenuPos(null)}
           />
         )}
@@ -292,9 +313,9 @@ const CallControls: React.FC<CallControlsProps> = ({
           <button
             onClick={onToggleMute}
             title={isMuted ? 'Unmute' : 'Mute'}
-            style={{ ...btnBase, backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
+            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
           >
-            {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+            {isMuted ? <MicOff size={iconSize} /> : <Mic size={iconSize} />}
           </button>
         </div>
       </ControlGroup>
@@ -303,6 +324,8 @@ const CallControls: React.FC<CallControlsProps> = ({
       <ControlGroup
         chevron={camDevices.length >= 1 && !!onSwitchCamera}
         onChevron={openCamMenu}
+        isSmall={isSmall}
+        isVerySmall={isVerySmall}
         menu={camMenuPos && (
           <DeviceMenu
             sections={[{
@@ -312,6 +335,7 @@ const CallControls: React.FC<CallControlsProps> = ({
               onSelect: handleSelectCam,
             }]}
             pos={camMenuPos}
+            width={isVerySmall ? 240 : 280}
             onClose={() => setCamMenuPos(null)}
           />
         )}
@@ -328,9 +352,9 @@ const CallControls: React.FC<CallControlsProps> = ({
                 ? 'Disable camera'
                 : 'Turn off camera'
             }
-            style={{ ...btnBase, backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
+            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
           >
-            {isVideoOff ? <VideoOff size={22} /> : <Video size={22} />}
+            {isVideoOff ? <VideoOff size={iconSize} /> : <Video size={iconSize} />}
           </button>
         </div>
       </ControlGroup>
@@ -340,9 +364,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         <button
           onClick={onToggleScreenShare}
           title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-          style={{ ...btnBase, backgroundColor: isScreenSharing ? '#f59e0b' : 'rgba(255,255,255,0.15)' }}
+          style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isScreenSharing ? '#f59e0b' : 'rgba(255,255,255,0.15)' }}
         >
-          {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
+          {isScreenSharing ? <MonitorOff size={iconSize} /> : <Monitor size={iconSize} />}
         </button>
       )}
 
@@ -352,17 +376,17 @@ const CallControls: React.FC<CallControlsProps> = ({
           <button
             onClick={onToggleGridView}
             title={isGridView ? 'Switch to PiP view' : 'Switch to grid view'}
-            style={{ ...btnBase, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
+            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
           >
-            <LayoutGrid size={22} />
+            <LayoutGrid size={iconSize} />
           </button>
           {isGridView && onToggleGridOrientation && (
             <button
               onClick={onToggleGridOrientation}
               title={gridOrientation === 'horizontal' ? 'Switch to vertical grid' : 'Switch to horizontal grid'}
-              style={{ ...btnBase, backgroundColor: 'rgba(255,255,255,0.15)' }}
+              style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: 'rgba(255,255,255,0.15)' }}
             >
-              {gridOrientation === 'horizontal' ? <Rows2 size={22} /> : <Columns2 size={22} />}
+              {gridOrientation === 'horizontal' ? <Rows2 size={iconSize} /> : <Columns2 size={iconSize} />}
             </button>
           )}
         </div>
@@ -373,9 +397,9 @@ const CallControls: React.FC<CallControlsProps> = ({
         <button
           onClick={onToggleChat}
           title={isChatOpen ? 'Close chat' : 'Open chat'}
-          style={{ ...btnBase, backgroundColor: isChatOpen ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
+          style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isChatOpen ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
         >
-          <MessageCircle size={22} />
+          <MessageCircle size={iconSize} />
         </button>
       )}
 
@@ -383,9 +407,9 @@ const CallControls: React.FC<CallControlsProps> = ({
       <button
         onClick={onEndCall}
         title="End call"
-        style={{ ...btnBase, width: 60, height: 60, fontSize: 24, backgroundColor: '#ef4444' }}
+        style={{ ...btnBase, width: endCallSize, height: endCallSize, fontSize: isVerySmall ? 20 : 24, backgroundColor: '#ef4444' }}
       >
-        <Phone size={24} style={{ transform: 'rotate(135deg)' }} />
+        <Phone size={isVerySmall ? 20 : 24} style={{ transform: 'rotate(135deg)' }} />
       </button>
     </div>
   );
