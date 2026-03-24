@@ -229,22 +229,22 @@ const CallWindowPage: React.FC = () => {
   }, [callChat, selectedChatId]);
 
   // ─── Chat panel resize drag ─────────────────────────────────────────────────
-  const handleChatResizeMouseDown = (e: React.MouseEvent) => {
+  const handleChatResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     chatResizingRef.current = true;
     const startX = e.clientX;
     const startWidth = chatPanelWidth;
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       if (!chatResizingRef.current) return;
       setChatPanelWidth(Math.min(700, Math.max(280, startWidth - (ev.clientX - startX))));
     };
     const onUp = () => {
       chatResizingRef.current = false;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   // ─── IPC signal sender (routes socket events through main window) ──────────
@@ -910,11 +910,11 @@ const CallWindowPage: React.FC = () => {
   };
 
   // ─── Grid resize ──────────────────────────────────────────────────────────
-  const handleGridResizeMouseDown = (e: React.MouseEvent) => {
+  const handleGridResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     gridResizingRef.current = true;
     const containerEl = (e.currentTarget as HTMLElement).parentElement;
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       if (!gridResizingRef.current || !containerEl) return;
       const rect = containerEl.getBoundingClientRect();
       if (gridOrientation === 'horizontal') {
@@ -923,27 +923,8 @@ const CallWindowPage: React.FC = () => {
         setGridSplit(Math.min(80, Math.max(20, ((ev.clientY - rect.top) / rect.height) * 100)));
       }
     };
-    const onUp = () => { gridResizingRef.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
-  const handleGridResizeTouchStart = (e: React.TouchEvent) => {
-    gridResizingRef.current = true;
-    const containerEl = (e.currentTarget as HTMLElement).parentElement;
-    const onMove = (ev: TouchEvent) => {
-      if (!gridResizingRef.current || !containerEl || !ev.touches[0]) return;
-      const rect = containerEl.getBoundingClientRect();
-      const t = ev.touches[0];
-      if (gridOrientation === 'horizontal') {
-        setGridSplit(Math.min(80, Math.max(20, ((t.clientX - rect.left) / rect.width) * 100)));
-      } else {
-        setGridSplit(Math.min(80, Math.max(20, ((t.clientY - rect.top) / rect.height) * 100)));
-      }
-    };
-    const onUp = () => { gridResizingRef.current = false; window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
-    window.addEventListener('touchmove', onMove, { passive: true });
-    window.addEventListener('touchend', onUp);
+    const onUp = () => { gridResizingRef.current = false; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
   };
 
   const handleToggleScreenShare = async () => {
@@ -1243,13 +1224,13 @@ const CallWindowPage: React.FC = () => {
                     <div style={{ position: 'absolute', top: 10, left: 12, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20 }}>{leftLabel}</div>
                   </div>
                   <div
-                    onMouseDown={handleGridResizeMouseDown}
-                    onTouchStart={handleGridResizeTouchStart}
+                    onPointerDown={handleGridResizePointerDown}
                     style={{ 
                       width: gridOrientation === 'horizontal' ? 6 : '100%', 
                       height: gridOrientation === 'horizontal' ? '100%' : 6, 
                       cursor: gridOrientation === 'horizontal' ? 'col-resize' : 'row-resize', 
-                      flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, position: 'relative' 
+                      flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, position: 'relative',
+                      touchAction: 'none'
                     }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.5)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
@@ -1284,8 +1265,7 @@ const CallWindowPage: React.FC = () => {
             {/* Callee avatar + name centered */}
             <div style={{
               position: 'absolute', inset: 0,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 14,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14,
             }}>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.5, animation: 'callPulse 1.5s ease-out infinite', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
@@ -1306,9 +1286,9 @@ const CallWindowPage: React.FC = () => {
           <>
             <VideoStream
               stream={localIsMain ? localStream : remoteStream}
-            label={localIsMain ? 'You' : displayName}
-            muted={localIsMain} // Only mute if showing local stream
-            mirror={localIsMain}
+              label={localIsMain ? 'You' : displayName}
+              muted={localIsMain}
+              mirror={localIsMain}
               objectFit="contain"
               style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }}
             />
@@ -1320,8 +1300,7 @@ const CallWindowPage: React.FC = () => {
               const borderRad = pipShape === 'circle' ? '50%' : 12;
               const pos = pipPos ?? { top: window.innerHeight - PIP_H - 100, left: window.innerWidth - PIP_W - 20 };
 
-              const handlePipMouseDown = (e: React.MouseEvent) => {
-                e.preventDefault();
+              const handlePipPointerDown = (e: React.PointerEvent) => {
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
                 const isCircle = pipShape === 'circle';
@@ -1330,7 +1309,7 @@ const CallWindowPage: React.FC = () => {
                   pipMovedRef.current = true;
                   const sx = e.clientX, sy = e.clientY, oW = PIP_W, oH = PIP_H, oT = pos.top, oL = pos.left;
                   const MIN = 80, MAX = 640;
-                  const onMove = (ev: MouseEvent) => {
+                  const onMove = (ev: PointerEvent) => {
                     const dx = ev.clientX - sx, dy = ev.clientY - sy;
                     let nW = oW, nH = oH, nT = oT, nL = oL;
                     if (edges.right)  nW = Math.max(MIN, Math.min(MAX, oW + dx));
@@ -1340,36 +1319,21 @@ const CallWindowPage: React.FC = () => {
                     if (isCircle) { const s = Math.max(nW, nH); nW = s; nH = s; }
                     setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                   };
-                  const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-                  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+                  const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+                  window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
                   return;
                 }
                 pipMovedRef.current = false;
                 pipDragRef.current = { startX: e.clientX, startY: e.clientY, origTop: pos.top, origLeft: pos.left };
-                const onMove = (ev: MouseEvent) => {
+                const onMove = (ev: PointerEvent) => {
                   if (!pipDragRef.current) return;
                   const dx = ev.clientX - pipDragRef.current.startX, dy = ev.clientY - pipDragRef.current.startY;
                   if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                   pipMovedRef.current = true;
                   setPipPos({ top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx)) });
                 };
-                const onUp = () => { pipDragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-                window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
-              };
-
-              const handlePipTouchStart = (e: React.TouchEvent) => {
-                const t0 = e.touches[0];
-                pipMovedRef.current = false;
-                pipDragRef.current = { startX: t0.clientX, startY: t0.clientY, origTop: pos.top, origLeft: pos.left };
-                const onMove = (ev: TouchEvent) => {
-                  if (!pipDragRef.current || !ev.touches[0]) return;
-                  const dx = ev.touches[0].clientX - pipDragRef.current.startX, dy = ev.touches[0].clientY - pipDragRef.current.startY;
-                  if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-                  pipMovedRef.current = true;
-                  setPipPos({ top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx)) });
-                };
-                const onUp = () => { pipDragRef.current = null; window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
-                window.addEventListener('touchmove', onMove, { passive: true }); window.addEventListener('touchend', onUp);
+                const onUp = () => { pipDragRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+                window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
               };
 
               if (pipHidden) {
@@ -1387,7 +1351,7 @@ const CallWindowPage: React.FC = () => {
 
               return (
                 <div key="pip"
-                  onMouseDown={handlePipMouseDown} onTouchStart={handlePipTouchStart}
+                  onPointerDown={handlePipPointerDown}
                   onMouseMove={(e) => { 
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
                     const cur = getPipResizeCursor(getPipResizeEdges(e.clientX - r.left, e.clientY - r.top, PIP_W, PIP_H, pipShape === 'circle')); 
@@ -1398,7 +1362,7 @@ const CallWindowPage: React.FC = () => {
                   }}
                   onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                   title="Drag · Click to swap"
-                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor }}
+                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none' }}
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream
@@ -1593,8 +1557,8 @@ const CallWindowPage: React.FC = () => {
       {showCallChat && (
         <>
           <div
-            onMouseDown={handleChatResizeMouseDown}
-            style={{ width: 5, height: '100%', cursor: 'col-resize', backgroundColor: 'transparent', flexShrink: 0, zIndex: 10 }}
+            onPointerDown={handleChatResizePointerDown}
+            style={{ width: 5, height: '100%', cursor: 'col-resize', backgroundColor: 'transparent', flexShrink: 0, zIndex: 10, touchAction: 'none' }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(99,102,241,0.5)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
           />

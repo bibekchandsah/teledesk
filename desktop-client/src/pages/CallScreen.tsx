@@ -123,23 +123,23 @@ const CallScreen: React.FC = () => {
     };
   }, [activeCall, currentUser]);
 
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
+  const handleResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     isResizing.current = true;
     const startX = e.clientX;
     const startWidth = chatPanelWidth;
-    const onMouseMove = (ev: MouseEvent) => {
+    const onMouseMove = (ev: PointerEvent) => {
       if (!isResizing.current) return;
       const delta = startX - ev.clientX;
       setChatPanelWidth(Math.min(700, Math.max(280, startWidth + delta)));
     };
     const onMouseUp = () => {
       isResizing.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('pointermove', onMouseMove);
+      window.removeEventListener('pointerup', onMouseUp);
     };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('pointermove', onMouseMove);
+    window.addEventListener('pointerup', onMouseUp);
   };
 
   // ─── Play remote stream through DOM <audio> element ───────────────────
@@ -383,11 +383,11 @@ const CallScreen: React.FC = () => {
     }
   };
 
-  const handleGridResizeMouseDown = (e: React.MouseEvent) => {
+  const handleGridResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
     gridResizingRef.current = true;
     const containerEl = (e.currentTarget as HTMLElement).parentElement;
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (ev: PointerEvent) => {
       if (!gridResizingRef.current || !containerEl) return;
       const rect = containerEl.getBoundingClientRect();
       if (gridOrientation === 'horizontal') {
@@ -400,35 +400,11 @@ const CallScreen: React.FC = () => {
     };
     const onUp = () => {
       gridResizingRef.current = false;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
-  const handleGridResizeTouchStart = (e: React.TouchEvent) => {
-    gridResizingRef.current = true;
-    const containerEl = (e.currentTarget as HTMLElement).parentElement;
-    const onMove = (ev: TouchEvent) => {
-      if (!gridResizingRef.current || !containerEl || !ev.touches[0]) return;
-      const rect = containerEl.getBoundingClientRect();
-      const t = ev.touches[0];
-      if (gridOrientation === 'horizontal') {
-        const pct = Math.min(80, Math.max(20, ((t.clientX - rect.left) / rect.width) * 100));
-        setGridSplit(pct);
-      } else {
-        const pct = Math.min(80, Math.max(20, ((t.clientY - rect.top) / rect.height) * 100));
-        setGridSplit(pct);
-      }
-    };
-    const onUp = () => {
-      gridResizingRef.current = false;
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
-    };
-    window.addEventListener('touchmove', onMove, { passive: true });
-    window.addEventListener('touchend', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   const handlePipCornerMouseDown = (
@@ -498,8 +474,7 @@ const CallScreen: React.FC = () => {
                 </div>
                 {/* Draggable divider */}
                 <div
-                  onMouseDown={handleGridResizeMouseDown}
-                  onTouchStart={handleGridResizeTouchStart}
+                  onPointerDown={handleGridResizePointerDown}
                   style={{
                     width: gridOrientation === 'horizontal' ? 6 : '100%',
                     height: gridOrientation === 'horizontal' ? '100%' : 6,
@@ -508,6 +483,7 @@ const CallScreen: React.FC = () => {
                     background: 'rgba(255,255,255,0.06)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     zIndex: 5, position: 'relative',
+                    touchAction: 'none'
                   }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.5)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
@@ -567,86 +543,40 @@ const CallScreen: React.FC = () => {
             const borderRad = pipShape === 'circle' ? '50%' : 12;
             const pos = pipPos ?? { top: window.innerHeight - PIP_H - 100, left: window.innerWidth - PIP_W - 20 };
 
-            const handlePipMouseDown = (e: React.MouseEvent) => {
-              e.preventDefault();
+            const handlePipPointerDown = (e: React.PointerEvent) => {
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              const lx = e.clientX - rect.left;
-              const ly = e.clientY - rect.top;
+              const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
               const isCircle = pipShape === 'circle';
               const edges = getPipResizeEdges(lx, ly, PIP_W, PIP_H, isCircle);
-
               if (edges) {
-                // ── RESIZE from border ────────────────────────────────
                 pipMovedRef.current = true;
-                const startX = e.clientX;
-                const startY = e.clientY;
-                const origW = PIP_W, origH = PIP_H;
-                const origTop = pos.top, origLeft = pos.left;
+                const sx = e.clientX, sy = e.clientY, oW = PIP_W, oH = PIP_H, oT = pos.top, oL = pos.left;
                 const MIN = 80, MAX = 640;
-                const onMove = (ev: MouseEvent) => {
-                  const dx = ev.clientX - startX;
-                  const dy = ev.clientY - startY;
-                  let newW = origW, newH = origH, newTop = origTop, newLeft = origLeft;
-                  if (edges.right)  newW = Math.max(MIN, Math.min(MAX, origW + dx));
-                  if (edges.left) { newW = Math.max(MIN, Math.min(MAX, origW - dx)); newLeft = origLeft + (origW - newW); }
-                  if (edges.bottom) newH = Math.max(MIN, Math.min(MAX, origH + dy));
-                  if (edges.top)  { newH = Math.max(MIN, Math.min(MAX, origH - dy)); newTop = origTop + (origH - newH); }
-                  if (isCircle) { const s = Math.max(newW, newH); newW = s; newH = s; }
-                  setPipSize({ w: newW, h: newH });
-                  setPipPos({ top: Math.max(0, newTop), left: Math.max(0, newLeft) });
+                const onMove = (ev: PointerEvent) => {
+                  const dx = ev.clientX - sx, dy = ev.clientY - sy;
+                  let nW = oW, nH = oH, nT = oT, nL = oL;
+                  if (edges.right)  nW = Math.max(MIN, Math.min(MAX, oW + dx));
+                  if (edges.left) { nW = Math.max(MIN, Math.min(MAX, oW - dx)); nL = oL + (oW - nW); }
+                  if (edges.bottom) nH = Math.max(MIN, Math.min(MAX, oH + dy));
+                  if (edges.top)  { nH = Math.max(MIN, Math.min(MAX, oH - dy)); nT = oT + (oH - nH); }
+                  if (isCircle) { const s = Math.max(nW, nH); nW = s; nH = s; }
+                  setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                 };
-                const onUp = () => {
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
+                const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+                window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
                 return;
               }
-
-              // ── DRAG ─────────────────────────────────────────────────
               pipMovedRef.current = false;
               pipDragRef.current = { startX: e.clientX, startY: e.clientY, origTop: pos.top, origLeft: pos.left };
-              const onMove = (ev: MouseEvent) => {
+              const onMove = (ev: PointerEvent) => {
                 if (!pipDragRef.current) return;
-                const dx = ev.clientX - pipDragRef.current.startX;
-                const dy = ev.clientY - pipDragRef.current.startY;
+                const dx = ev.clientX - pipDragRef.current.startX, dy = ev.clientY - pipDragRef.current.startY;
                 if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                 pipMovedRef.current = true;
-                const newTop = Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy));
-                const newLeft = Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx));
-                setPipPos({ top: newTop, left: newLeft });
+                setPipPos({ top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx)) });
               };
-              const onUp = () => {
-                pipDragRef.current = null;
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
-              };
-              window.addEventListener('mousemove', onMove);
-              window.addEventListener('mouseup', onUp);
-            };
-
-            const handlePipTouchStart = (e: React.TouchEvent) => {
-              const touch = e.touches[0];
-              pipMovedRef.current = false;
-              pipDragRef.current = { startX: touch.clientX, startY: touch.clientY, origTop: pos.top, origLeft: pos.left };
-              const onMove = (ev: TouchEvent) => {
-                if (!pipDragRef.current || !ev.touches[0]) return;
-                const dx = ev.touches[0].clientX - pipDragRef.current.startX;
-                const dy = ev.touches[0].clientY - pipDragRef.current.startY;
-                if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-                pipMovedRef.current = true;
-                const newTop = Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy));
-                const newLeft = Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx));
-                setPipPos({ top: newTop, left: newLeft });
-              };
-              const onUp = () => {
-                pipDragRef.current = null;
-                window.removeEventListener('touchmove', onMove);
-                window.removeEventListener('touchend', onUp);
-              };
-              window.addEventListener('touchmove', onMove, { passive: true });
-              window.addEventListener('touchend', onUp);
+              const onUp = () => { pipDragRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+              window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
             };
 
             // Hidden state: snap reveal tab to the nearest horizontal edge
@@ -694,16 +624,13 @@ const CallScreen: React.FC = () => {
             return (
               <div
                 key="pip"
-                onMouseDown={handlePipMouseDown}
-                onTouchStart={handlePipTouchStart}
-                onMouseMove={(e) => {
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  const cur = getPipResizeCursor(
-                    getPipResizeEdges(e.clientX - rect.left, e.clientY - rect.top, PIP_W, PIP_H, pipShape === 'circle')
-                  );
-                  if (cur !== pipCursor) setPipCursor(cur);
+                onPointerDown={handlePipPointerDown}
+                onMouseMove={(e) => { 
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
+                  const cur = getPipResizeCursor(getPipResizeEdges(e.clientX - rect.left, e.clientY - rect.top, PIP_W, PIP_H, pipShape === 'circle')); 
+                  if (cur !== pipCursor) setPipCursor(cur); 
                 }}
-                onMouseLeave={() => {
+                onMouseLeave={() => { 
                   if (pipCursor !== 'grab') setPipCursor('grab');
                 }}
                 onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
@@ -717,6 +644,7 @@ const CallScreen: React.FC = () => {
                   zIndex: 20,
                   userSelect: 'none',
                   cursor: pipCursor,
+                  touchAction: 'none'
                 }}
               >
                 {/* Video clip layer — borderRadius clips video to shape */}
@@ -999,7 +927,7 @@ const CallScreen: React.FC = () => {
         <>
           {/* Drag handle */}
           <div
-            onMouseDown={handleResizeMouseDown}
+            onPointerDown={handleResizePointerDown}
             style={{
               width: 5,
               height: '100%',
@@ -1007,6 +935,7 @@ const CallScreen: React.FC = () => {
               backgroundColor: 'transparent',
               flexShrink: 0,
               zIndex: 10,
+              touchAction: 'none'
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(99,102,241,0.5)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
