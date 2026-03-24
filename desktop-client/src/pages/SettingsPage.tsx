@@ -99,6 +99,7 @@ const SettingsPage: React.FC = () => {
 
   const [showActiveStatus, setShowActiveStatus] = useState(currentUser?.showActiveStatus !== false);
   const [showMessageStatus, setShowMessageStatus] = useState(currentUser?.showMessageStatus !== false);
+  const [showLiveTyping, setShowLiveTyping] = useState(currentUser?.showLiveTyping !== false);
   const [editingName, setEditingName] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState(currentUser?.username ?? '');
@@ -110,9 +111,10 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
     setShowMessageStatus(currentUser?.showMessageStatus !== false);
+    setShowLiveTyping(currentUser?.showLiveTyping !== false);
     setUsernameInput(currentUser?.username ?? '');
     setNameInput(currentUser?.name ?? '');
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.username, currentUser?.name]);
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -350,6 +352,22 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleToggleLiveTyping = async () => {
+    const newVal = !showLiveTyping;
+    setShowLiveTyping(newVal);
+    try {
+      const res = await updateMyProfile({ showLiveTyping: newVal });
+      if (res.success && res.data) setCurrentUser(res.data);
+      const socket = (await import('../services/socketService')).getSocket();
+      if (socket) {
+        socket.emit('live_typing_status_changed', { showLiveTyping: newVal });
+      }
+    } catch (e) {
+      console.error('[Settings] Failed to update live typing setting', e);
+      setShowLiveTyping(!newVal); // rollback on error
+    }
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -574,14 +592,14 @@ const SettingsPage: React.FC = () => {
           description="When both users enable this, you see each other’s text as they type"
         >
           <button
-            onClick={toggleLiveTyping}
+            onClick={handleToggleLiveTyping}
             style={{
               width: 46,
               height: 26,
               borderRadius: 13,
               border: 'none',
               cursor: 'pointer',
-              backgroundColor: liveTypingEnabled ? 'var(--accent)' : 'var(--bg-tertiary)',
+              backgroundColor: showLiveTyping ? 'var(--accent)' : 'var(--bg-tertiary)',
               position: 'relative',
               transition: 'background-color 0.2s',
               flexShrink: 0,
@@ -592,7 +610,7 @@ const SettingsPage: React.FC = () => {
               style={{
                 position: 'absolute',
                 top: 3,
-                left: liveTypingEnabled ? 23 : 3,
+                left: showLiveTyping ? 23 : 3,
                 width: 20,
                 height: 20,
                 borderRadius: '50%',

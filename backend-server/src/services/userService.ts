@@ -18,6 +18,7 @@ type UserRow = {
   online_status: string;
   show_active_status: boolean;
   show_message_status: boolean;
+  show_live_typing: boolean;
   pinned_chat_ids: string[];
   archived_chat_ids: string[];
   locked_chat_ids: string[];
@@ -45,6 +46,7 @@ const rowToUser = (r: UserRow): User => ({
   onlineStatus: r.online_status as User['onlineStatus'],
   showActiveStatus: r.show_active_status,
   showMessageStatus: r.show_message_status,
+  showLiveTyping: r.show_live_typing,
   pinnedChatIds: r.pinned_chat_ids ?? [],
   archivedChatIds: r.archived_chat_ids ?? [],
   lockedChatIds: r.locked_chat_ids ?? [],
@@ -78,6 +80,7 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       online_status: 'online',
       show_active_status: true,
       show_message_status: true,
+      show_live_typing: true,
       pinned_chat_ids: [],
       archived_chat_ids: [],
       locked_chat_ids: [],
@@ -105,6 +108,7 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
   if (data.avatar !== undefined) updates.avatar = data.avatar;
   if (data.showActiveStatus !== undefined) updates.show_active_status = data.showActiveStatus;
   if (data.showMessageStatus !== undefined) updates.show_message_status = data.showMessageStatus;
+  if (data.showLiveTyping !== undefined) updates.show_live_typing = data.showLiveTyping;
 
   const { data: updated } = await supabase
     .from('users')

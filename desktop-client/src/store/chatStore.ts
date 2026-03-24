@@ -45,6 +45,7 @@ interface ChatState {
   setUserProfile: (user: User) => void;
   setUserShowActiveStatus: (userId: string, showActiveStatus: boolean) => void;
   setUserShowMessageStatus: (userId: string, showMessageStatus: boolean) => void;
+  setUserShowLiveTyping: (userId: string, showLiveTyping: boolean) => void;
   incrementUnread: (chatId: string) => void;
   clearUnread: (chatId: string) => void;
   updateChatLastMessage: (message: Message, lastMessageAt?: string) => void;
@@ -250,6 +251,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => ({
       userProfiles: state.userProfiles[userId]
         ? { ...state.userProfiles, [userId]: { ...state.userProfiles[userId], showMessageStatus } }
+        : state.userProfiles,
+    })),
+
+  setUserShowLiveTyping: (userId, showLiveTyping) =>
+    set((state) => ({
+      userProfiles: state.userProfiles[userId]
+        ? { ...state.userProfiles, [userId]: { ...state.userProfiles[userId], showLiveTyping } }
         : state.userProfiles,
     })),
 

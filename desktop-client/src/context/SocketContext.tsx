@@ -19,7 +19,7 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue>({ isConnected: false });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
+  const { addMessage, setTyping, setLiveTypingText, setUserOnline, setUserProfile, setUserShowActiveStatus, setUserShowMessageStatus, setUserShowLiveTyping, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, activeChat, nicknames } =
     useChatStore();
   const { setIncomingCall } = useCallStore();
   const { currentUser } = useAuthStore();
@@ -35,6 +35,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const liveTypingRef = useRef(liveTypingEnabled);
   useEffect(() => { liveTypingRef.current = liveTypingEnabled; }, [liveTypingEnabled]);
+
+  // Track currentUser ref so socket handlers always read the latest value
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   // Deduplicate messages received via both chat-room and personal-room broadcasts
   const processedMsgIds = useRef<Set<string>>(new Set());
@@ -185,10 +189,18 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       userId: string;
       userName: string;
       text: string;
+      showLiveTyping?: boolean;
     }) => {
-      if (data.userId !== currentUser.uid && liveTypingRef.current) {
+      // Only show if the SENDER has showLiveTyping enabled.
+      // The receiver's own setting is irrelevant here — it only controls
+      // whether others can see the receiver's own typing (handled on their sender side).
+      if (data.userId !== currentUser.uid && data.showLiveTyping !== false) {
         setLiveTypingText(data.chatId, data.userId, data.userName, data.text);
       }
+    };
+
+    const handleLiveTypingStatusChanged = (data: { userId: string; showLiveTyping: boolean }) => {
+      setUserShowLiveTyping(data.userId, data.showLiveTyping);
     };
 
     // ─── Presence Events ─────────────────────────────────────────────────
@@ -369,6 +381,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socket.on(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
     socket.on(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
     socket.on(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
+    socket.on(SOCKET_EVENTS.LIVE_TYPING_STATUS_CHANGED, handleLiveTypingStatusChanged);
     socket.on(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
     socket.on(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
@@ -394,6 +407,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.USER_OFFLINE, handleUserOffline);
       socket.off(SOCKET_EVENTS.ACTIVE_STATUS_CHANGED, handleActiveStatusChanged);
       socket.off(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, handleMessageStatusChanged);
+      socket.off(SOCKET_EVENTS.LIVE_TYPING_STATUS_CHANGED, handleLiveTypingStatusChanged);
       socket.off(SOCKET_EVENTS.CHAT_DELETED, handleChatDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_DELETED, handleMessageDeleted);
       socket.off(SOCKET_EVENTS.MESSAGE_EDITED, handleMessageEdited);
@@ -407,7 +421,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off(SOCKET_EVENTS.DRAFT_DELETED, handleDraftDeleted);
       socket.off(SOCKET_EVENTS.INCOMING_CALL, handleIncomingCall);
     };
-  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
+  }, [currentUser, addMessage, setTyping, setLiveTypingText, setUserOnline, setUserShowActiveStatus, setUserShowMessageStatus, setUserShowLiveTyping, updateChatLastMessage, incrementUnread, removeChat, markMessageDeleted, updateMessage, updateChatPins, markChatMessagesRead, markMessageDelivered, setIncomingCall, navigate, nicknames]);
 
   // ─── Notification reply (Electron only) ──────────────────────────────────
   useEffect(() => {

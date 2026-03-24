@@ -16,6 +16,8 @@ const lastDbUpdate = new Map<string, number>();
 const sessionSockets = new Map<string, string>();
 // Cache of userId -> showActiveStatus so late-joining users get accurate state
 const userShowStatus = new Map<string, boolean>();
+// Cache of userId -> showLiveTyping
+const userShowLiveTyping = new Map<string, boolean>();
 
 // Export for device session service and debugging
 export const getSessionSockets = () => {
@@ -100,6 +102,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
       // Cache for later use
       userShowStatus.set(uid, showActiveStatus);
+      userShowLiveTyping.set(uid, userDoc?.showLiveTyping !== false);
 
       // Broadcast online status to all other connected clients
       socket.broadcast.emit(SOCKET_EVENTS.USER_ONLINE, { userId: uid, status: 'online', showActiveStatus });
@@ -330,6 +333,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         userId: uid,
         userName: payload.userName,
         text: payload.text,
+        showLiveTyping: userShowLiveTyping.get(uid) ?? true,
       };
       // Emit to chat room (users who have this chat open)
       socket.to(`chat:${payload.chatId}`).emit(SOCKET_EVENTS.LIVE_TYPING_UPDATE, data);
@@ -504,6 +508,15 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       }).catch(() => {});
       // Notify all other connected clients so they can update their UI in real-time
       socket.broadcast.emit(SOCKET_EVENTS.MESSAGE_STATUS_CHANGED, { userId: uid, showMessageStatus: newVal });
+    });
+
+    // ─── Live Typing Status Visibility ────────────────────────────────────────
+    socket.on(SOCKET_EVENTS.LIVE_TYPING_STATUS_CHANGED, async (payload: { showLiveTyping: boolean }) => {
+      const newVal = payload.showLiveTyping === true;
+      userShowLiveTyping.set(uid, newVal);
+      const { upsertUser } = require('../services/userService');
+      await upsertUser(uid, { showLiveTyping: newVal }).catch(() => {});
+      socket.broadcast.emit(SOCKET_EVENTS.LIVE_TYPING_STATUS_CHANGED, { userId: uid, showLiveTyping: newVal });
     });
 
     // ─── Message Reactions ─────────────────────────────────────────────────

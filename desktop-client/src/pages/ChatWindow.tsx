@@ -2604,12 +2604,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (!chatId || !currentUser) return;
 
     sendTyping(chatId, true, currentUser.name);
-    if (liveTypingEnabled) sendLiveTyping(chatId, value, currentUser.name);
+    // Always send live typing - let the receiver decide based on sender's showLiveTyping setting
+    sendLiveTyping(chatId, value, currentUser.name);
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       sendTyping(chatId, false, currentUser.name);
-      if (liveTypingEnabled) sendLiveTyping(chatId, '', currentUser.name);
+      sendLiveTyping(chatId, '', currentUser.name);
     }, APP_CONFIG.TYPING_TIMEOUT_MS);
   };
 
@@ -2951,7 +2952,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTyping(chatId, false, currentUser.name);
-    if (liveTypingEnabled) sendLiveTyping(chatId, '', currentUser.name);
+    sendLiveTyping(chatId, '', currentUser.name);
   };
 
   // ─── Reply / Forward handlers ─────────────────────────────────────────────

@@ -108,6 +108,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           
           console.log('[Auth] User profile restored from multi-account storage');
+
+          // Background: fetch full profile from backend to hydrate settings
+          // (showLiveTyping, showActiveStatus, showMessageStatus, etc.) that
+          // are not stored in AccountData.
+          (async () => {
+            try {
+              const { getMyProfile } = await import('../services/apiService');
+              const res = await getMyProfile();
+              if (res.success && res.data) {
+                setCurrentUser(res.data);
+                setUserProfile(res.data);
+                useChatStore.getState().setPinnedChatIds(res.data.pinnedChatIds ?? []);
+                useChatStore.getState().setArchivedChatIds(res.data.archivedChatIds ?? []);
+                useChatStore.getState().setLockedChatIds(res.data.lockedChatIds ?? []);
+                useChatStore.getState().setNicknames(res.data.nicknames ?? {});
+                console.log('[Auth] Full profile hydrated from backend');
+              }
+            } catch (e) {
+              console.warn('[Auth] Background profile hydration failed:', e);
+            }
+          })();
         } else {
           console.log('[Auth] No active account found - user may be adding new account');
           setLoading(false);
