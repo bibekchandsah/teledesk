@@ -13,7 +13,7 @@ const router = Router();
 // Standard Auth
 router.post('/custom-token', authenticateToken, generateCustomToken);
 router.post('/switch-account', authenticateToken, switchAccount);
-router.post('/refresh-token', authenticateToken, refreshToken);
+router.post('/refresh-token', refreshToken);
 
 // Desktop OAuth (System Browser Flow)
 router.get('/desktop/google', initiateDesktopGoogleLogin);

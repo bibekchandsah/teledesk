@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { auth } from '../config/firebase';
 import logger from '../utils/logger';
+import jwt from 'jsonwebtoken';
+import { extractBearerToken, extractClientIP } from '../utils/helpers';
+import { getSessionByTokenId, updateSessionActivity } from '../services/deviceSessionService';
 
 /**
  * Generate a custom token for the authenticated user
@@ -33,35 +36,98 @@ export const generateCustomToken = async (req: Request, res: Response): Promise<
   }
 };
 
+let certsCache: Record<string, string> | null = null;
+let certsExpiry = 0;
+
+async function getFirebasePublicKeys() {
+  if (certsCache && Date.now() < certsExpiry) return certsCache;
+  const res = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+  const cacheControl = res.headers.get('cache-control') || '';
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/);
+  const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) * 1000 : 3600000;
+  certsExpiry = Date.now() + maxAge;
+  certsCache = (await res.json()) as Record<string, string>;
+  return certsCache;
+}
+
 /**
  * Refresh the access token for the authenticated user
  * This allows long-term sessions without forcing re-login
+ * Safely accepts expired ID tokens if they match a valid device session
  */
 export const refreshToken = async (req: Request, res: Response): Promise<void> => {
   try {
-    const uid = req.user?.uid;
+    const token = extractBearerToken(req.headers.authorization);
     
-    if (!uid) {
-      res.status(401).json({ success: false, error: 'Not authenticated' });
+    if (!token) {
+      res.status(401).json({ success: false, error: 'No authorization token provided' });
       return;
     }
 
-    // Verify the user still exists
+    let decodedUid: string;
     try {
-      await auth.getUser(uid);
+      // Decode without verification first to get the kid
+      const decodedHeader = jwt.decode(token, { complete: true });
+      if (!decodedHeader || typeof decodedHeader === 'string' || !decodedHeader.header.kid) {
+        throw new Error('Invalid token format');
+      }
+
+      const certs = await getFirebasePublicKeys();
+      const cert = certs[decodedHeader.header.kid];
+      if (!cert) throw new Error('Firebase public key not found');
+
+      const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+      if (!projectId) throw new Error('Firebase project ID is not configured');
+      
+      // Verify signature, but allow expired tokens
+      const verified = jwt.verify(token, cert, {
+        algorithms: ['RS256'],
+        ignoreExpiration: true,
+        audience: projectId,
+        issuer: `https://securetoken.google.com/${projectId}`
+      }) as { user_id?: string, uid?: string, sub?: string };
+      
+      decodedUid = verified.user_id || verified.uid || verified.sub || '';
+      if (!decodedUid) throw new Error('No UID in token payload');
+    } catch (verifyError) {
+      logger.error(`Token signature verification failed during refresh: ${(verifyError as Error).message}`);
+      res.status(401).json({ success: false, error: 'Invalid token signature' });
+      return;
+    }
+
+    // Verify session fingerprint against the database
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const ipAddress = extractClientIP(req);
+    const crypto = await import('crypto');
+    const deviceFingerprint = crypto.createHash('md5').update(userAgent).digest('hex');
+    const sessionFingerprint = `${decodedUid}_${deviceFingerprint}_${ipAddress}`;
+
+    const session = await getSessionByTokenId(sessionFingerprint);
+    if (!session || session.isRevoked) {
+      logger.warn(`Refresh rejected: Session ${sessionFingerprint} is revoked or not found.`);
+      res.status(401).json({ success: false, error: 'SESSION_REVOKED', message: 'Your session has been revoked or expired.' });
+      return;
+    }
+
+    // Verify the user still exists in Firebase
+    try {
+      await auth.getUser(decodedUid);
     } catch (error) {
-      res.status(404).json({ success: false, error: 'User not found' });
+      res.status(404).json({ success: false, error: 'User not found in Firebase' });
       return;
     }
 
     // Generate a fresh custom token
-    const customToken = await auth.createCustomToken(uid);
+    const customToken = await auth.createCustomToken(decodedUid);
     
-    logger.info(`Refreshed token for user: ${uid}`);
+    // Update session activity so it stays alive
+    await updateSessionActivity(sessionFingerprint);
+    
+    logger.info(`Securely refreshed token for user: ${decodedUid}`);
     
     res.json({
       success: true,
-      data: { token: customToken, uid },
+      data: { token: customToken, uid: decodedUid },
     });
   } catch (error) {
     logger.error(`Failed to refresh token: ${(error as Error).message}`);

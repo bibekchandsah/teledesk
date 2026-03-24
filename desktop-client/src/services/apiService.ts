@@ -38,7 +38,44 @@ const authFetch = async <T>(
     }
 
     // Token may have just expired — force-refresh and retry once
-    const freshToken = await refreshIdToken();
+    let freshToken = await refreshIdToken();
+    
+    // If Firebase SDK failed to refresh (e.g. session lost after app restart), 
+    // try the backend refresh endpoint using the expired cached token
+    if (!freshToken && token) {
+      try {
+        console.warn('[API] Firebase native refresh failed. Attempting backend session refresh...');
+        const refreshRes = await fetch(`${BASE_URL}/api/auth/refresh-token`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData.success && refreshData.data?.token) {
+            console.log('[API] Backend issued new custom token. Re-authenticating Firebase...');
+            const { signInWithCustomToken } = await import('./firebaseService');
+            // This exchanges the custom token for a fresh ID token and restores Firebase state
+            const fbUser = await signInWithCustomToken(refreshData.data.token);
+            freshToken = await fbUser.getIdToken(true);
+          }
+        } else if (refreshRes.status === 401) {
+           const errData = await refreshRes.clone().json().catch(() => ({}));
+           if (errData.error === 'SESSION_REVOKED') {
+             console.warn('[API] Backend refresh denied. Session revoked.');
+             const message = encodeURIComponent(errData.message || 'Your session has been revoked or expired.');
+             window.location.href = `/login?logout=true&revoked=true&message=${message}`;
+             return errData as ApiResponse<T>;
+           }
+        }
+      } catch (err) {
+        console.error('[API] Backend refresh attempt failed:', err);
+      }
+    }
+
     if (freshToken) {
       headers['Authorization'] = `Bearer ${freshToken}`;
       response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });

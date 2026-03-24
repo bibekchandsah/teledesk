@@ -27,8 +27,15 @@ export const refreshAccountToken = async (uid: string, oldToken: string): Promis
     }
     
     const data = await response.json();
-    console.log('[MultiAccount] Token refreshed successfully');
-    return data.token;
+    if (data.success && data.data?.token) {
+      console.log('[MultiAccount] Backend issued new custom token. Exchanging for ID token...');
+      const fbUser = await signInWithCustomToken(data.data.token);
+      const freshIdToken = await fbUser.getIdToken(true);
+      console.log('[MultiAccount] Token refreshed and exchanged successfully');
+      return freshIdToken;
+    } else {
+      throw new Error(data.error || 'Failed to parse refresh token response');
+    }
   } catch (error) {
     console.error('[MultiAccount] Token refresh failed:', error);
     throw error;
