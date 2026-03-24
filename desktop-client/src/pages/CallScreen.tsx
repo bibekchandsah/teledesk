@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useCallStore } from '../store/callStore';
 import { useCallContext } from '../context/CallContext';
 import { useAuthStore } from '../store/authStore';
@@ -62,6 +62,7 @@ const CallScreen: React.FC = () => {
   const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 192, h: 192 });
   const [pipCursor, setPipCursor] = useState('grab');
   const [pipHidden, setPipHidden] = useState(false);
+  const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [gridView, setGridView] = useState(false);
   const [gridSwapped, setGridSwapped] = useState(false);
@@ -95,6 +96,7 @@ const CallScreen: React.FC = () => {
   const pipMovedRef = useRef(false);
   const isResizing = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pipIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -191,17 +193,23 @@ const CallScreen: React.FC = () => {
     };
   }, [remoteStream]);
 
-  // Hide controls after 3 s of mouse idle, show immediately on mouse move
+  // Hide controls after 5 s of mouse idle, show immediately on mouse move
   useEffect(() => {
     const showAndReset = () => {
       setControlsVisible(true);
+      setPipControlsVisible(true);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+      idleTimerRef.current = setTimeout(() => {
+        setControlsVisible(false);
+        setPipControlsVisible(false);
+      }, 5000);
     };
     showAndReset(); // start the timer right away
     window.addEventListener('mousemove', showAndReset);
+    window.addEventListener('touchstart', showAndReset, { passive: true });
     return () => {
       window.removeEventListener('mousemove', showAndReset);
+      window.removeEventListener('touchstart', showAndReset);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, []);
@@ -695,7 +703,9 @@ const CallScreen: React.FC = () => {
                   );
                   if (cur !== pipCursor) setPipCursor(cur);
                 }}
-                onMouseLeave={() => { if (pipCursor !== 'grab') setPipCursor('grab'); }}
+                onMouseLeave={() => {
+                  if (pipCursor !== 'grab') setPipCursor('grab');
+                }}
                 onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                 title="Drag · Click to swap"
                 style={{
@@ -730,8 +740,13 @@ const CallScreen: React.FC = () => {
 
                 {/* Three-dot handle — hover to open menu */}
                 <div
-                  onMouseEnter={() => setShowPipMenu(true)}
-                  onMouseLeave={() => setShowPipMenu(false)}
+                  onMouseEnter={() => {
+                    setShowPipMenu(true);
+                    if (pipIdleTimerRef.current) clearTimeout(pipIdleTimerRef.current);
+                  }}
+                  onMouseLeave={() => {
+                    setShowPipMenu(false);
+                  }}
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => e.stopPropagation()}
                   style={{
@@ -743,6 +758,9 @@ const CallScreen: React.FC = () => {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
+                    opacity: (pipControlsVisible || showPipMenu) ? 1 : 0,
+                    transition: 'opacity 0.3s ease',
+                    pointerEvents: (pipControlsVisible || showPipMenu) ? 'auto' : 'none'
                   }}
                 >
                   {/* dots pill */}

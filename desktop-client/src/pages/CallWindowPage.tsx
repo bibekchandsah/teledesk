@@ -108,6 +108,7 @@ const CallWindowPage: React.FC = () => {
   const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 192, h: 192 });
   const [pipCursor, setPipCursor] = useState('grab');
   const [pipHidden, setPipHidden] = useState(false);
+  const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [showCallChat, setShowCallChat] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
@@ -130,7 +131,9 @@ const CallWindowPage: React.FC = () => {
   const callDataRef = useRef<CallWindowInitData | null>(parseCallWindowData());
   const firstRemoteStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pipIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const callDurationRef = useRef(0);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   // Queue ICE candidates that arrive before the peer is constructed
   const pendingSignalsRef = useRef<Array<import('simple-peer').SignalData>>([]);
@@ -649,17 +652,23 @@ const CallWindowPage: React.FC = () => {
     return () => window.removeEventListener('resize', onResize);
   }, [pipShape, pipSize]);
 
-  // ─── Auto-hide controls after 3s of mouse idle ───────────────────────────
+  // ─── Auto-hide controls after 5s of mouse idle ───────────────────────────
   useEffect(() => {
     const showAndReset = () => {
       setControlsVisible(true);
+      setPipControlsVisible(true);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+      idleTimerRef.current = setTimeout(() => {
+        setControlsVisible(false);
+        setPipControlsVisible(false);
+      }, 5000);
     };
     showAndReset();
     window.addEventListener('mousemove', showAndReset);
+    window.addEventListener('touchstart', showAndReset, { passive: true });
     return () => {
       window.removeEventListener('mousemove', showAndReset);
+      window.removeEventListener('touchstart', showAndReset);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, []);
@@ -1379,8 +1388,14 @@ const CallWindowPage: React.FC = () => {
               return (
                 <div key="pip"
                   onMouseDown={handlePipMouseDown} onTouchStart={handlePipTouchStart}
-                  onMouseMove={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const cur = getPipResizeCursor(getPipResizeEdges(e.clientX - r.left, e.clientY - r.top, PIP_W, PIP_H, pipShape === 'circle')); if (cur !== pipCursor) setPipCursor(cur); }}
-                  onMouseLeave={() => { if (pipCursor !== 'grab') setPipCursor('grab'); }}
+                  onMouseMove={(e) => { 
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
+                    const cur = getPipResizeCursor(getPipResizeEdges(e.clientX - r.left, e.clientY - r.top, PIP_W, PIP_H, pipShape === 'circle')); 
+                    if (cur !== pipCursor) setPipCursor(cur); 
+                  }}
+                  onMouseLeave={() => { 
+                    if (pipCursor !== 'grab') setPipCursor('grab');
+                  }}
                   onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                   title="Drag · Click to swap"
                   style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor }}
@@ -1393,9 +1408,22 @@ const CallWindowPage: React.FC = () => {
                     label={localIsMain ? displayName : 'You'}
                     style={{ width: '100%', height: '100%', pointerEvents: 'none' }} />
                   </div>
-                  <div onMouseEnter={() => setShowPipMenu(true)} onMouseLeave={() => setShowPipMenu(false)}
+                  <div 
+                    onMouseEnter={() => {
+                      setShowPipMenu(true);
+                      if (pipIdleTimerRef.current) clearTimeout(pipIdleTimerRef.current);
+                    }} 
+                    onMouseLeave={() => {
+                      setShowPipMenu(false);
+                    }}
                     onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
-                    style={{ position: 'absolute', bottom: pipShape === 'circle' ? '10%' : 6, left: '50%', transform: 'translateX(-50%)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                    style={{ 
+                      position: 'absolute', bottom: pipShape === 'circle' ? '10%' : 6, left: '50%', transform: 'translateX(-50%)', 
+                      zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      opacity: (pipControlsVisible || showPipMenu) ? 1 : 0,
+                      transition: 'opacity 0.3s ease',
+                      pointerEvents: (pipControlsVisible || showPipMenu) ? 'auto' : 'none'
+                    }}
                   >
                     <div style={{ background: 'rgba(0,0,0,0.65)', borderRadius: 10, padding: '1px 9px 3px', cursor: 'default', color: 'rgba(255,255,255,0.9)', fontSize: 20, lineHeight: 1, letterSpacing: 3 }}>···</div>
                     {showPipMenu && (
