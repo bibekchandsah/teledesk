@@ -15,7 +15,7 @@ import { MicOff, Phone, PhoneOff, Video } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
-import { getUserById } from '../services/apiService';
+import { getChats, getUserById } from '../services/apiService';
 import callAudioService from '../services/callAudioService';
 
 interface CallWindowInitData {
@@ -148,19 +148,54 @@ const CallWindowPage: React.FC = () => {
   // ─── Bootstrap chats + user profiles for the in-call chat sidebar ──────────
   useEffect(() => {
     if (!currentUser) return;
-    const unsub = listenToUserChats(currentUser.uid, async (updatedChats) => {
-      setChats(updatedChats);
-      const memberIds = new Set<string>();
-      updatedChats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
-      memberIds.delete(currentUser.uid);
-      for (const uid of memberIds) {
-        const res = await getUserById(uid);
-        if (res.success && res.data) setUserProfile(res.data);
+    
+    let isSubscribed = false;
+    let chatUnsub: (() => void) | null = null;
+
+    const loadData = async () => {
+      if (isSubscribed) return;
+      isSubscribed = true;
+
+      // Eagerly fetch chats via REST API
+      try {
+        const res = await getChats();
+        if (res.success && res.data) {
+          setChats(res.data);
+          const memberIds = new Set<string>();
+          res.data.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
+          memberIds.delete(currentUser.uid);
+          for (const uid of memberIds) {
+            const r = await getUserById(uid);
+            if (r.success && r.data) setUserProfile(r.data);
+          }
+        }
+      } catch (err) {
+        console.error('[CallWindow] Failed to load initial chats:', err);
       }
-    });
-    return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.uid]);
+
+      // Start realtime listener
+      try {
+        chatUnsub = listenToUserChats(currentUser.uid, async (updatedChats) => {
+          setChats(updatedChats);
+          const memberIds = new Set<string>();
+          updatedChats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
+          memberIds.delete(currentUser.uid);
+          for (const uid of memberIds) {
+            const r = await getUserById(uid);
+            if (r.success && r.data) setUserProfile(r.data);
+          }
+        });
+      } catch (err) {
+        console.error('[CallWindow] Failed to start chat listener:', err);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      chatUnsub?.();
+    };
+  }, [currentUser?.uid, setChats, setUserProfile]);
 
   // ─── Play incoming ringtone ───────────────────────────────────────────────
   useEffect(() => {
