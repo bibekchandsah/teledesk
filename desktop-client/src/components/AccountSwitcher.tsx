@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { ChevronUp, Plus, Trash2 } from 'lucide-react';
 import ConfirmationModal from './modals/ConfirmationModal';
 import ErrorModal from './modals/ErrorModal';
+import UserAvatar from './UserAvatar';
 
 export const AccountSwitcher: React.FC = () => {
   const { accounts, activeAccountUid, removeAccount, setActiveAccount } = useMultiAccountStore();
@@ -132,7 +133,7 @@ export const AccountSwitcher: React.FC = () => {
         console.log('[AccountSwitcher] Setting error modal state to show expired token message');
         setErrorModal({
           isOpen: true,
-          message: 'Your session for this account has expired. You will be redirected to log in again.',
+          message: `${(tokenError as Error).message}. You will be redirected to log in again.`,
         });
         console.log('[AccountSwitcher] Error modal state set:', { isOpen: true });
         
@@ -462,18 +463,10 @@ export const AccountSwitcher: React.FC = () => {
                       }
                     }}
                   >
-                    <img
-                      src={account.avatar || '/default-avatar.png'}
-                      alt={account.name}
-                      style={{
-                        width: 40,
-                        height: 40,
-                        minWidth: 40,
-                        minHeight: 40,
-                        borderRadius: '50%',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                      }}
+                    <UserAvatar
+                      name={account.name}
+                      avatar={account.avatar}
+                      size={40}
                     />
                     <div style={{ flex: 1, textAlign: 'left', overflow: 'hidden' }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

@@ -23,7 +23,9 @@ export const refreshAccountToken = async (uid: string, oldToken: string): Promis
     });
     
     if (!response.ok) {
-      throw new Error('Failed to refresh token');
+      const errText = await response.text();
+      console.error('[MultiAccount] API error text:', errText);
+      throw new Error(`Failed to refresh token: ${response.status} ${errText}`);
     }
     
     const data = await response.json();
@@ -86,14 +88,14 @@ export const switchToAccount = async (account: StoredAccount): Promise<boolean> 
           console.log('[MultiAccount] Token refreshed and updated in storage');
         } catch (refreshError) {
           console.error('[MultiAccount] Token refresh failed:', refreshError);
-          throw new Error('Token expired - please log in again');
+          throw refreshError;
         }
       } else {
         console.log('[MultiAccount] Token is valid');
       }
     } catch (error) {
       console.error('[MultiAccount] Token validation failed:', error);
-      throw new Error('Token expired - please log in again');
+      throw error;
     }
     
     // Set the account as active

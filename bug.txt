@@ -39,3 +39,7 @@ fixed desktop app ringing sound when call is received
 fixed incoming ringing sound in desktop app 
 fixed voice audio in desktop to web and web to desktop
 fixed video audio in desktop to web and web to desktop
+fixed active status of multiple instances and account switchhing
+fixed live typing status independently
+fixed added multiple instance for same app 
+fixed ringtone for compiled exe

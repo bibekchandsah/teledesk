@@ -31,6 +31,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         <img
           src={avatar}
           alt={name}
+          referrerPolicy="no-referrer"
           style={{
             width: size,
             height: size,

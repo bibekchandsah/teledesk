@@ -102,9 +102,13 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     const deviceFingerprint = crypto.createHash('md5').update(userAgent).digest('hex');
     const sessionFingerprint = `${decodedUid}_${deviceFingerprint}_${ipAddress}`;
 
+    logger.debug(`[AuthRefresh] Attempting refresh for UID: ${decodedUid}`);
+    logger.debug(`[AuthRefresh] IP: ${ipAddress}, UA: ${userAgent.slice(0, 50)}...`);
+    logger.debug(`[AuthRefresh] Calculated Fingerprint: ${sessionFingerprint}`);
+
     const session = await getSessionByTokenId(sessionFingerprint);
     if (!session || session.isRevoked) {
-      logger.warn(`Refresh rejected: Session ${sessionFingerprint} is revoked or not found.`);
+      logger.warn(`Refresh rejected: Session ${sessionFingerprint} is ${!session ? 'not found' : 'revoked'}.`);
       res.status(401).json({ success: false, error: 'SESSION_REVOKED', message: 'Your session has been revoked or expired.' });
       return;
     }

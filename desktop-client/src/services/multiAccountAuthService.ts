@@ -50,15 +50,13 @@ class MultiAccountAuthService {
   async saveAccounts(data: MultiAccountStorage): Promise<void> {
     console.log('[MultiAccountAuth] Saving accounts:', data);
     
-    if (!this.isInitialized) {
-      await this.waitForInitialization();
-    }
-    
     if (window.electronAPI?.saveMultiAccounts) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.saveMultiAccounts(data);
       console.log('[MultiAccountAuth] Save result:', result);
     } else {
-      console.warn('[MultiAccountAuth] Cannot save - electronAPI not available');
+      console.log('[MultiAccountAuth] Saving to localStorage fallback');
+      localStorage.setItem('multi-account-auth-data', JSON.stringify(data));
     }
   }
 
@@ -66,16 +64,21 @@ class MultiAccountAuthService {
   async loadAccounts(): Promise<MultiAccountStorage | null> {
     console.log('[MultiAccountAuth] Loading accounts...');
     
-    if (!this.isInitialized) {
-      await this.waitForInitialization();
-    }
-    
     if (window.electronAPI?.loadMultiAccounts) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.loadMultiAccounts();
       console.log('[MultiAccountAuth] Load result:', result);
       return result;
     } else {
-      console.warn('[MultiAccountAuth] Cannot load - electronAPI not available');
+      console.log('[MultiAccountAuth] Loading from localStorage fallback');
+      const data = localStorage.getItem('multi-account-auth-data');
+      if (data) {
+        try {
+          return JSON.parse(data) as MultiAccountStorage;
+        } catch (e) {
+          console.error('[MultiAccountAuth] Failed to parse localStorage data', e);
+        }
+      }
       return null;
     }
   }
@@ -170,15 +173,13 @@ class MultiAccountAuthService {
   async clearAllAccounts(): Promise<void> {
     console.log('[MultiAccountAuth] Clearing all accounts...');
     
-    if (!this.isInitialized) {
-      await this.waitForInitialization();
-    }
-    
     if (window.electronAPI?.clearMultiAccounts) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.clearMultiAccounts();
       console.log('[MultiAccountAuth] Clear result:', result);
     } else {
-      console.warn('[MultiAccountAuth] Cannot clear - electronAPI not available');
+      console.log('[MultiAccountAuth] Clearing localStorage fallback');
+      localStorage.removeItem('multi-account-auth-data');
     }
   }
 

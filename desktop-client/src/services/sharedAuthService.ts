@@ -36,7 +36,18 @@ class SharedAuthService {
       });
       this.isInitialized = true;
     } else {
-      console.warn('[SharedAuthService] electronAPI not available after waiting - running in web mode?');
+      console.warn('[SharedAuthService] electronAPI not available - setting up localStorage listener');
+      window.addEventListener('storage', (event) => {
+        if (event.key === 'shared-auth-data' && event.newValue) {
+          try {
+            const data = JSON.parse(event.newValue);
+            this.notifyListeners(data);
+          } catch (e) {
+            console.error('[SharedAuthService] Failed to parse localStorage update', e);
+          }
+        }
+      });
+      this.isInitialized = true;
     }
   }
 
@@ -51,10 +62,13 @@ class SharedAuthService {
     }
     
     if (window.electronAPI) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.saveSharedAuth(data);
       console.log('[SharedAuthService] Save result:', result);
     } else {
-      console.warn('[SharedAuthService] Cannot save - electronAPI not available');
+      console.log('[SharedAuthService] Saving to localStorage fallback');
+      localStorage.setItem('shared-auth-data', JSON.stringify(data));
+      this.notifyListeners(data);
     }
   }
 
@@ -69,11 +83,20 @@ class SharedAuthService {
     }
     
     if (window.electronAPI) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.loadSharedAuth();
       console.log('[SharedAuthService] Load result:', result);
       return result;
     } else {
-      console.warn('[SharedAuthService] Cannot load - electronAPI not available');
+      console.log('[SharedAuthService] Loading from localStorage fallback');
+      const data = localStorage.getItem('shared-auth-data');
+      if (data) {
+        try {
+          return JSON.parse(data) as SharedAuthData;
+        } catch (e) {
+          console.error('[SharedAuthService] Failed to parse localStorage data', e);
+        }
+      }
       return null;
     }
   }
@@ -89,10 +112,12 @@ class SharedAuthService {
     }
     
     if (window.electronAPI) {
+      if (!this.isInitialized) await this.waitForInitialization();
       const result = await window.electronAPI.clearSharedAuth();
       console.log('[SharedAuthService] Clear result:', result);
     } else {
-      console.warn('[SharedAuthService] Cannot clear - electronAPI not available');
+      console.log('[SharedAuthService] Clearing localStorage fallback');
+      localStorage.removeItem('shared-auth-data');
     }
   }
 
