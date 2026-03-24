@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
-import { listenToUserChats, onAuthChange } from '../services/firebaseService';
 import { getUserById, getChats } from '../services/apiService';
+import { useAuthStore } from '../store/authStore';
+import { Loader2 } from 'lucide-react';
 import ChatWindow from './ChatWindow';
 
 /**
@@ -17,6 +18,7 @@ const PopupChatPage: React.FC = () => {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const { setChats, setUserProfile, setActiveChat, chats } = useChatStore();
+  const { isAuthenticated, isLoading, currentUser } = useAuthStore();
 
   // Whenever chats load, resolve and set activeChat for the target chatId
   useEffect(() => {
@@ -26,48 +28,71 @@ const PopupChatPage: React.FC = () => {
   }, [chatId, chats, setActiveChat]);
 
   useEffect(() => {
+    if (!isAuthenticated || !currentUser) return;
+    
     let chatUnsub: (() => void) | null = null;
+    let isSubscribed = false;
 
-    const authUnsub = onAuthChange(async (fbUser) => {
-      // Already subscribed — nothing to do
-      if (chatUnsub) return;
-      if (!fbUser) return;
+    const loadData = async () => {
+      if (isSubscribed) return;
+      isSubscribed = true;
 
-      // Eagerly fetch chats via the REST API so the chat loads immediately
-      // without waiting for the Supabase realtime handshake.
-      const res = await getChats().catch(() => null);
-      if (res?.success && res.data) {
-        setChats(res.data);
-        // Load member profiles
-        const memberIds = new Set<string>();
-        res.data.forEach((c) => c.members.forEach((m: string) => memberIds.add(m)));
-        memberIds.delete(fbUser.uid);
-        for (const uid of memberIds) {
-          const r = await getUserById(uid);
-          if (r.success && r.data) setUserProfile(r.data);
+      // Eagerly fetch chats via the REST API
+      try {
+        const res = await getChats();
+        if (res.success && res.data) {
+          setChats(res.data);
+          // Load member profiles
+          const memberIds = new Set<string>();
+          res.data.forEach((c) => c.members.forEach((m: string) => memberIds.add(m)));
+          memberIds.delete(currentUser.uid);
+          for (const uid of memberIds) {
+            const r = await getUserById(uid);
+            if (r.success && r.data) setUserProfile(r.data);
+          }
         }
+      } catch (error) {
+        console.error('[Popup] Failed to load initial chats:', error);
       }
 
       // Also set up realtime subscription for live updates
-      chatUnsub = listenToUserChats(fbUser.uid, async (chats) => {
-        setChats(chats);
+      try {
+        const { listenToUserChats } = await import('../services/firebaseService');
+        chatUnsub = listenToUserChats(currentUser.uid, async (updatedChats) => {
+          setChats(updatedChats);
+          const memberIds = new Set<string>();
+          updatedChats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
+          memberIds.delete(currentUser.uid);
 
-        const memberIds = new Set<string>();
-        chats.forEach((c) => c.members.forEach((m) => memberIds.add(m)));
-        memberIds.delete(fbUser.uid);
+          for (const uid of memberIds) {
+            const r = await getUserById(uid);
+            if (r.success && r.data) setUserProfile(r.data);
+          }
+        });
+      } catch (error) {
+        console.error('[Popup] Failed to start realtime listener:', error);
+      }
+    };
 
-        for (const uid of memberIds) {
-          const r = await getUserById(uid);
-          if (r.success && r.data) setUserProfile(r.data);
-        }
-      });
-    });
+    loadData();
 
     return () => {
-      authUnsub();
       chatUnsub?.();
     };
-  }, [setChats, setUserProfile]);
+  }, [isAuthenticated, currentUser?.uid, setChats, setUserProfile]);
+
+  if (isLoading || (!isAuthenticated && !currentUser)) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-primary)' }}>
+        <Loader2 className="animate-spin" size={48} style={{ opacity: 0.5, color: 'var(--text-secondary)' }} />
+      </div>
+    );
+  }
+
+  if (isAuthenticated && !currentUser) {
+     // Wait for profile hydration
+     return null;
+  }
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
