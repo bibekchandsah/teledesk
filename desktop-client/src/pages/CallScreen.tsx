@@ -53,6 +53,7 @@ const CallScreen: React.FC = () => {
   const [showCallChat, setShowCallChat] = useState(false);
   const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [gridOrientation, setGridOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [localIsMain, setLocalIsMain] = useState(false);
@@ -381,8 +382,13 @@ const CallScreen: React.FC = () => {
     const onMove = (ev: MouseEvent) => {
       if (!gridResizingRef.current || !containerEl) return;
       const rect = containerEl.getBoundingClientRect();
-      const pct = Math.min(80, Math.max(20, ((ev.clientX - rect.left) / rect.width) * 100));
-      setGridSplit(pct);
+      if (gridOrientation === 'horizontal') {
+        const pct = Math.min(80, Math.max(20, ((ev.clientX - rect.left) / rect.width) * 100));
+        setGridSplit(pct);
+      } else {
+        const pct = Math.min(80, Math.max(20, ((ev.clientY - rect.top) / rect.height) * 100));
+        setGridSplit(pct);
+      }
     };
     const onUp = () => {
       gridResizingRef.current = false;
@@ -399,8 +405,14 @@ const CallScreen: React.FC = () => {
     const onMove = (ev: TouchEvent) => {
       if (!gridResizingRef.current || !containerEl || !ev.touches[0]) return;
       const rect = containerEl.getBoundingClientRect();
-      const pct = Math.min(80, Math.max(20, ((ev.touches[0].clientX - rect.left) / rect.width) * 100));
-      setGridSplit(pct);
+      const t = ev.touches[0];
+      if (gridOrientation === 'horizontal') {
+        const pct = Math.min(80, Math.max(20, ((t.clientX - rect.left) / rect.width) * 100));
+        setGridSplit(pct);
+      } else {
+        const pct = Math.min(80, Math.max(20, ((t.clientY - rect.top) / rect.height) * 100));
+        setGridSplit(pct);
+      }
     };
     const onUp = () => {
       gridResizingRef.current = false;
@@ -449,7 +461,7 @@ const CallScreen: React.FC = () => {
       >
       {/* ── GRID VIEW ─────────────────────────────────────────────── */}
       {effectiveIsVideo && gridView && activeCall.status !== 'ringing' ? (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'row' }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: gridOrientation === 'horizontal' ? 'row' : 'column' }}>
           {/* Left panel */}
           {(() => {
             const leftStream  = gridSwapped ? (localStream)  : (remoteStream);
@@ -462,7 +474,11 @@ const CallScreen: React.FC = () => {
             const rightMirror = !gridSwapped;
             return (
               <>
-                <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
+                <div style={{ 
+                  width: gridOrientation === 'horizontal' ? `${gridSplit}%` : '100%', 
+                  height: gridOrientation === 'horizontal' ? '100%' : `${gridSplit}%`, 
+                  position: 'relative', flexShrink: 0, backgroundColor: '#000' 
+                }}>
                   <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
@@ -472,13 +488,15 @@ const CallScreen: React.FC = () => {
                     fontSize: 12, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
                   }}>{leftLabel}</div>
                 </div>
-
                 {/* Draggable divider */}
                 <div
                   onMouseDown={handleGridResizeMouseDown}
                   onTouchStart={handleGridResizeTouchStart}
                   style={{
-                    width: 6, height: '100%', cursor: 'col-resize', flexShrink: 0,
+                    width: gridOrientation === 'horizontal' ? 6 : '100%',
+                    height: gridOrientation === 'horizontal' ? '100%' : 6,
+                    cursor: gridOrientation === 'horizontal' ? 'col-resize' : 'row-resize',
+                    flexShrink: 0,
                     background: 'rgba(255,255,255,0.06)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     zIndex: 5, position: 'relative',
@@ -504,9 +522,8 @@ const CallScreen: React.FC = () => {
                     ⇄
                   </button>
                 </div>
-
                 {/* Right panel */}
-                <div style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#000' }}>
+                <div style={{ flex: 1, position: 'relative', backgroundColor: '#000' }}>
                   <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
@@ -950,7 +967,9 @@ const CallScreen: React.FC = () => {
           onSwitchCamera={effectiveIsVideo ? handleSwitchCamera : undefined}
           onSwitchSpeaker={handleSwitchSpeaker}
           isGridView={gridView}
-          onToggleGridView={effectiveIsVideo ? () => setGridView((v) => !v) : undefined}
+          onToggleGridView={() => setGridView(!gridView)}
+          gridOrientation={gridOrientation}
+          onToggleGridOrientation={() => setGridOrientation(v => v === 'horizontal' ? 'vertical' : 'horizontal')}
           isScreenSharing={isScreenSharing}
           onToggleScreenShare={handleToggleScreenShare}
         />

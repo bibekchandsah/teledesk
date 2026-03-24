@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Mic, MicOff, Video, VideoOff, Phone, MessageCircle, ChevronUp, LayoutGrid, Monitor, MonitorOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Phone, MessageCircle, ChevronUp, LayoutGrid, Monitor, MonitorOff, Rows2, Columns2 } from 'lucide-react';
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -16,6 +16,8 @@ interface CallControlsProps {
   onSwitchSpeaker?: (deviceId: string) => void;
   isGridView?: boolean;
   onToggleGridView?: () => void;
+  gridOrientation?: 'horizontal' | 'vertical';
+  onToggleGridOrientation?: () => void;
   isScreenSharing?: boolean;
   onToggleScreenShare?: () => void;
 }
@@ -176,6 +178,8 @@ const CallControls: React.FC<CallControlsProps> = ({
   onSwitchSpeaker,
   isGridView,
   onToggleGridView,
+  gridOrientation = 'horizontal',
+  onToggleGridOrientation,
   isScreenSharing,
   onToggleScreenShare,
 }) => {
@@ -344,13 +348,24 @@ const CallControls: React.FC<CallControlsProps> = ({
 
       {/* Grid / PiP view toggle (when video is active) */}
       {onToggleGridView && (
-        <button
-          onClick={onToggleGridView}
-          title={isGridView ? 'Switch to PiP view' : 'Switch to grid view'}
-          style={{ ...btnBase, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
-        >
-          <LayoutGrid size={22} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={onToggleGridView}
+            title={isGridView ? 'Switch to PiP view' : 'Switch to grid view'}
+            style={{ ...btnBase, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
+          >
+            <LayoutGrid size={22} />
+          </button>
+          {isGridView && onToggleGridOrientation && (
+            <button
+              onClick={onToggleGridOrientation}
+              title={gridOrientation === 'horizontal' ? 'Switch to vertical grid' : 'Switch to horizontal grid'}
+              style={{ ...btnBase, backgroundColor: 'rgba(255,255,255,0.15)' }}
+            >
+              {gridOrientation === 'horizontal' ? <Rows2 size={22} /> : <Columns2 size={22} />}
+            </button>
+          )}
+        </div>
       )}
 
       {/* Chat toggle */}

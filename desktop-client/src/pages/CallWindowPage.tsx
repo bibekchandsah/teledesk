@@ -100,6 +100,7 @@ const CallWindowPage: React.FC = () => {
   const [isAccepted, setIsAccepted] = useState(false);
   const [volumeBars, setVolumeBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [gridView, setGridView] = useState(false);
+  const [gridOrientation, setGridOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [gridSwapped, setGridSwapped] = useState(false);
   const [gridSplit, setGridSplit] = useState(50);
   const [pipPos, setPipPos] = useState<{ top: number; left: number } | null>(null);
@@ -907,7 +908,11 @@ const CallWindowPage: React.FC = () => {
     const onMove = (ev: MouseEvent) => {
       if (!gridResizingRef.current || !containerEl) return;
       const rect = containerEl.getBoundingClientRect();
-      setGridSplit(Math.min(80, Math.max(20, ((ev.clientX - rect.left) / rect.width) * 100)));
+      if (gridOrientation === 'horizontal') {
+        setGridSplit(Math.min(80, Math.max(20, ((ev.clientX - rect.left) / rect.width) * 100)));
+      } else {
+        setGridSplit(Math.min(80, Math.max(20, ((ev.clientY - rect.top) / rect.height) * 100)));
+      }
     };
     const onUp = () => { gridResizingRef.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
     window.addEventListener('mousemove', onMove);
@@ -920,7 +925,12 @@ const CallWindowPage: React.FC = () => {
     const onMove = (ev: TouchEvent) => {
       if (!gridResizingRef.current || !containerEl || !ev.touches[0]) return;
       const rect = containerEl.getBoundingClientRect();
-      setGridSplit(Math.min(80, Math.max(20, ((ev.touches[0].clientX - rect.left) / rect.width) * 100)));
+      const t = ev.touches[0];
+      if (gridOrientation === 'horizontal') {
+        setGridSplit(Math.min(80, Math.max(20, ((t.clientX - rect.left) / rect.width) * 100)));
+      } else {
+        setGridSplit(Math.min(80, Math.max(20, ((t.clientY - rect.top) / rect.height) * 100)));
+      }
     };
     const onUp = () => { gridResizingRef.current = false; window.removeEventListener('touchmove', onMove); window.removeEventListener('touchend', onUp); };
     window.addEventListener('touchmove', onMove, { passive: true });
@@ -1201,7 +1211,7 @@ const CallWindowPage: React.FC = () => {
       >
         {/* ── GRID VIEW ─────────────────────────────────────────────── */}
         {effectiveIsVideo && gridView && callStatus !== 'ringing' ? (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'row' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: gridOrientation === 'horizontal' ? 'row' : 'column' }}>
             {(() => {
               const leftStream  = gridSwapped ? localStream  : remoteStream;
               const rightStream = gridSwapped ? remoteStream : localStream;
@@ -1213,7 +1223,11 @@ const CallWindowPage: React.FC = () => {
               const rightMirror = !gridSwapped;
               return (
                 <>
-                  <div style={{ width: `${gridSplit}%`, height: '100%', position: 'relative', flexShrink: 0, backgroundColor: '#000' }}>
+                  <div style={{ 
+                    width: gridOrientation === 'horizontal' ? `${gridSplit}%` : '100%', 
+                    height: gridOrientation === 'horizontal' ? '100%' : `${gridSplit}%`, 
+                    position: 'relative', flexShrink: 0, backgroundColor: '#000' 
+                  }}>
                     <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
@@ -1222,7 +1236,12 @@ const CallWindowPage: React.FC = () => {
                   <div
                     onMouseDown={handleGridResizeMouseDown}
                     onTouchStart={handleGridResizeTouchStart}
-                    style={{ width: 6, height: '100%', cursor: 'col-resize', flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, position: 'relative' }}
+                    style={{ 
+                      width: gridOrientation === 'horizontal' ? 6 : '100%', 
+                      height: gridOrientation === 'horizontal' ? '100%' : 6, 
+                      cursor: gridOrientation === 'horizontal' ? 'col-resize' : 'row-resize', 
+                      flexShrink: 0, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, position: 'relative' 
+                    }}
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.5)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
                   >
@@ -1230,7 +1249,7 @@ const CallWindowPage: React.FC = () => {
                       style={{ position: 'absolute', width: 32, height: 32, borderRadius: '50%', background: 'rgba(15,23,42,0.9)', border: '1.5px solid rgba(255,255,255,0.25)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, padding: 0, zIndex: 10 }}
                     >⇄</button>
                   </div>
-                  <div style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#000' }}>
+                  <div style={{ flex: 1, position: 'relative', backgroundColor: '#000' }}>
                     <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
                     objectFit="contain"
                     style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
@@ -1532,6 +1551,8 @@ const CallWindowPage: React.FC = () => {
             onSwitchSpeaker={handleSwitchSpeaker}
             isGridView={gridView}
             onToggleGridView={effectiveIsVideo ? () => setGridView((v) => !v) : undefined}
+            gridOrientation={gridOrientation}
+            onToggleGridOrientation={() => setGridOrientation(v => v === 'horizontal' ? 'vertical' : 'horizontal')}
             isScreenSharing={isScreenSharing}
             onToggleScreenShare={handleToggleScreenShare}
             isChatOpen={showCallChat}
