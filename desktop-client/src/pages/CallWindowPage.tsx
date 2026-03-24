@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Sp from 'simple-peer';
 import type { Instance as SimplePeerInstance } from 'simple-peer';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +17,7 @@ import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
 import { getChats, getUserById } from '../services/apiService';
 import callAudioService from '../services/callAudioService';
+import InCallChatList from '../components/InCallChatList';
 
 interface CallWindowInitData {
   callId: string;
@@ -109,6 +110,8 @@ const CallWindowPage: React.FC = () => {
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [showCallChat, setShowCallChat] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
+  const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   // Remote peer's mute/video status (received via relayed socket events)
   const [peerIsMuted, setPeerIsMuted] = useState(false);
   const [peerIsVideoOff, setPeerIsVideoOff] = useState(false);
@@ -209,9 +212,17 @@ const CallWindowPage: React.FC = () => {
   }, [isAccepted]);
 
   // ─── Derived: 1-on-1 chat between the two call participants ────────────────
-  const callChat = callData && currentUser
-    ? chats.find((c) => c.type === 'private' && c.members.includes(currentUser.uid) && c.members.includes(callData.targetUserId))
-    : undefined;
+  const callChat = useMemo(() => {
+    if (!callData || !currentUser) return undefined;
+    return chats.find((c) => c.type === 'private' && c.members.includes(currentUser.uid) && c.members.includes(callData.targetUserId));
+  }, [chats, callData, currentUser]);
+
+  // Set initial selectedChatId when callChat is first resolved
+  useEffect(() => {
+    if (callChat && !selectedChatId) {
+      setSelectedChatId(callChat.chatId);
+    }
+  }, [callChat, selectedChatId]);
 
   // ─── Chat panel resize drag ─────────────────────────────────────────────────
   const handleChatResizeMouseDown = (e: React.MouseEvent) => {
@@ -1530,7 +1541,7 @@ const CallWindowPage: React.FC = () => {
       </div>
 
       {/* ── In-call chat sidebar ─────────────────────────────────────────── */}
-      {showCallChat && callChat && (
+      {showCallChat && (
         <>
           <div
             onMouseDown={handleChatResizeMouseDown}
@@ -1539,7 +1550,27 @@ const CallWindowPage: React.FC = () => {
             onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent'; }}
           />
           <div style={{ width: chatPanelWidth, minWidth: 280, maxWidth: 700, height: '100%', borderLeft: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-            <ChatWindow chatId={callChat.chatId} onBack={() => setShowCallChat(false)} />
+            {viewMode === 'list' ? (
+              <InCallChatList 
+                activeChatId={selectedChatId || undefined} 
+                onChatSelect={(id) => {
+                  setSelectedChatId(id);
+                  setViewMode('chat');
+                }}
+                onClose={() => setShowCallChat(false)}
+              />
+            ) : (
+              <ChatWindow 
+                chatId={selectedChatId || callChat?.chatId} 
+                onBack={() => {
+                  if (window.innerWidth < 425) {
+                    setShowCallChat(false);
+                  } else {
+                    setViewMode('list');
+                  }
+                }} 
+              />
+            )}
           </div>
         </>
       )}

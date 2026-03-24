@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useCallStore } from '../store/callStore';
 import { useCallContext } from '../context/CallContext';
 import { useAuthStore } from '../store/authStore';
@@ -9,6 +9,7 @@ import ChatWindow from './ChatWindow';
 import UserAvatar from '../components/UserAvatar';
 import ScreenPickerModal from '../components/ScreenPickerModal';
 import { formatDuration } from '../utils/formatters';
+import InCallChatList from '../components/InCallChatList';
 import { toggleAudio, toggleVideo, switchMicrophone, switchCamera, startScreenShare, stopScreenShare, enableCallVideo, disableCallVideo } from '../services/webrtcService';
 import { getSocket, sendCallMuteChanged, sendCallVideoChanged } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
@@ -50,6 +51,8 @@ const CallScreen: React.FC = () => {
   const { currentUser } = useAuthStore();
   const { chats, nicknames } = useChatStore();
   const [showCallChat, setShowCallChat] = useState(false);
+  const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [localIsMain, setLocalIsMain] = useState(false);
@@ -258,12 +261,21 @@ const CallScreen: React.FC = () => {
       : activeCall.callerAvatar;
 
   // Find the 1-on-1 chat between the two participants
-  const callChat = chats.find(
-    (c) =>
-      c.type === 'private' &&
-      c.members.includes(currentUid) &&
-      c.members.includes(peerUid),
-  );
+  const callChat = useMemo(() => {
+    return chats.find(
+      (c) =>
+        c.type === 'private' &&
+        c.members.includes(currentUid) &&
+        c.members.includes(peerUid),
+    );
+  }, [chats, currentUid, peerUid]);
+
+  // Set initial selectedChatId when callChat is first resolved
+  useEffect(() => {
+    if (callChat && !selectedChatId) {
+      setSelectedChatId(callChat.chatId);
+    }
+  }, [callChat, selectedChatId]);
 
   const handleToggleMute = () => {
     const newMuted = !isMuted;
@@ -975,7 +987,27 @@ const CallScreen: React.FC = () => {
               flexShrink: 0,
             }}
           >
-            <ChatWindow chatId={callChat.chatId} onBack={() => setShowCallChat(false)} />
+            {viewMode === 'list' ? (
+              <InCallChatList 
+                activeChatId={selectedChatId || undefined} 
+                onChatSelect={(id) => {
+                  setSelectedChatId(id);
+                  setViewMode('chat');
+                }}
+                onClose={() => setShowCallChat(false)}
+              />
+            ) : (
+              <ChatWindow 
+                chatId={selectedChatId || callChat?.chatId} 
+                onBack={() => {
+                  if (window.innerWidth < 425) {
+                    setShowCallChat(false);
+                  } else {
+                    setViewMode('list');
+                  }
+                }} 
+              />
+            )}
           </div>
         </>
       )}
