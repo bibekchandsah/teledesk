@@ -1612,37 +1612,37 @@ const CallWindowPage: React.FC = () => {
 
         ) : (
           /* ── Voice call avatar + status + visualiser ─────────────────── */
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#fff', gap: 20, padding: '0 32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#fff', gap: isMiniMode ? 12 : 20, padding: isMiniMode ? 0 : '0 32px' }}>
             <div style={{ position: 'relative' }}>
-              {callStatus === 'ringing' && (
+              {callStatus === 'ringing' && !isMiniMode && (
                 <>
                   <div style={{ position: 'absolute', width: 130, height: 130, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.4, animation: 'callPulse 1.5s ease-out infinite', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
                   <div style={{ position: 'absolute', width: 155, height: 155, borderRadius: '50%', border: '2px solid #6366f1', opacity: 0.2, animation: 'callPulse 1.5s ease-out infinite 0.4s', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
                 </>
               )}
-              <UserAvatar name={displayName} avatar={callData.targetAvatar} size={110} />
+              <UserAvatar name={displayName} avatar={callData.targetAvatar} size={isMiniMode ? 64 : 110} />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>{displayName}</h2>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: 16 }}>
+              {!isMiniMode && <h2 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, color: '#f1f5f9' }}>{displayName}</h2>}
+              <p style={{ margin: 0, color: isMiniMode ? '#fff' : '#94a3b8', fontSize: isMiniMode ? 14 : 16, fontWeight: isMiniMode ? 600 : 400 }}>
                 {callStatus === 'active' ? formatDuration(callDuration) : callData.isOutgoing ? (isRinging ? 'Ringing…' : 'Calling…') : 'Connecting…'}
               </p>
             </div>
             {callStatus === 'active' && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 32, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: isMiniMode ? 2 : 3, height: isMiniMode ? 24 : 32, marginTop: isMiniMode ? 0 : 4 }}>
                 {volumeBars.map((h, i) => (
-                  <div key={i} style={{ width: 4, borderRadius: 2, height: `${Math.max(4, h * 0.32)}px`, backgroundColor: h > 20 ? '#6366f1' : '#475569', transition: 'height 0.08s ease' }} />
+                  <div key={i} style={{ width: isMiniMode ? 3 : 4, borderRadius: 2, height: `${Math.max(4, h * (isMiniMode ? 0.24 : 0.32))}px`, backgroundColor: h > 20 ? '#6366f1' : '#475569', transition: 'height 0.08s ease' }} />
                 ))}
               </div>
             )}
-            {/* Local mute status */}
-            {isMuted && callStatus === 'active' && (
+            {/* Local mute status (hide in mini-mode to save space, but controls will show mute state) */}
+            {isMuted && callStatus === 'active' && !isMiniMode && (
               <div style={{ fontSize: 13, color: '#f87171', background: 'rgba(239,68,68,0.15)', padding: '4px 12px', borderRadius: 20 }}>
                 You are muted
               </div>
             )}
             {/* Remote mute status */}
-            {peerIsMuted && callStatus === 'active' && (
+            {peerIsMuted && callStatus === 'active' && !isMiniMode && (
               <div style={{ fontSize: 13, color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '4px 12px', borderRadius: 20 }}>
                 {displayName} is muted
               </div>
@@ -1650,8 +1650,8 @@ const CallWindowPage: React.FC = () => {
           </div>
         )}
 
-        {/* Peer info overlay (video mode, active call only) */}
-        {effectiveIsVideo && callStatus !== 'ringing' && (
+        {/* Peer info overlay (active call only, shown on hover in mini-mode or video mode) */}
+        {callStatus !== 'ringing' && (isMiniMode || effectiveIsVideo) && (
           <div style={{
             position: 'absolute', top: 16, left: 16,
             display: 'flex', alignItems: 'center', gap: 8,
@@ -1662,9 +1662,9 @@ const CallWindowPage: React.FC = () => {
             transform: controlsVisible ? 'translateY(0)' : 'translateY(-12px)',
             transition: 'opacity 0.4s ease, transform 0.4s ease',
             pointerEvents: 'none',
-            zIndex: 10,
+            zIndex: 45, // Above controls
           }}>
-            <UserAvatar name={displayName} avatar={callData.targetAvatar} size={30} />
+            {!isMiniMode && <UserAvatar name={displayName} avatar={callData.targetAvatar} size={30} />}
             <span style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 600 }}>{displayName}</span>
           </div>
         )}
@@ -1683,7 +1683,7 @@ const CallWindowPage: React.FC = () => {
         )}
 
         {/* Pin icon (for entering Mini Mode) */}
-        {effectiveIsVideo && callStatus !== 'ringing' && (
+        {callStatus !== 'ringing' && (
           <div style={{
             position: 'absolute', top: isMiniMode ? 16 : 48, right: 16,
             display: 'flex', alignItems: 'center', gap: 8,
@@ -1762,13 +1762,16 @@ const CallWindowPage: React.FC = () => {
             >
               {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
-            <button 
-              onClick={handleToggleVideo} 
-              title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
-              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-            >
-               {isVideoOff ? <VideoOff size={16} /> : <Video size={16} />}
-            </button>
+            {/* Camera toggle: only show in video call or if already enabled in voice call */}
+            {(isVideoCall || isLocalVideoEnabled) && (
+              <button 
+                onClick={handleToggleVideo} 
+                title={isVideoCall ? (isVideoOff ? 'Turn on camera' : 'Turn off camera') : 'Turn off camera'}
+                style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: (isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                {(isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? <VideoOff size={16} /> : <Video size={16} />}
+              </button>
+            )}
             <button 
               onClick={handleHangup} 
               title="End call"
