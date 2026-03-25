@@ -20,6 +20,9 @@ interface CallControlsProps {
   onToggleGridOrientation?: () => void;
   isScreenSharing?: boolean;
   onToggleScreenShare?: () => void;
+  activeMicId?: string;
+  activeCamId?: string;
+  activeSpeakerId?: string;
 }
 
 interface MenuSection {
@@ -185,13 +188,13 @@ const CallControls: React.FC<CallControlsProps> = ({
   onToggleGridOrientation,
   isScreenSharing,
   onToggleScreenShare,
+  activeMicId = '',
+  activeCamId = '',
+  activeSpeakerId = '',
 }) => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [speakerDevices, setSpeakerDevices] = useState<MediaDeviceInfo[]>([]);
   const [camDevices, setCamDevices] = useState<MediaDeviceInfo[]>([]);
-  const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
-  const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? '');
-  const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
   const [micMenuPos, setMicMenuPos] = useState<MenuPos | null>(null);
   const [camMenuPos, setCamMenuPos] = useState<MenuPos | null>(null);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -248,17 +251,14 @@ const CallControls: React.FC<CallControlsProps> = ({
   };
 
   const handleSelectMic = (id: string) => {
-    setActiveMicId(id);
     onSwitchMic?.(id);
   };
 
   const handleSelectSpeaker = (id: string) => {
-    setActiveSpeakerId(id);
     onSwitchSpeaker?.(id);
   };
 
   const handleSelectCam = (id: string) => {
-    setActiveCamId(id);
     onSwitchCamera?.(id);
   };
 

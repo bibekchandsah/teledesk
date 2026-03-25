@@ -122,6 +122,9 @@ const CallWindowPage: React.FC = () => {
   const [peerIsVideoOff, setPeerIsVideoOff] = useState(false);
   const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
   const [iceState, setIceState] = useState<RTCIceConnectionState>('new');
+  const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
+  const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
+  const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? '');
 
   const { currentUser } = useAuthStore();
   const { chats, setChats, setUserProfile, nicknames } = useChatStore();
@@ -559,6 +562,27 @@ const CallWindowPage: React.FC = () => {
         .then((stream) => {
           setLocalStream(stream);
           localStreamRef.current = stream;
+
+          // Sync active device IDs from the acquired tracks
+          const audioTrack = stream.getAudioTracks()[0];
+          if (audioTrack) {
+            const currentMicId = audioTrack.getSettings().deviceId;
+            if (currentMicId) {
+              setActiveMicId(currentMicId);
+              if (!localStorage.getItem('selectedMicId')) localStorage.setItem('selectedMicId', currentMicId);
+            }
+          }
+          const videoTrack = stream.getVideoTracks()[0];
+          if (videoTrack) {
+            const currentCamId = videoTrack.getSettings().deviceId;
+            if (currentCamId) {
+              setActiveCamId(currentCamId);
+              if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', currentCamId);
+            }
+          }
+          const savedSpeaker = localStorage.getItem('selectedSpeakerId');
+          if (savedSpeaker) setActiveSpeakerId(savedSpeaker);
+
           // Flush any peer creation that was buffered while waiting for stream
           const pp = pendingPeerRef.current;
           if (pp) {
@@ -883,6 +907,7 @@ const CallWindowPage: React.FC = () => {
   // ─── Device switch handlers ───────────────────────────────────────────────
   const handleSwitchMic = async (deviceId: string) => {
     localStorage.setItem('selectedMicId', deviceId);
+    setActiveMicId(deviceId);
     try {
       const ns = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } }, video: false });
       const newTrack = ns.getAudioTracks()[0];
@@ -899,6 +924,7 @@ const CallWindowPage: React.FC = () => {
 
   const handleSwitchCamera = async (deviceId: string) => {
     localStorage.setItem('selectedCameraId', deviceId);
+    setActiveCamId(deviceId);
     try {
       const ns = await navigator.mediaDevices.getUserMedia({ audio: false, video: { deviceId: { exact: deviceId } } });
       const newTrack = ns.getVideoTracks()[0];
@@ -916,6 +942,7 @@ const CallWindowPage: React.FC = () => {
 
   const handleSwitchSpeaker = async (deviceId: string) => {
     localStorage.setItem('selectedSpeakerId', deviceId);
+    setActiveSpeakerId(deviceId);
     const audio = remoteAudioRef.current as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
     if (audio?.setSinkId) {
       try { await audio.setSinkId(deviceId); } catch (e) { console.error('[CallWindow] setSinkId failed', e); }
@@ -1780,6 +1807,9 @@ const CallWindowPage: React.FC = () => {
               onToggleScreenShare={handleToggleScreenShare}
               isChatOpen={showCallChat}
               onToggleChat={callChat ? () => setShowCallChat((v) => !v) : undefined}
+              activeMicId={activeMicId}
+              activeCamId={activeCamId}
+              activeSpeakerId={activeSpeakerId}
             />
           </div>
         )}
