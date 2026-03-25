@@ -291,7 +291,7 @@ const CallScreen: React.FC = () => {
     };
   }, [activeCall]);
 
-  if (!activeCall) return null;
+  if (!activeCall || activeCall.isExternal) return null;
 
   const isVideo = activeCall.type === 'video';
   // A voice call is effectively in video mode when the local user has enabled their camera
