@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Mic, MicOff, Video, VideoOff, Phone, 
+  Monitor, MessageCircle, 
+  ChevronUp, LayoutGrid, Rows2, Columns2
+} from 'lucide-react';
 import ReactDOM from 'react-dom';
-import { Mic, MicOff, Video, VideoOff, Phone, MessageCircle, ChevronUp, LayoutGrid, Monitor, MonitorOff, Rows2, Columns2 } from 'lucide-react';
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -23,6 +27,7 @@ interface CallControlsProps {
   activeMicId?: string;
   activeCamId?: string;
   activeSpeakerId?: string;
+  isMiniMode?: boolean;
 }
 
 interface MenuSection {
@@ -34,13 +39,11 @@ interface MenuSection {
 
 interface MenuPos { bottom: number; left: number; }
 
-// Truncate label to first 4 words
 const truncateLabel = (label: string): string => {
   const words = label.trim().split(/\s+/);
   return words.length > 4 ? words.slice(0, 4).join(' ') + ' ...' : label;
 };
 
-// ── device picker popup — rendered into document.body via portal ──────────
 const DeviceMenu: React.FC<{
   sections: MenuSection[];
   pos: MenuPos;
@@ -129,16 +132,13 @@ const DeviceMenu: React.FC<{
   );
 };
 
-// ── button + optional chevron wrapper ─────────────────────────────────────
 const ControlGroup: React.FC<{
   children: React.ReactNode;
   chevron?: boolean;
-  anchorRef?: React.RefObject<HTMLElement>;
-  menu?: React.ReactNode;
   onChevron?: () => void;
   isSmall?: boolean;
   isVerySmall?: boolean;
-}> = ({ children, chevron, menu, onChevron, isSmall, isVerySmall }) => (
+}> = ({ children, chevron, onChevron, isSmall, isVerySmall }) => (
   <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end' }}>
     {children}
     {chevron && (
@@ -166,7 +166,6 @@ const ControlGroup: React.FC<{
         <ChevronUp size={11} />
       </button>
     )}
-    {menu}
   </div>
 );
 
@@ -191,6 +190,7 @@ const CallControls: React.FC<CallControlsProps> = ({
   activeMicId = '',
   activeCamId = '',
   activeSpeakerId = '',
+  isMiniMode = false,
 }) => {
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [speakerDevices, setSpeakerDevices] = useState<MediaDeviceInfo[]>([]);
@@ -207,14 +207,6 @@ const CallControls: React.FC<CallControlsProps> = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const isSmall = windowWidth < 600;
-  const isVerySmall = windowWidth < 450;
-  const btnSize = isVerySmall ? 40 : isSmall ? 44 : 52;
-  const gap = isVerySmall ? 8 : isSmall ? 12 : 20;
-  const padding = isVerySmall ? '10px 14px' : isSmall ? '12px 20px' : '16px 32px';
-  const iconSize = isVerySmall ? 18 : isSmall ? 20 : 22;
-  const endCallSize = isVerySmall ? 44 : isSmall ? 50 : 60;
-
   useEffect(() => {
     const load = async () => {
       try {
@@ -222,12 +214,19 @@ const CallControls: React.FC<CallControlsProps> = ({
         setMicDevices(all.filter((d) => d.kind === 'audioinput'));
         setSpeakerDevices(all.filter((d) => d.kind === 'audiooutput'));
         setCamDevices(all.filter((d) => d.kind === 'videoinput'));
-      } catch { /* permission not yet granted */ }
+      } catch { }
     };
     load();
   }, []);
 
-  // Compute menu position from anchor rect at click time
+  const isSmall = windowWidth < 600 || isMiniMode;
+  const isVerySmall = windowWidth < 450 || isMiniMode;
+  const btnSize = isVerySmall ? 40 : isSmall ? 44 : 52;
+  const gap = isVerySmall ? 8 : isSmall ? 12 : 20;
+  const padding = isVerySmall ? '10px 14px' : isSmall ? '12px 20px' : '16px 32px';
+  const iconSize = isVerySmall ? 18 : isSmall ? 20 : 22;
+  const endCallSize = isVerySmall ? 44 : isSmall ? 50 : 60;
+
   const openMicMenu = () => {
     if (micMenuPos) { setMicMenuPos(null); return; }
     const rect = micBtnRef.current?.getBoundingClientRect();
@@ -250,27 +249,14 @@ const CallControls: React.FC<CallControlsProps> = ({
     setCamMenuPos({ bottom: window.innerHeight - rect.top + 10, left });
   };
 
-  const handleSelectMic = (id: string) => {
-    onSwitchMic?.(id);
-  };
-
-  const handleSelectSpeaker = (id: string) => {
-    onSwitchSpeaker?.(id);
-  };
-
-  const handleSelectCam = (id: string) => {
-    onSwitchCamera?.(id);
-  };
-
-  const btnBase: React.CSSProperties = {
-    width: 52, height: 52, borderRadius: '50%', border: 'none',
+  const btnBaseStyle: React.CSSProperties = {
+    width: btnSize, height: btnSize, borderRadius: '50%', border: 'none',
     cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', color: '#fff', transition: 'background-color 0.2s',
   };
 
   return (
     <div
-      className="call-controls"
       style={{
         display: 'flex',
         justifyContent: 'center',
@@ -279,112 +265,86 @@ const CallControls: React.FC<CallControlsProps> = ({
         padding: padding,
         backgroundColor: 'rgba(0,0,0,0.6)',
         borderRadius: 50,
+        pointerEvents: 'auto',
       }}
     >
-      {/* Mic button + chevron */}
       <ControlGroup
         chevron={(micDevices.length > 1 || speakerDevices.length > 0) && !!onSwitchMic}
         onChevron={openMicMenu}
         isSmall={isSmall}
         isVerySmall={isVerySmall}
-        menu={micMenuPos && (
+      >
+        <div ref={micBtnRef}>
+          <button
+            onClick={onToggleMute}
+            title={isMuted ? 'Unmute' : 'Mute'}
+            style={{ ...btnBaseStyle, backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
+          >
+            {isMuted ? <MicOff size={iconSize} /> : <Mic size={iconSize} />}
+          </button>
+        </div>
+        {micMenuPos && (
           <DeviceMenu
             sections={[
-              ...(micDevices.length > 0 ? [{
-                title: 'Microphone',
-                devices: micDevices,
-                activeId: activeMicId,
-                onSelect: handleSelectMic,
-              }] : []),
-              ...(speakerDevices.length > 0 ? [{
-                title: 'Speaker',
-                devices: speakerDevices,
-                activeId: activeSpeakerId,
-                onSelect: handleSelectSpeaker,
-              }] : []),
+              ...(micDevices.length > 0 ? [{ title: 'Microphone', devices: micDevices, activeId: activeMicId, onSelect: (id: string) => onSwitchMic?.(id) }] : []),
+              ...(speakerDevices.length > 0 ? [{ title: 'Speaker', devices: speakerDevices, activeId: activeSpeakerId, onSelect: (id: string) => onSwitchSpeaker?.(id) }] : []),
             ]}
             pos={micMenuPos}
             width={isVerySmall ? 240 : 280}
             onClose={() => setMicMenuPos(null)}
           />
         )}
-      >
-        <div ref={micBtnRef}>
-          <button
-            onClick={onToggleMute}
-            title={isMuted ? 'Unmute' : 'Mute'}
-            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
-          >
-            {isMuted ? <MicOff size={iconSize} /> : <Mic size={iconSize} />}
-          </button>
-        </div>
       </ControlGroup>
 
-      {/* Camera button + chevron (always shown) */}
       <ControlGroup
         chevron={camDevices.length >= 1 && !!onSwitchCamera}
         onChevron={openCamMenu}
         isSmall={isSmall}
         isVerySmall={isVerySmall}
-        menu={camMenuPos && (
+      >
+        <div ref={camBtnRef}>
+          <button
+            onClick={onToggleVideo}
+            title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+            style={{ ...btnBaseStyle, backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
+          >
+            {isVideoOff ? <VideoOff size={iconSize} /> : <Video size={iconSize} />}
+          </button>
+        </div>
+        {camMenuPos && (
           <DeviceMenu
-            sections={[{
-              title: 'Camera',
-              devices: camDevices,
-              activeId: activeCamId,
-              onSelect: handleSelectCam,
-            }]}
+            sections={[{ title: 'Camera', devices: camDevices, activeId: activeCamId, onSelect: (id: string) => onSwitchCamera?.(id) }]}
             pos={camMenuPos}
             width={isVerySmall ? 240 : 280}
             onClose={() => setCamMenuPos(null)}
           />
         )}
-      >
-        <div ref={camBtnRef}>
-          <button
-            onClick={onToggleVideo}
-            title={
-              callType === 'voice' && isVideoOff
-                ? 'Enable camera'
-                : isVideoOff
-                ? 'Turn on camera'
-                : callType === 'voice'
-                ? 'Disable camera'
-                : 'Turn off camera'
-            }
-            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)' }}
-          >
-            {isVideoOff ? <VideoOff size={iconSize} /> : <Video size={iconSize} />}
-          </button>
-        </div>
       </ControlGroup>
 
-      {/* Screen share toggle */}
-      {onToggleScreenShare && (
+      {onToggleScreenShare && !isMiniMode && (
         <button
           onClick={onToggleScreenShare}
-          title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-          style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isScreenSharing ? '#f59e0b' : 'rgba(255,255,255,0.15)' }}
+          title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+          style={{ ...btnBaseStyle, backgroundColor: isScreenSharing ? '#10b981' : 'rgba(255,255,255,0.15)' }}
         >
-          {isScreenSharing ? <MonitorOff size={iconSize} /> : <Monitor size={iconSize} />}
+          <Monitor size={iconSize} />
         </button>
       )}
 
-      {/* Grid / PiP view toggle (when video is active) */}
-      {onToggleGridView && (
+      {onToggleGridView && !isMiniMode && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={onToggleGridView}
-            title={isGridView ? 'Switch to PiP view' : 'Switch to grid view'}
-            style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
+            title="Toggle grid view"
+            style={{ ...btnBaseStyle, backgroundColor: isGridView ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
           >
             <LayoutGrid size={iconSize} />
           </button>
           {isGridView && onToggleGridOrientation && (
             <button
               onClick={onToggleGridOrientation}
-              title={gridOrientation === 'horizontal' ? 'Switch to vertical grid' : 'Switch to horizontal grid'}
-              style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: 'rgba(255,255,255,0.15)' }}
+              title="Toggle grid orientation"
+              style={{ ...btnBaseStyle, backgroundColor: 'rgba(255,255,255,0.15)' }}
             >
               {gridOrientation === 'horizontal' ? <Rows2 size={iconSize} /> : <Columns2 size={iconSize} />}
             </button>
@@ -392,22 +352,25 @@ const CallControls: React.FC<CallControlsProps> = ({
         </div>
       )}
 
-      {/* Chat toggle */}
-      {onToggleChat && (
+      {onToggleChat && !isMiniMode && (
         <button
           onClick={onToggleChat}
           title={isChatOpen ? 'Close chat' : 'Open chat'}
-          style={{ ...btnBase, width: btnSize, height: btnSize, backgroundColor: isChatOpen ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
+          style={{ ...btnBaseStyle, backgroundColor: isChatOpen ? '#6366f1' : 'rgba(255,255,255,0.15)' }}
         >
           <MessageCircle size={iconSize} />
         </button>
       )}
 
-      {/* End call */}
       <button
         onClick={onEndCall}
         title="End call"
-        style={{ ...btnBase, width: endCallSize, height: endCallSize, fontSize: isVerySmall ? 20 : 24, backgroundColor: '#ef4444' }}
+        style={{ 
+          ...btnBaseStyle, 
+          width: endCallSize, 
+          height: endCallSize, 
+          backgroundColor: '#ef4444' 
+        }}
       >
         <Phone size={isVerySmall ? 20 : 24} style={{ transform: 'rotate(135deg)' }} />
       </button>
@@ -416,4 +379,3 @@ const CallControls: React.FC<CallControlsProps> = ({
 };
 
 export default CallControls;
-

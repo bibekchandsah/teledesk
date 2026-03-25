@@ -1810,6 +1810,7 @@ const CallWindowPage: React.FC = () => {
               activeMicId={activeMicId}
               activeCamId={activeCamId}
               activeSpeakerId={activeSpeakerId}
+              isMiniMode={isMiniMode}
             />
           </div>
         )}

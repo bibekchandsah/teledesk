@@ -14,6 +14,7 @@ import { toggleAudio, toggleVideo, switchMicrophone, switchCamera, startScreenSh
 import { getSocket, sendCallMuteChanged, sendCallVideoChanged } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import callAudioService from '../services/callAudioService';
+import { Pin, PinOff } from 'lucide-react';
 
 const BORDER_ZONE = 12;
 
@@ -51,6 +52,18 @@ const CallScreen: React.FC = () => {
   const { currentUser } = useAuthStore();
   const { chats, nicknames } = useChatStore();
   const [showCallChat, setShowCallChat] = useState(false);
+  const handleToggleMiniMode = () => {
+    if (!isMiniMode) {
+      setShowCallChat(false);
+      // Center mini mode initially if not set
+      if (!miniPos.top) {
+        setMiniPos({ top: 20, left: window.innerWidth - miniSize.w - 20 });
+      }
+    }
+    setIsMiniMode(!isMiniMode);
+  };
+
+  const menuItems = [ { label: 'Chat', onClick: () => setViewMode('chat') } ];
   const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [gridOrientation, setGridOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
@@ -77,6 +90,12 @@ const CallScreen: React.FC = () => {
   const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
   const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
   const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? 'default');
+  
+  const [isMiniMode, setIsMiniMode] = useState(false);
+  const [miniSize, setMiniSize] = useState({ w: 320, h: 180 });
+  const [miniPos, setMiniPos] = useState({ top: 20, left: window.innerWidth - 340 });
+  
+  const [mainCursor, setMainCursor] = useState('default');
   const gridResizingRef = useRef(false);
 
   // Clamp pipPos when window is resized so PiP never goes off-screen
@@ -84,17 +103,31 @@ const CallScreen: React.FC = () => {
     const onResize = () => {
       setPipPos((prev) => {
         if (!prev) return prev;
-        const PIP_W = pipShape === 'circle' ? 120 : pipSize.w;
-        const PIP_H = pipShape === 'circle' ? 120 : pipSize.h;
+        const limitW = isMiniMode ? miniSize.w : window.innerWidth;
+        const limitH = isMiniMode ? miniSize.h : window.innerHeight;
+        const PIP_W = pipShape === 'circle' ? (isMiniMode ? Math.min(120, miniSize.w * 0.4) : 120) : (isMiniMode ? Math.min(pipSize.w, miniSize.w * 0.4) : pipSize.w);
+        const PIP_H = pipShape === 'circle' ? PIP_W : (isMiniMode ? Math.min(pipSize.h, miniSize.h * 0.4) : pipSize.h);
         return {
-          top:  Math.max(0, Math.min(window.innerHeight - PIP_H, prev.top)),
-          left: Math.max(0, Math.min(window.innerWidth  - PIP_W, prev.left)),
+          top:  Math.max(0, Math.min(limitH - PIP_H, prev.top)),
+          left: Math.max(0, Math.min(limitW - PIP_W, prev.left)),
         };
       });
     };
+    onResize(); // Run when state changes
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [pipShape, pipSize]);
+  }, [pipShape, pipSize, isMiniMode, miniSize]);
+  const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const onResize = () => {
+      setWindowSize({ w: window.innerWidth, h: window.innerHeight });
+      if (!isMiniMode) {
+        setMiniPos(p => ({ ...p, left: window.innerWidth - miniSize.w - 20 }));
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isMiniMode, miniSize.w]);
   const pipDragRef = useRef<{ startX: number; startY: number; origTop: number; origLeft: number } | null>(null);
   const pipMovedRef = useRef(false);
   const isResizing = useRef(false);
@@ -196,26 +229,20 @@ const CallScreen: React.FC = () => {
     };
   }, [remoteStream]);
 
-  // Hide controls after 5 s of mouse idle, show immediately on mouse move
-  useEffect(() => {
-    const showAndReset = () => {
-      setControlsVisible(true);
-      setPipControlsVisible(true);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => {
-        setControlsVisible(false);
-        setPipControlsVisible(false);
-      }, 5000);
-    };
-    showAndReset(); // start the timer right away
-    window.addEventListener('mousemove', showAndReset);
-    window.addEventListener('touchstart', showAndReset, { passive: true });
-    return () => {
-      window.removeEventListener('mousemove', showAndReset);
-      window.removeEventListener('touchstart', showAndReset);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
+  const handleInteraction = useCallback(() => {
+    setControlsVisible(true);
+    setPipControlsVisible(true);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      setControlsVisible(false);
+      setPipControlsVisible(false);
+    }, 5000);
   }, []);
+
+  useEffect(() => {
+    handleInteraction(); // Show controls initially
+    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+  }, [handleInteraction]);
 
   // Sync active device IDs when localStream changes
   useEffect(() => {
@@ -446,15 +473,110 @@ const CallScreen: React.FC = () => {
     _isCircle: boolean,
   ) => { /* replaced by border-drag resize in handlePipMouseDown */ };
 
+  const handleMainPointerDown = (e: React.PointerEvent) => {
+    if (!isMiniMode) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
+    const edges = {
+      left: lx <= 12,
+      right: lx >= miniSize.w - 12,
+      top: ly <= 12,
+      bottom: ly >= miniSize.h - 12,
+    };
+    const isAnyEdge = edges.left || edges.right || edges.top || edges.bottom;
+
+    if (isAnyEdge) {
+      isResizing.current = true;
+      const sx = e.clientX, sy = e.clientY;
+      const oW = miniSize.w, oH = miniSize.h, oT = miniPos.top, oL = miniPos.left;
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        let nW = oW, nH = oH, nT = oT, nL = oL;
+        if (edges.right) nW = Math.max(240, oW + dx);
+        if (edges.left) { nW = Math.max(240, oW - dx); nL = oL + (oW - nW); }
+        if (edges.bottom) nH = Math.max(135, oH + dy);
+        if (edges.top) { nH = Math.max(135, oH - dy); nT = oT + (oH - nH); }
+        setMiniSize({ w: nW, h: nH });
+        setMiniPos({ top: nT, left: nL });
+        // Keep PiP attached to bottom-right during main window resize
+        setPipPos((prev) => {
+          if (!prev) return prev;
+          const distR = oW - prev.left;
+          const distB = oH - prev.top;
+          return { top: nH - distB, left: nW - distR };
+        });
+      };
+      const onUp = () => { 
+        isResizing.current = false;
+        window.removeEventListener('pointermove', onMove); 
+        window.removeEventListener('pointerup', onUp); 
+      };
+      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+    } else {
+      isResizing.current = true;
+      const sx = e.clientX, sy = e.clientY, oT = miniPos.top, oL = miniPos.left;
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        setMiniPos({ top: oT + dy, left: oL + dx });
+      };
+      const onUp = () => { 
+        isResizing.current = false;
+        window.removeEventListener('pointermove', onMove); 
+        window.removeEventListener('pointerup', onUp); 
+      };
+      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+    }
+  };
+
+  const handleMainMouseMove = (e: React.PointerEvent) => {
+    if (!isMiniMode || isResizing.current) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
+    const edges = {
+      left: lx <= 12,
+      right: lx >= miniSize.w - 12,
+      top: ly <= 12,
+      bottom: ly >= miniSize.h - 12,
+    };
+    const { left, right, top, bottom } = edges;
+    let cur = 'move'; // Default for dragging
+    if ((top && left) || (bottom && right)) cur = 'nwse-resize';
+    else if ((top && right) || (bottom && left)) cur = 'nesw-resize';
+    else if (top || bottom) cur = 'ns-resize';
+    else if (left || right) cur = 'ew-resize';
+    
+    if (cur !== mainCursor) setMainCursor(cur);
+  };
+
   return (
     <div
+      onPointerDown={handleMainPointerDown}
+      onPointerMove={handleMainMouseMove}
+      onMouseMove={handleInteraction}
+      onMouseEnter={handleInteraction}
+      onTouchStart={handleInteraction}
+      onMouseLeave={() => isMiniMode && !isResizing.current && setMainCursor('default')}
       style={{
         position: 'fixed',
-        inset: 0,
         zIndex: 999,
         backgroundColor: '#0f172a',
         display: 'flex',
         flexDirection: 'row',
+        overflow: isMiniMode ? 'visible' : 'hidden', // Allow handles/shadows to show
+        cursor: isMiniMode ? mainCursor : 'default',
+        ...(isMiniMode ? {
+          top: miniPos.top,
+          left: miniPos.left,
+          width: miniSize.w,
+          height: miniSize.h,
+          borderRadius: 16,
+          boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          transition: isResizing.current ? 'none' : 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        } : {
+          inset: 0,
+          transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        })
       }}
     >
       {/* ── DOM Audio Element for Remote Stream ────────────── */}
@@ -567,12 +689,15 @@ const CallScreen: React.FC = () => {
             const pipStream = localIsMain ? remoteStream : localStream;
             // Only show PiP when the stream actually has live video
             if (!pipStream?.getVideoTracks().some((t) => t.readyState !== 'ended')) return null;
-            const PIP_W = pipSize.w;
-            const PIP_H = pipShape === 'circle' ? pipSize.w : pipSize.h;
+            const PIP_W = isMiniMode ? Math.min(pipSize.w, miniSize.w * 0.4) : pipSize.w;
+            const PIP_H = pipShape === 'circle' ? PIP_W : (isMiniMode ? Math.min(pipSize.h, miniSize.h * 0.4) : pipSize.h);
             const borderRad = pipShape === 'circle' ? '50%' : 12;
-            const pos = pipPos ?? { top: window.innerHeight - PIP_H - 100, left: window.innerWidth - PIP_W - 20 };
+            const containerW = isMiniMode ? miniSize.w : window.innerWidth;
+            const containerH = isMiniMode ? miniSize.h : window.innerHeight;
+            const pos = pipPos ?? { top: containerH - PIP_H - (isMiniMode ? 10 : 100), left: containerW - PIP_W - (isMiniMode ? 10 : 20) };
 
             const handlePipPointerDown = (e: React.PointerEvent) => {
+              e.stopPropagation();
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
               const isCircle = pipShape === 'circle';
@@ -606,7 +731,9 @@ const CallScreen: React.FC = () => {
                 const dx = ev.clientX - pipDragRef.current.startX, dy = ev.clientY - pipDragRef.current.startY;
                 if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
                 pipMovedRef.current = true;
-                setPipPos({ top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx)) });
+                const limitW = isMiniMode ? miniSize.w : window.innerWidth;
+                const limitH = isMiniMode ? miniSize.h : window.innerHeight;
+                setPipPos({ top: Math.max(0, Math.min(limitH - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(limitW - PIP_W, pipDragRef.current.origLeft + dx)) });
               };
               const onUp = () => { pipDragRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
               window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
@@ -659,6 +786,7 @@ const CallScreen: React.FC = () => {
                 key="pip"
                 onPointerDown={handlePipPointerDown}
                 onMouseMove={(e) => { 
+                  handleInteraction();
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
                   const cur = getPipResizeCursor(getPipResizeEdges(e.clientX - rect.left, e.clientY - rect.top, PIP_W, PIP_H, pipShape === 'circle')); 
                   if (cur !== pipCursor) setPipCursor(cur); 
@@ -669,15 +797,20 @@ const CallScreen: React.FC = () => {
                 onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                 title="Drag · Click to swap"
                 style={{
-                  position: 'fixed',
-                  top: pos.top,
-                  left: pos.left,
-                  width: PIP_W,
-                  height: PIP_H,
+                  position: isMiniMode ? 'absolute' : 'fixed',
                   zIndex: 20,
                   userSelect: 'none',
                   cursor: pipCursor,
-                  touchAction: 'none'
+                  touchAction: 'none',
+                  ...(isMiniMode ? {
+                    bottom: miniSize.h - pos.top - PIP_H,
+                    right: miniSize.w - pos.left - PIP_W,
+                  } : {
+                    top: pos.top,
+                    left: pos.left,
+                  }),
+                  width: PIP_W,
+                  height: PIP_H,
                 }}
               >
                 {/* Video clip layer — borderRadius clips video to shape */}
@@ -893,6 +1026,31 @@ const CallScreen: React.FC = () => {
         </div>
       )}
 
+      {/* Top right buttons (Pin, etc.) */}
+      <div style={{
+        position: 'absolute', top: 16, right: 16,
+        display: 'flex', alignItems: 'center', gap: 8,
+        opacity: controlsVisible ? 1 : 0,
+        transform: controlsVisible ? 'translateY(0)' : 'translateY(-12px)',
+        transition: 'opacity 0.4s ease, transform 0.4s ease',
+        zIndex: 50,
+      }}>
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={handleToggleMiniMode}
+          title={isMiniMode ? "Exit mini mode" : "Enter mini mode"}
+          style={{
+            width: 36, height: 36, borderRadius: '50%',
+            backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background-color 0.2s',
+            pointerEvents: 'auto',
+          }}
+        >
+          {isMiniMode ? <PinOff size={18} /> : <Pin size={18} />}
+        </button>
+      </div>
+
       {/* Mute / video-off status badges (video mode, active call) */}
       {effectiveIsVideo && activeCall.status === 'active' && (isMuted || peerIsMuted || !localHasVideo || !remoteHasVideo) && (
         <div style={{
@@ -933,12 +1091,13 @@ const CallScreen: React.FC = () => {
       {/* Controls */}
       <div style={{
         position: 'absolute',
-        bottom: 24,
+        bottom: isMiniMode ? 10 : 24,
         left: '50%',
         transform: controlsVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
         opacity: controlsVisible ? 1 : 0,
         transition: 'opacity 0.4s ease, transform 0.4s ease',
         pointerEvents: controlsVisible ? 'auto' : 'none',
+        zIndex: 100,
       }}>
         <CallControls
           isMuted={isMuted}
@@ -961,6 +1120,7 @@ const CallScreen: React.FC = () => {
           activeMicId={activeMicId}
           activeCamId={activeCamId}
           activeSpeakerId={activeSpeakerId}
+          isMiniMode={isMiniMode}
         />
       </div>
       </div>{/* end video area */}

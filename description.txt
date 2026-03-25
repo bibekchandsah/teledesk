@@ -866,12 +866,12 @@ Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron
 (fixed) chat during call 
 (fixed) show using microhoone and camera and output (web & desktop)
 (fixed) PiP is correctly positioned in the bottom-right corner of the mini-window.
-(fixed) PiP preview now defaults to a 16:9 aspect ratio instead of a square
+(fixed) PiP preview now defaults to a 16:9 aspect ratio instead of a square (web & desktop)
 (fixed) 
 use own r2 bucket 10GB for more secure data
 restart in deploy isn't working, it's not restarting when clicked restart
 account selection delete icon not trigger
-
+in mobile device show the actual resolution of the video not 16:9 (web & desktop)
 
 
 
