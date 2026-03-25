@@ -124,7 +124,7 @@ const CallWindowPage: React.FC = () => {
   const [iceState, setIceState] = useState<RTCIceConnectionState>('new');
   const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
   const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
-  const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? '');
+  const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? 'default');
 
   const { currentUser } = useAuthStore();
   const { chats, setChats, setUserProfile, nicknames } = useChatStore();

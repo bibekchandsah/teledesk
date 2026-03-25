@@ -59,7 +59,7 @@ const CallScreen: React.FC = () => {
   const [localIsMain, setLocalIsMain] = useState(false);
   const [pipPos, setPipPos] = useState<{ top: number; left: number } | null>(null);
   const [pipShape, setPipShape] = useState<'rectangle' | 'circle'>('rectangle');
-  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 192, h: 192 });
+  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 240, h: 135 });
   const [pipCursor, setPipCursor] = useState('grab');
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
@@ -74,6 +74,9 @@ const CallScreen: React.FC = () => {
   // Tracks remote peer's mute/video-off status (received via socket)
   const [peerIsMuted, setPeerIsMuted] = useState(false);
   const [peerIsVideoOff, setPeerIsVideoOff] = useState(false);
+  const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
+  const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
+  const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? 'default');
   const gridResizingRef = useRef(false);
 
   // Clamp pipPos when window is resized so PiP never goes off-screen
@@ -214,6 +217,27 @@ const CallScreen: React.FC = () => {
     };
   }, []);
 
+  // Sync active device IDs when localStream changes
+  useEffect(() => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      const currentMicId = audioTrack.getSettings().deviceId;
+      if (currentMicId) {
+        setActiveMicId(currentMicId);
+        if (!localStorage.getItem('selectedMicId')) localStorage.setItem('selectedMicId', currentMicId);
+      }
+    }
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      const currentCamId = videoTrack.getSettings().deviceId;
+      if (currentCamId) {
+        setActiveCamId(currentCamId);
+        if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', currentCamId);
+      }
+    }
+  }, [localStream]);
+
   // Listen for remote peer's mute / video-off status changes
   useEffect(() => {
     // Reset statuses whenever the call changes
@@ -323,10 +347,14 @@ const CallScreen: React.FC = () => {
   };
 
   const handleSwitchMic = async (deviceId: string) => {
+    localStorage.setItem('selectedMicId', deviceId);
+    setActiveMicId(deviceId);
     try { await switchMicrophone(deviceId); } catch (e) { console.error('[Call] switchMic', e); }
   };
 
   const handleSwitchCamera = async (deviceId: string) => {
+    localStorage.setItem('selectedCameraId', deviceId);
+    setActiveCamId(deviceId);
     try { await switchCamera(deviceId); } catch (e) { console.error('[Call] switchCamera', e); }
   };
 
@@ -374,6 +402,7 @@ const CallScreen: React.FC = () => {
 
   const handleSwitchSpeaker = async (deviceId: string) => {
     localStorage.setItem('selectedSpeakerId', deviceId);
+    setActiveSpeakerId(deviceId);
     if (remoteAudioRef.current && typeof (remoteAudioRef.current as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }).setSinkId === 'function') {
       try {
         await (remoteAudioRef.current as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }).setSinkId(deviceId);
@@ -559,7 +588,11 @@ const CallScreen: React.FC = () => {
                   if (edges.left) { nW = Math.max(MIN, Math.min(MAX, oW - dx)); nL = oL + (oW - nW); }
                   if (edges.bottom) nH = Math.max(MIN, Math.min(MAX, oH + dy));
                   if (edges.top)  { nH = Math.max(MIN, Math.min(MAX, oH - dy)); nT = oT + (oH - nH); }
-                  if (isCircle) { const s = Math.max(nW, nH); nW = s; nH = s; }
+                  if (isCircle) { 
+                    const s = Math.max(nW, nH); 
+                    nW = s; 
+                    nH = oH; // Restore the previous rectangular height so it's not lost
+                  }
                   setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                 };
                 const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
@@ -723,7 +756,14 @@ const CallScreen: React.FC = () => {
                       {(['circle', 'rectangle'] as const).map((shape) => (
                         <button
                           key={shape}
-                          onClick={() => { setPipShape(shape); setShowPipMenu(false); }}
+                          onClick={() => { 
+                            if (shape === 'rectangle' && pipShape === 'circle') {
+                              // Restore 16:9 ratio when switching back from circle
+                              setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w * 9 / 16) }));
+                            }
+                            setPipShape(shape); 
+                            setShowPipMenu(false); 
+                          }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: 8,
                             width: '100%', padding: '8px 12px',
@@ -918,6 +958,9 @@ const CallScreen: React.FC = () => {
           onToggleGridOrientation={() => setGridOrientation(v => v === 'horizontal' ? 'vertical' : 'horizontal')}
           isScreenSharing={isScreenSharing}
           onToggleScreenShare={handleToggleScreenShare}
+          activeMicId={activeMicId}
+          activeCamId={activeCamId}
+          activeSpeakerId={activeSpeakerId}
         />
       </div>
       </div>{/* end video area */}
