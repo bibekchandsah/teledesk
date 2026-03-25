@@ -11,7 +11,7 @@ import CallControls from '../components/CallControls';
 import ScreenPickerModal from '../components/ScreenPickerModal';
 import ChatWindow from './ChatWindow';
 import { formatDuration } from '../utils/formatters';
-import { MicOff, Phone, PhoneOff, Video, Pin, PinOff, Minus, Square, Copy, X } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Pin, PinOff, Minus, Square, Copy, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
@@ -108,7 +108,7 @@ const CallWindowPage: React.FC = () => {
   const [gridSplit, setGridSplit] = useState(50);
   const [pipPos, setPipPos] = useState<{ top: number; left: number } | null>(null);
   const [pipShape, setPipShape] = useState<'rectangle' | 'circle'>('rectangle');
-  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 192, h: 192 });
+  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 240, h: 135 });
   const [pipCursor, setPipCursor] = useState('grab');
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
@@ -926,10 +926,15 @@ const CallWindowPage: React.FC = () => {
     const nextMode = !isMiniMode;
     setIsMiniMode(nextMode);
     window.electronAPI?.setCallMiniMode(nextMode);
-    // Auto-hide controls if moving to mini mode
+    // Adjust PiP size and position for mini mode
     if (nextMode) {
+      setPipSize({ w: 112, h: 63 });
+      setPipPos(null); // Reset to default (which will use mini-mode offsets)
       setControlsVisible(false);
       setPipControlsVisible(false);
+    } else {
+      setPipSize({ w: 240, h: 135 });
+      setPipPos(null);
     }
   };
 
@@ -1443,7 +1448,9 @@ const CallWindowPage: React.FC = () => {
               const PIP_W = pipSize.w;
               const PIP_H = pipShape === 'circle' ? pipSize.w : pipSize.h;
               const borderRad = pipShape === 'circle' ? '50%' : 12;
-              const pos = pipPos ?? { top: window.innerHeight - PIP_H - 100, left: window.innerWidth - PIP_W - 20 };
+              const defaultBottomGap = isMiniMode ? 10 : 100;
+              const defaultRightGap = isMiniMode ? 10 : 20;
+              const pos = pipPos ?? { top: window.innerHeight - PIP_H - defaultBottomGap, left: window.innerWidth - PIP_W - defaultRightGap };
 
               const handlePipPointerDown = (e: React.PointerEvent) => {
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1461,7 +1468,11 @@ const CallWindowPage: React.FC = () => {
                     if (edges.left) { nW = Math.max(MIN, Math.min(MAX, oW - dx)); nL = oL + (oW - nW); }
                     if (edges.bottom) nH = Math.max(MIN, Math.min(MAX, oH + dy));
                     if (edges.top)  { nH = Math.max(MIN, Math.min(MAX, oH - dy)); nT = oT + (oH - nH); }
-                    if (isCircle) { const s = Math.max(nW, nH); nW = s; nH = s; }
+                    if (isCircle) { 
+                      const s = Math.max(nW, nH); 
+                      nW = s; 
+                      nH = oH; // Restore the previous rectangular height so it's not lost
+                    }
                     setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                   };
                   const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
@@ -1538,7 +1549,15 @@ const CallWindowPage: React.FC = () => {
                     {showPipMenu && (
                       <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', background: '#1e293b', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '4px 0', width: 162, boxShadow: '0 6px 24px rgba(0,0,0,0.7)', zIndex: 10 }}>
                         {(['circle', 'rectangle'] as const).map((shape) => (
-                          <button key={shape} onClick={() => { setPipShape(shape); setShowPipMenu(false); }}
+                          <button key={shape} 
+                            onClick={() => { 
+                              if (shape === 'rectangle' && pipShape === 'circle') {
+                                // Restore 16:9 ratio when switching back from circle
+                                setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w * 9 / 16) }));
+                              }
+                              setPipShape(shape); 
+                              setShowPipMenu(false); 
+                            }}
                             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', color: pipShape === shape ? '#6366f1' : '#e2e8f0', fontSize: 13, fontWeight: pipShape === shape ? 600 : 400, textAlign: 'left', whiteSpace: 'nowrap' }}
                           >
                             <span style={{ fontSize: 15 }}>{shape === 'circle' ? '◯' : '▭'}</span>
@@ -1709,14 +1728,26 @@ const CallWindowPage: React.FC = () => {
               ['WebkitAppRegion' as any]: 'no-drag',
             }}
           >
-            <button onClick={handleToggleMute} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              {isMuted ? <MicOff size={16} /> : <MicOff size={16} style={{ opacity: 0.7 }} />}
+            <button 
+              onClick={handleToggleMute} 
+              title={isMuted ? 'Unmute' : 'Mute'}
+              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+              {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
-            <button onClick={handleToggleVideo} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-               {isVideoOff ? <Video size={16} style={{ opacity: 0.5 }} /> : <Video size={16} />}
+            <button 
+              onClick={handleToggleVideo} 
+              title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+               {isVideoOff ? <VideoOff size={16} /> : <Video size={16} />}
             </button>
-            <button onClick={handleHangup} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', backgroundColor: '#ef4444', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-               <PhoneOff size={18} />
+            <button 
+              onClick={handleHangup} 
+              title="End call"
+              style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', backgroundColor: '#ef4444', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+               <Phone size={18} style={{ transform: 'rotate(135deg)' }} />
             </button>
           </div>
         )}
