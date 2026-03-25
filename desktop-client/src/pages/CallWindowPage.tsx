@@ -11,7 +11,7 @@ import CallControls from '../components/CallControls';
 import ScreenPickerModal from '../components/ScreenPickerModal';
 import ChatWindow from './ChatWindow';
 import { formatDuration } from '../utils/formatters';
-import { MicOff, Phone, PhoneOff, Video } from 'lucide-react';
+import { MicOff, Phone, PhoneOff, Video, Pin, PinOff, Minus, Square, Copy, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { listenToUserChats } from '../services/firebaseService';
@@ -98,6 +98,9 @@ const CallWindowPage: React.FC = () => {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isAccepted, setIsAccepted] = useState(false);
+  const [isMiniMode, setIsMiniMode] = useState(false);
+  const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [volumeBars, setVolumeBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [gridView, setGridView] = useState(false);
   const [gridOrientation, setGridOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
@@ -652,6 +655,16 @@ const CallWindowPage: React.FC = () => {
     return () => window.removeEventListener('resize', onResize);
   }, [pipShape, pipSize]);
 
+  // ─── Sync window maximization state ──────────────────────────────────
+  useEffect(() => {
+    const unsubMax = window.electronAPI?.onCallWindowMaximized?.(() => setIsWindowMaximized(true));
+    const unsubUnmax = window.electronAPI?.onCallWindowUnmaximized?.(() => setIsWindowMaximized(false));
+    return () => {
+      unsubMax?.();
+      unsubUnmax?.();
+    };
+  }, []);
+
   // ─── Auto-hide controls after 5s of mouse idle ───────────────────────────
   useEffect(() => {
     const showAndReset = () => {
@@ -909,6 +922,17 @@ const CallWindowPage: React.FC = () => {
     }
   };
 
+  const handleToggleMiniMode = () => {
+    const nextMode = !isMiniMode;
+    setIsMiniMode(nextMode);
+    window.electronAPI?.setCallMiniMode(nextMode);
+    // Auto-hide controls if moving to mini mode
+    if (nextMode) {
+      setControlsVisible(false);
+      setPipControlsVisible(false);
+    }
+  };
+
   // ─── Grid resize ──────────────────────────────────────────────────────────
   const handleGridResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -1021,6 +1045,7 @@ const CallWindowPage: React.FC = () => {
         style={{
           height: '100vh',
           backgroundColor: '#0f172a',
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1032,10 +1057,18 @@ const CallWindowPage: React.FC = () => {
           textAlign: 'center',
         }}
       >
+        {/* Draggable area */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 36,
+          zIndex: 100,
+          ['WebkitAppRegion' as any]: 'drag',
+          ...(window.electronAPI?.platform === 'win32' && { paddingRight: 138 }),
+        }} />
+
         <MicOff size={48} />
         <p style={{ fontSize: 16, maxWidth: 320 }}>{mediaError}</p>
         <button
-          onClick={() => window.electronAPI?.hangupCallWindow?.()}
+          onClick={handleHangup}
           style={{
             padding: '10px 24px',
             borderRadius: 8,
@@ -1066,6 +1099,7 @@ const CallWindowPage: React.FC = () => {
         style={{
           height: '100vh',
           backgroundColor: '#0f172a',
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1075,6 +1109,14 @@ const CallWindowPage: React.FC = () => {
           gap: 16,
         }}
       >
+        {/* Draggable area */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 36,
+          zIndex: 100,
+          ['WebkitAppRegion' as any]: 'drag',
+          ...(window.electronAPI?.platform === 'win32' && { paddingRight: 138 }),
+        }} />
+
         <div
           className="loader"
           style={{
@@ -1098,6 +1140,7 @@ const CallWindowPage: React.FC = () => {
         style={{
           height: '100vh',
           backgroundColor: '#0f172a',
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1107,6 +1150,14 @@ const CallWindowPage: React.FC = () => {
           gap: 36,
         }}
       >
+        {/* Draggable area */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 36,
+          zIndex: 100,
+          ['WebkitAppRegion' as any]: 'drag',
+          ...(window.electronAPI?.platform === 'win32' && { paddingRight: 138 }),
+        }} />
+
         {/* Avatar with pulsing rings */}
         <div style={{ position: 'relative', width: 170, height: 170, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{
@@ -1181,8 +1232,102 @@ const CallWindowPage: React.FC = () => {
         backgroundColor: '#0f172a',
         display: 'flex',
         overflow: 'hidden',
+        cursor: isMiniMode ? 'move' : 'default',
+        userSelect: 'none',
+        ['WebkitAppRegion' as any]: isMiniMode ? 'drag' : 'no-drag',
       }}
     >
+      {/* ── Custom Title Bar (normal mode only) ───────────────────── */}
+      {!isMiniMode && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 36,
+          display: 'flex', alignItems: 'center',
+          zIndex: 100,
+          ['WebkitAppRegion' as any]: 'drag',
+          opacity: controlsVisible ? 1 : 0,
+          transition: 'opacity 0.4s ease',
+          ...(window.electronAPI?.platform === 'win32' && { paddingRight: 138 }),
+        }}>
+          {/* Title text (centred, unselectable) */}
+          <span style={{
+            flex: 1, textAlign: 'left', fontSize: 12, color: 'rgba(255,255,255,0.45)',
+            userSelect: 'none', letterSpacing: '0.03em', marginLeft: 10,
+          }}>
+            {/* show profile picture */}
+            <img src={callData?.targetAvatar} alt="" style={{ width: 20, height: 20, borderRadius: '50%', marginRight: 10 }} />
+            {callData?.targetName ?? ''} {callData?.callType === 'video' ? '(Video Call)' : '(Voice Call)'}
+          </span>
+          {/* Win-style control buttons — hidden if using native titleBarOverlay */}
+          {window.electronAPI?.platform !== 'win32' && (
+            <div style={{ display: 'flex', ['WebkitAppRegion' as any]: 'no-drag' }}>
+            {/* Minimize */}
+            <button
+              onClick={() => window.electronAPI?.minimizeCallWindow?.()}
+              style={{
+                width: 46, height: 36, border: 'none', background: 'transparent',
+                color: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
+              }}
+              title="Minimize"
+            >
+              <Minus size={14} />
+            </button>
+            {/* Maximize / Restore */}
+            <button
+              onClick={() => window.electronAPI?.maximizeCallWindow?.()}
+              style={{
+                width: 46, height: 36, border: 'none', background: 'transparent',
+                color: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
+              }}
+              title={isWindowMaximized ? "Restore" : "Maximize"}
+            >
+              {isWindowMaximized ? <Copy size={12} style={{ transform: 'rotate(180deg)' }} /> : <Square size={12} />}
+            </button>
+            {/* Close */}
+            <button
+              onClick={handleHangup}
+              style={{
+                width: 46, height: 36, border: 'none', background: 'transparent',
+                color: 'rgba(255,255,255,0.8)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#e81123';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
+              }}
+              title="End call & close"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          )}
+        </div>
+      )}
+
       {/* ── Hidden DOM Audio Element for Remote Stream ────────────── */}
       <audio ref={remoteAudioRef} autoPlay muted={false} style={{ display: 'none' }} />
 
@@ -1362,7 +1507,7 @@ const CallWindowPage: React.FC = () => {
                   }}
                   onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                   title="Drag · Click to swap"
-                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none' }}
+                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none', ['WebkitAppRegion' as any]: 'no-drag' }}
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream
@@ -1478,7 +1623,7 @@ const CallWindowPage: React.FC = () => {
           </div>
         )}
         {/* Duration badge (video calls, active) */}
-        {effectiveIsVideo && callStatus === 'active' && (
+        {effectiveIsVideo && callStatus === 'active' && !isMiniMode && (
           <div style={{
             position: 'absolute', top: 16, left: '50%',
             transform: controlsVisible ? 'translateX(-50%)' : 'translateX(-50%) translateY(-12px)',
@@ -1491,8 +1636,35 @@ const CallWindowPage: React.FC = () => {
           </div>
         )}
 
+        {/* Pin icon (for entering Mini Mode) */}
+        {effectiveIsVideo && callStatus !== 'ringing' && (
+          <div style={{
+            position: 'absolute', top: isMiniMode ? 16 : 48, right: 16,
+            display: 'flex', alignItems: 'center', gap: 8,
+            zIndex: 35,
+            opacity: controlsVisible ? 1 : 0,
+            transition: 'opacity 0.4s ease, top 0.4s ease',
+            pointerEvents: controlsVisible ? 'auto' : 'none',
+            ['WebkitAppRegion' as any]: 'no-drag',
+          }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleToggleMiniMode(); }}
+              className="control-btn"
+              title={isMiniMode ? "Restore Window" : "Pin to Mini Mode"}
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+                backgroundColor: isMiniMode ? '#6366f1' : 'rgba(0,0,0,0.4)', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                backdropFilter: 'blur(8px)', transition: 'all 0.2s'
+              }}
+            >
+              {isMiniMode ? <PinOff size={16} /> : <Pin size={16} />}
+            </button>
+          </div>
+        )}
+
         {/* Mute / video-off status badges (video mode, active call) */}
-        {effectiveIsVideo && callStatus === 'active' && (isMuted || peerIsMuted || !localHasVideo || !remoteHasVideo) && (
+        {effectiveIsVideo && callStatus === 'active' && !isMiniMode && (isMuted || peerIsMuted || !localHasVideo || !remoteHasVideo) && (
           <div style={{
             position: 'absolute', top: 56, left: '50%',
             transform: 'translateX(-50%)',
@@ -1522,39 +1694,68 @@ const CallWindowPage: React.FC = () => {
           </div>
         )}
 
+        {/* ── Mini Mode Dedicated Controls ────────────────────────── */}
+        {isMiniMode && (
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            style={{
+              position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+              display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(0,0,0,0.6)',
+              padding: '6px 12px', borderRadius: 30, zIndex: 40, border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(6px)',
+              opacity: controlsVisible ? 1 : 0,
+              transition: 'opacity 0.4s ease',
+              pointerEvents: controlsVisible ? 'auto' : 'none',
+              ['WebkitAppRegion' as any]: 'no-drag',
+            }}
+          >
+            <button onClick={handleToggleMute} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isMuted ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              {isMuted ? <MicOff size={16} /> : <MicOff size={16} style={{ opacity: 0.7 }} />}
+            </button>
+            <button onClick={handleToggleVideo} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: isVideoOff ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+               {isVideoOff ? <Video size={16} style={{ opacity: 0.5 }} /> : <Video size={16} />}
+            </button>
+            <button onClick={handleHangup} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', backgroundColor: '#ef4444', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+               <PhoneOff size={18} />
+            </button>
+          </div>
+        )}
+
         {/* Controls */}
-        <div style={{
-          position: 'absolute', bottom: 24, left: '50%',
-          transform: controlsVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
-          opacity: controlsVisible ? 1 : 0,
-          transition: 'opacity 0.4s ease, transform 0.4s ease',
-          pointerEvents: controlsVisible ? 'auto' : 'none',
-          zIndex: 30,
-        }}>
-          <CallControls
-            isMuted={isMuted}
-            isVideoOff={isVideoCall ? isVideoOff : !isLocalVideoEnabled}
-            callType={callData.callType}
-            onToggleMute={handleToggleMute}
-            onToggleVideo={handleToggleVideo}
-            onEndCall={handleHangup}
-            onSwitchMic={handleSwitchMic}
-            onSwitchCamera={effectiveIsVideo ? handleSwitchCamera : undefined}
-            onSwitchSpeaker={handleSwitchSpeaker}
-            isGridView={gridView}
-            onToggleGridView={effectiveIsVideo ? () => setGridView((v) => !v) : undefined}
-            gridOrientation={gridOrientation}
-            onToggleGridOrientation={() => setGridOrientation(v => v === 'horizontal' ? 'vertical' : 'horizontal')}
-            isScreenSharing={isScreenSharing}
-            onToggleScreenShare={handleToggleScreenShare}
-            isChatOpen={showCallChat}
-            onToggleChat={callChat ? () => setShowCallChat((v) => !v) : undefined}
-          />
-        </div>
+        {!isMiniMode && (
+          <div style={{
+            position: 'absolute', bottom: 24, left: '50%',
+            transform: controlsVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
+            opacity: controlsVisible ? 1 : 0,
+            transition: 'opacity 0.4s ease, transform 0.4s ease',
+            pointerEvents: controlsVisible ? 'auto' : 'none',
+            zIndex: 30,
+          }}>
+            <CallControls
+              isMuted={isMuted}
+              isVideoOff={isVideoCall ? isVideoOff : !isLocalVideoEnabled}
+              callType={callData.callType}
+              onToggleMute={handleToggleMute}
+              onToggleVideo={handleToggleVideo}
+              onEndCall={handleHangup}
+              onSwitchMic={handleSwitchMic}
+              onSwitchCamera={effectiveIsVideo ? handleSwitchCamera : undefined}
+              onSwitchSpeaker={handleSwitchSpeaker}
+              isGridView={gridView}
+              onToggleGridView={effectiveIsVideo ? () => setGridView((v) => !v) : undefined}
+              gridOrientation={gridOrientation}
+              onToggleGridOrientation={() => setGridOrientation(v => v === 'horizontal' ? 'vertical' : 'horizontal')}
+              isScreenSharing={isScreenSharing}
+              onToggleScreenShare={handleToggleScreenShare}
+              isChatOpen={showCallChat}
+              onToggleChat={callChat ? () => setShowCallChat((v) => !v) : undefined}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── In-call chat sidebar ─────────────────────────────────────────── */}
-      {showCallChat && (
+      {showCallChat && !isMiniMode && (
         <>
           <div
             onPointerDown={handleChatResizePointerDown}

@@ -1,4 +1,4 @@
-﻿import {
+import {
   app,
   BrowserWindow,
   ipcMain,
@@ -1473,12 +1473,19 @@ const createCallWindow = (initData: CallInitData) => {
   callWindow = new BrowserWindow({
     width: 960,
     height: 680,
-    minWidth: 640,
-    minHeight: 480,
+    minWidth: 300,
+    minHeight: 160,
     title: `${peerName} — ${callLabel}`,
     backgroundColor: '#0f172a',
     show: false,
     alwaysOnTop: true,
+    frame: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#0f172a',
+      symbolColor: '#ffffff',
+      height: 36,
+    },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1504,6 +1511,14 @@ const createCallWindow = (initData: CallInitData) => {
   callWindow.once('ready-to-show', () => {
     callWindow?.show();
     callWindow?.focus();
+  });
+
+  callWindow.on('maximize', () => {
+    callWindow?.webContents.send('call:window-maximized');
+  });
+
+  callWindow.on('unmaximize', () => {
+    callWindow?.webContents.send('call:window-unmaximized');
   });
 
   // Set peer avatar as window icon asynchronously
@@ -1592,6 +1607,60 @@ ipcMain.on('call:force-close', () => {
   callWindow = null;
   callWindowReady = false;
   pendingRelayEvents = [];
+});
+
+let lastCallWindowBounds: Electron.Rectangle | null = null;
+
+// Minimize the call window to taskbar
+ipcMain.on('call:window-minimize', () => {
+  if (callWindow && !callWindow.isDestroyed()) callWindow.minimize();
+});
+
+// Maximize/Restore the call window
+ipcMain.on('call:window-maximize', () => {
+  if (callWindow && !callWindow.isDestroyed()) {
+    if (callWindow.isMaximized()) {
+      callWindow.unmaximize();
+    } else {
+      callWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('call:set-mini-mode', (_event, enabled: boolean) => {
+  if (callWindow && !callWindow.isDestroyed()) {
+    if (enabled) {
+      lastCallWindowBounds = callWindow.getBounds();
+      callWindow.setAlwaysOnTop(true, 'screen-saver');
+      callWindow.setResizable(true);
+      const miniWidth = 300;
+      const miniHeight = 160;
+      // Use transparent/0-height overlay instead of null to avoid JavaScript error 
+      // while effectively hiding the buttons in mini-mode.
+      callWindow.setTitleBarOverlay({ color: '#0f172a00', symbolColor: '#0f172a00', height: 0 });
+      callWindow.setSize(miniWidth, miniHeight, false);
+      const { workArea } = screen.getDisplayMatching(callWindow.getBounds());
+      callWindow.setPosition(
+        workArea.x + workArea.width - miniWidth - 24,
+        workArea.y + 24,
+        false
+      );
+    } else {
+      callWindow.setResizable(true);
+      callWindow.setAlwaysOnTop(true); // Return to standard always-on-top
+
+      callWindow.setTitleBarOverlay({ color: '#0f172a', symbolColor: '#ffffff', height: 36 });
+
+      // Restore previous window bounds
+      if (lastCallWindowBounds) {
+        callWindow.setBounds(lastCallWindowBounds, true);
+      } else {
+        // Fallback to default size if bounds lost
+        callWindow.setSize(960, 680, true);
+        callWindow.center();
+      }
+    }
+  }
 });
 
 

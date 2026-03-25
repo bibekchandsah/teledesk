@@ -856,6 +856,11 @@ Three changes were made:
 This mirrors how Google/Gmail handles it — the session stays alive indefinitely as long as the user is active, and only expires on manual sign-out or account revocation.
 
 
+<------------------------------------ call window --------------------------------->
+Hangup on Close: The close button (and media error close button) now correctly triggers a full hangup, notifying the other participant and cleaning up resources.
+Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron's titleBarOverlay. The custom React buttons are now hidden on Windows to avoid duplication, and the title bar layout has been adjusted to accommodate the native controls.
+
+
 <---------------- idea -------------------------->
 (fixed) login with google
 (fixed) chat during call 

@@ -53,6 +53,11 @@ interface ElectronAPI {
   emitSocketFromCallWindow: (event: string, data: unknown) => void;
   hangupCallWindow: () => void;
   sendWindowEvent: (event: string) => void;
+  setCallMiniMode: (enabled: boolean) => void;
+  minimizeCallWindow: () => void;
+  maximizeCallWindow: () => void;
+  onCallWindowMaximized: (cb: () => void) => () => void;
+  onCallWindowUnmaximized: (cb: () => void) => () => void;
   requestIncomingCallWindowReady?: () => void;
   onIncomingCallWindowInit?: (cb: (data: IncomingCallData) => void) => () => void;
   acceptIncomingCallFromWindow?: () => void;

@@ -98,6 +98,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   hangupCallWindow: () => ipcRenderer.send('call:hangup-from-window'),
   /** Send a named lifecycle event from the call window to the main window */
   sendWindowEvent: (event: string) => ipcRenderer.send('call:send-window-event', event),
+  /** Toggle mini-player (PiP) mode for the call window */
+  setCallMiniMode: (enabled: boolean) => ipcRenderer.send('call:set-mini-mode', enabled),
+  /** Minimize the call window to the taskbar */
+  minimizeCallWindow: () => ipcRenderer.send('call:window-minimize'),
+  /** Maximize or restore the call window */
+  maximizeCallWindow: () => ipcRenderer.send('call:window-maximize'),
+  /** Listen for window maximization state changes */
+  onCallWindowMaximized: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('call:window-maximized', handler);
+    return () => ipcRenderer.off('call:window-maximized', handler);
+  },
+  onCallWindowUnmaximized: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('call:window-unmaximized', handler);
+    return () => ipcRenderer.off('call:window-unmaximized', handler);
+  },
 
   // ─── Incoming call window renderer APIs ───────────────────────────────
   /** Signal main process that the incoming call window renderer is ready */
@@ -255,6 +272,7 @@ export interface ElectronAPI {
   emitSocketFromCallWindow: (event: string, data: unknown) => void;
   hangupCallWindow: () => void;
   sendWindowEvent: (event: string) => void;
+  setCallMiniMode: (enabled: boolean) => void;
 
   // Incoming call (kept for backwards compat, no separate window)
   requestIncomingCallWindowReady?: () => void;
