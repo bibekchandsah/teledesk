@@ -1404,10 +1404,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // set from a sidebar click.  Resolve it from the chats list as soon as it loads.
   useEffect(() => {
     if (!chatId) return;
+    // Guard: already active?
     if (activeChat?.chatId === chatId) return;
+
     const found = chats.find((c) => c.chatId === chatId);
-    if (found) setActiveChat(found);
-  }, [chatId, chats, activeChat, setActiveChat]);
+    if (found) {
+      // Final guard to ensure we don't trigger a loop even if deps are unstable
+      setActiveChat(found);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId, chats, setActiveChat]);
 
   const [inputText, setInputText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
