@@ -14,6 +14,8 @@ interface CallWindowInitData {
   targetUserId: string;
   targetName: string;
   targetAvatar?: string;
+  startTime?: number;
+  isContinuing?: boolean;
 }
 
 interface IncomingCallData {

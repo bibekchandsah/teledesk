@@ -26,6 +26,8 @@ interface CallWindowInitData {
   targetUserId: string;
   targetName: string;
   targetAvatar?: string;
+  startTime?: number;
+  isContinuing?: boolean;
 }
 
 // Parse init data from URL query param (passed by Electron main process)
@@ -86,7 +88,9 @@ const CallWindowPage: React.FC = () => {
   const [callData] = useState<CallWindowInitData | null>(() => parseCallWindowData());
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [callStatus, setCallStatus] = useState<CallStatus>('ringing');
+  const [callStatus, setCallStatus] = useState<CallStatus>(() =>
+    parseCallWindowData()?.isContinuing ? 'active' : 'ringing'
+  );
   const [isRinging, setIsRinging] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -97,7 +101,9 @@ const CallWindowPage: React.FC = () => {
   const [localIsMain, setLocalIsMain] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
-  const [isAccepted, setIsAccepted] = useState(false);
+  const [isAccepted, setIsAccepted] = useState(() =>
+    parseCallWindowData()?.isContinuing ?? false
+  );
   const [isMiniMode, setIsMiniMode] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -284,10 +290,18 @@ const CallWindowPage: React.FC = () => {
     }
   };
 
+  // ─── Auto-accept when continuing a call on a new device ──────────────────
+  // (callStatus and isAccepted are already initialized correctly via useState)
+
   // ─── Start call timer ─────────────────────────────────────────────────────
-  const startTimer = () => {
+  const startTimer = (initialDuration = 0) => {
     if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
+    setCallDuration(initialDuration);
+    callDurationRef.current = initialDuration;
+    timerRef.current = setInterval(() => {
+      setCallDuration((d) => d + 1);
+      callDurationRef.current += 1;
+    }, 1000);
   };
 
   // ─── Cleanup everything ───────────────────────────────────────────────────
@@ -311,6 +325,9 @@ const CallWindowPage: React.FC = () => {
   const createInitiatorPeer = useCallback(
     (stream: MediaStream, callId: string, targetUserId: string) => {
       if (peerRef.current) peerRef.current.destroy();
+      // Reset state for fresh handshake (important for device transfer)
+      pendingSignalsRef.current = [];
+      hasReceivedInitialAnswerRef.current = false;
 
       const peer = new SimplePeer({
         initiator: true,
@@ -441,15 +458,29 @@ const CallWindowPage: React.FC = () => {
       const cd = callDataRef.current;
       const localSt = localStreamRef.current;
 
-      if (event === SOCKET_EVENTS.ACCEPT_CALL && cd?.isOutgoing) {
-        // Caller side: remote accepted — create initiator peer
-        if (localSt && cd) {
-          createInitiatorPeer(localSt, cd.callId, cd.targetUserId);
-          startTimer();
-          setCallStatus('active');
-        } else if (cd && !localSt) {
-          // Stream not captured yet — buffer for when it arrives
-          pendingPeerRef.current = { isInitiator: true, callId: cd.callId, targetUserId: cd.targetUserId };
+      if (event === SOCKET_EVENTS.ACCEPT_CALL) {
+        if (cd?.isOutgoing) {
+          // Caller side: remote accepted — create initiator peer
+          if (localSt && cd) {
+            const initialDur = cd.startTime ? Math.floor((Date.now() - cd.startTime) / 1000) : 0;
+            createInitiatorPeer(localSt, cd.callId, cd.targetUserId);
+            startTimer(initialDur);
+            setCallStatus('active');
+          } else if (cd && !localSt) {
+            // Stream not captured yet — buffer for when it arrives
+            pendingPeerRef.current = { isInitiator: true, callId: cd.callId, targetUserId: cd.targetUserId };
+          }
+        } else {
+          // Receiver side: caller just re-joined from another device (transfer/continue)
+          // Destroy our current peer so we can accept the NEW offer that will follow
+          if (peerRef.current) {
+            console.log('[CallWindow] Peer transferred — restarting webRTC connection');
+            peerRef.current.destroy();
+            peerRef.current = null;
+          }
+          // IMPORTANT: Clear any pending signals for the old session
+          pendingSignalsRef.current = [];
+          hasReceivedInitialAnswerRef.current = false;
         }
         return;
       }
@@ -460,8 +491,9 @@ const CallWindowPage: React.FC = () => {
         if (!cd?.isOutgoing && !peerRef.current) {
           // Callee side receiving the initial offer — create receiver peer
           if (localSt && cd) {
+            const initialDur = cd.startTime ? Math.floor((Date.now() - cd.startTime) / 1000) : 0;
             createReceiverPeer(localSt, cd.callId, cd.targetUserId, offerData.offer);
-            startTimer();
+            startTimer(initialDur);
             setCallStatus('active');
           } else if (cd && !localSt) {
             // Stream not captured yet — buffer the offer for when it arrives
@@ -587,12 +619,13 @@ const CallWindowPage: React.FC = () => {
           const pp = pendingPeerRef.current;
           if (pp) {
             pendingPeerRef.current = null;
+            const initialDur = cd.startTime ? Math.floor((Date.now() - cd.startTime) / 1000) : 0;
             if (pp.isInitiator) {
               createInitiatorPeer(stream, pp.callId, pp.targetUserId);
             } else if (pp.offer) {
               createReceiverPeer(stream, pp.callId, pp.targetUserId, pp.offer);
             }
-            startTimer();
+            startTimer(initialDur);
             setCallStatus('active');
           }
         })

@@ -24,14 +24,16 @@ export const getSessionSockets = () => {
   logger.debug(`Current session mappings: ${JSON.stringify(Array.from(sessionSockets.entries()))}`);
   return sessionSockets;
 };
-// Active calls: callId -> full call data needed for re-delivery
 const activeCalls = new Map<string, {
   callerId: string;
   receiverId: string;
   status: 'ringing' | 'active';
   callerName: string;
   callerAvatar?: string;
+  receiverName?: string;
+  receiverAvatar?: string;
   callType: 'video' | 'voice';
+  startTime?: number;
 }>();
 // Reverse lookup: userId -> callId
 const userActiveCall = new Map<string, string>();
@@ -149,23 +151,40 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     // When user B was offline at the time user A called, they missed INCOMING_CALL.
     // As soon as they reconnect within the 30-second ringing window, deliver it now
     // and notify user A that user B's device is now ringing.
+    // Also, if the call is already ACTIVE on another device, notify this socket.
     const pendingCallId = userActiveCall.get(uid);
     if (pendingCallId) {
       const pendingCall = activeCalls.get(pendingCallId);
-      if (pendingCall && pendingCall.status === 'ringing' && pendingCall.receiverId === uid) {
-        // Deliver the incoming call to the receiver who just came online
-        socket.emit(SOCKET_EVENTS.INCOMING_CALL, {
-          callId: pendingCallId,
-          callerId: pendingCall.callerId,
-          callerName: pendingCall.callerName,
-          callerAvatar: pendingCall.callerAvatar,
-          callType: pendingCall.callType,
-        });
-        // Notify the caller that the callee's device is now ringing
-        if (onlineUsers.has(pendingCall.callerId)) {
-          io.to(`user:${pendingCall.callerId}`).emit(SOCKET_EVENTS.CALL_RINGING, { callId: pendingCallId });
+      if (pendingCall) {
+        if (pendingCall.status === 'ringing' && pendingCall.receiverId === uid) {
+          // Deliver the incoming call to the receiver who just came online
+          socket.emit(SOCKET_EVENTS.INCOMING_CALL, {
+            callId: pendingCallId,
+            callerId: pendingCall.callerId,
+            callerName: pendingCall.callerName,
+            callerAvatar: pendingCall.callerAvatar,
+            callType: pendingCall.callType,
+          });
+          // Notify the caller that the callee's device is now ringing
+          if (onlineUsers.has(pendingCall.callerId)) {
+            io.to(`user:${pendingCall.callerId}`).emit(SOCKET_EVENTS.CALL_RINGING, { callId: pendingCallId });
+          }
+          logger.info(`Re-delivered pending call ${pendingCallId} to ${uid} after reconnect`);
+        } else if (pendingCall.status === 'active') {
+          // Tell this new socket that there's already an active call for this user
+          socket.emit(SOCKET_EVENTS.CALL_USER_STATE, {
+            callId: pendingCallId,
+            status: 'active',
+            callerId: pendingCall.callerId,
+            receiverId: pendingCall.receiverId,
+            callerName: pendingCall.callerName,
+            callerAvatar: pendingCall.callerAvatar,
+            receiverName: pendingCall.receiverName,
+            receiverAvatar: pendingCall.receiverAvatar,
+            callType: pendingCall.callType,
+            startTime: pendingCall.startTime,
+          });
         }
-        logger.info(`Re-delivered pending call ${pendingCallId} to ${uid} after reconnect`);
       }
     }
 
@@ -391,6 +410,8 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
           status: 'ringing',
           callerName: payload.callerName,
           callerAvatar: payload.callerAvatar,
+          receiverName: '', // Will be updated if available or needed
+          receiverAvatar: '',
           callType: payload.callType,
         });
         userActiveCall.set(uid, payload.callId);
@@ -412,20 +433,56 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, (payload: { callId: string; callerId: string }) => {
       const call = activeCalls.get(payload.callId);
-      if (call) activeCalls.set(payload.callId, { ...call, status: 'active' });
+      if (call && call.status === 'ringing') {
+        call.status = 'active';
+        call.startTime = Date.now();
+      }
+      
+      // Notify caller
       io.to(`user:${payload.callerId}`).emit(SOCKET_EVENTS.ACCEPT_CALL, {
         callId: payload.callId,
         acceptorId: uid,
       });
+
+      // Notify other devices of the acceptor to stop ringing
+      socket.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_HANDLED_ELSEWHERE, {
+        callId: payload.callId,
+        handledBy: socket.id
+      });
+
+      // Broadcast call state to all of acceptor's devices so they can show "Continue"
+      if (call) {
+        io.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_USER_STATE, {
+          callId: payload.callId,
+          status: 'active',
+          callerId: call.callerId,
+          receiverId: call.receiverId,
+          callerName: call.callerName,
+          callerAvatar: call.callerAvatar,
+          receiverName: call.receiverName,
+          receiverAvatar: call.receiverAvatar,
+          callType: call.callType,
+          startTime: call.startTime,
+          activeOnSocketId: socket.id
+        });
+      }
     });
 
     socket.on(SOCKET_EVENTS.REJECT_CALL, (payload: { callId: string; callerId: string }) => {
       activeCalls.delete(payload.callId);
       userActiveCall.delete(uid);
       userActiveCall.delete(payload.callerId);
+      
+      // Notify caller
       io.to(`user:${payload.callerId}`).emit(SOCKET_EVENTS.CALL_REJECTED, {
         callId: payload.callId,
         rejectedBy: uid,
+      });
+
+      // Notify other devices of the rejector to stop ringing
+      socket.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_HANDLED_ELSEWHERE, {
+        callId: payload.callId,
+        handledBy: socket.id
       });
     });
 
@@ -466,7 +523,15 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
       activeCalls.delete(payload.callId);
       userActiveCall.delete(uid);
       userActiveCall.delete(payload.to);
+      
+      // Notify other participant
       io.to(`user:${payload.to}`).emit(SOCKET_EVENTS.CALL_ENDED, {
+        callId: payload.callId,
+        endedBy: uid,
+      });
+
+      // Notify other devices of the ender
+      socket.to(`user:${uid}`).emit(SOCKET_EVENTS.CALL_ENDED, {
         callId: payload.callId,
         endedBy: uid,
       });

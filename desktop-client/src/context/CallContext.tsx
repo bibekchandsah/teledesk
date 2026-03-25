@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { getSocket } from '../services/socketService';
 import { SOCKET_EVENTS } from '@shared/constants/events';
+import { CallSession } from '@shared/types';
 import {
   createInitiatorPeer,
   createReceiverPeer,
@@ -12,6 +13,8 @@ import {
   processRenegotiationAnswer,
   processAnswer,
   getLocalStream,
+  destroyPeer,
+  stopLocalStream,
 } from '../services/webrtcService';
 import { useCallStore } from '../store/callStore';
 import { useAuthStore } from '../store/authStore';
@@ -27,6 +30,7 @@ interface CallContextValue {
     callType: 'video' | 'voice',
     targetAvatar?: string,
   ) => Promise<void>;
+  continueCall: () => void;
   acceptIncomingCall: (localStream: MediaStream) => void;
   rejectIncomingCall: () => void;
   endActiveCall: () => void;
@@ -46,6 +50,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLocalStream,
     setRemoteStream,
     startCallTimer,
+    startCallTimerAt,
     stopCallTimer,
     endCallCleanup,
     callDuration,
@@ -298,6 +303,53 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
+    // ─── Call Handled Elsewhere (accepted or rejected on another device) ───
+    const handleCallHandledElsewhere = (data: { callId: string }) => {
+      const ac = activeCallRef.current;
+      const ic = incomingCallRef.current;
+      if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+
+      clearRingingTimer();
+      callAudioService.stopAllRingtones();
+      
+      if (isElectron()) {
+        window.electronAPI?.closeCallWindow?.();
+        window.electronAPI?.closeIncomingCallWindow?.();
+      } else {
+        // Web path: explicitly destroy the WebRTC peer so it doesn't answer
+        // the new OFFER that the caller will send to the new device.
+        // DO NOT use hangUp() here because that sends an END_CALL signal!
+        destroyPeer();
+        stopLocalStream();
+      }
+      
+      endCallCleanup();
+    };
+
+    // ─── User Call State (sync active call from another device) ────────────
+    const handleUserCallState = (data: CallSession) => {
+      // If we are already in THIS call locally, don't overwrite it as external
+      const currentCall = activeCallRef.current;
+      if (currentCall?.callId === data.callId && !currentCall.isExternal) {
+        return;
+      }
+
+      if (data.status === 'active') {
+        const session = { ...data, isExternal: true };
+        setActiveCall(session);
+        activeCallRef.current = session;
+        // Also stop any local ringing if we were ringing for this call
+        if (incomingCallRef.current?.callId === data.callId) {
+          clearRingingTimer();
+          callAudioService.stopAllRingtones();
+          setIncomingCall(null);
+        }
+      } else if (activeCallRef.current?.callId === data.callId) {
+        // Call ended elsewhere
+        endCallCleanup();
+      }
+    };
+
     socket.on(SOCKET_EVENTS.ACCEPT_CALL, handleCallAccepted);
     socket.on(SOCKET_EVENTS.ANSWER, handleAnswer);
     socket.on(SOCKET_EVENTS.ICE_CANDIDATE, handleIceCandidate);
@@ -305,6 +357,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on(SOCKET_EVENTS.CALL_REJECTED, handleCallRejected);
     socket.on(SOCKET_EVENTS.OFFER, handleRenegotiationOffer);
     socket.on(SOCKET_EVENTS.CALL_RINGING, handleCallRinging);
+    socket.on(SOCKET_EVENTS.CALL_HANDLED_ELSEWHERE, handleCallHandledElsewhere);
+    socket.on(SOCKET_EVENTS.CALL_USER_STATE, handleUserCallState);
 
     const handleCallMuteChanged = (data: { callId: string; from: string; isMuted: boolean }) => {
       if (activeCallRef.current?.callId !== data.callId) return;
@@ -328,6 +382,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off(SOCKET_EVENTS.CALL_MUTE_CHANGED, handleCallMuteChanged);
       socket.off(SOCKET_EVENTS.CALL_VIDEO_CHANGED, handleCallVideoChanged);
       socket.off(SOCKET_EVENTS.CALL_RINGING, handleCallRinging);
+      socket.off(SOCKET_EVENTS.CALL_HANDLED_ELSEWHERE, handleCallHandledElsewhere);
+      socket.off(SOCKET_EVENTS.CALL_USER_STATE, handleUserCallState);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
@@ -591,8 +647,51 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     endCallCleanup();
   };
 
+  // --------- continueCall (transfer call to this device) -----------------------------------------------------------------------------------------------------------------------------------
+  const continueCall = (): void => {
+    const call = activeCallRef.current;
+    if (!call || !call.isExternal) return;
+
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Notify backend to take over (sends ACCEPT_CALL to peer)
+    const targetUserId = call.callerId === currentUser?.uid ? call.receiverId : call.callerId;
+    socket.emit(SOCKET_EVENTS.ACCEPT_CALL, {
+      callId: call.callId,
+      callerId: targetUserId,
+    });
+
+    // Mark as local active call
+    const localCall = { ...call, isExternal: false, status: 'active' as const };
+    setActiveCall(localCall);
+    activeCallRef.current = localCall;
+
+    // Sync the call timer to match the ongoing call's duration
+    const initialSecs = call.startTime ? Math.floor((Date.now() - call.startTime) / 1000) : 0;
+
+    // Open call window
+    if (isElectron()) {
+      const isOutgoingTransfer = call.callerId === currentUser?.uid;
+      const targetUserId: string = (isOutgoingTransfer ? call.receiverId : call.callerId) || '';
+      window.electronAPI!.openCallWindow!({
+        callId: call.callId,
+        callType: call.type,
+        isOutgoing: isOutgoingTransfer,
+        targetUserId,
+        targetName: (isOutgoingTransfer ? call.receiverName : call.callerName) || 'User',
+        targetAvatar: isOutgoingTransfer ? call.receiverAvatar : call.callerAvatar,
+        startTime: call.startTime,
+        isContinuing: true,
+      });
+    } else {
+      // Web fallback: start the WebRTC connection and timer in sync
+      startCallTimerAt(initialSecs);
+    }
+  };
+
   return (
-    <CallContext.Provider value={{ startCall, acceptIncomingCall, rejectIncomingCall, endActiveCall }}>
+    <CallContext.Provider value={{ startCall, continueCall, acceptIncomingCall, rejectIncomingCall, endActiveCall }}>
       {children}
     </CallContext.Provider>
   );
@@ -600,6 +699,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 const noOpCallContext: CallContextValue = {
   startCall: async () => { },
+  continueCall: () => { },
   acceptIncomingCall: () => { },
   rejectIncomingCall: () => { },
   endActiveCall: () => { },

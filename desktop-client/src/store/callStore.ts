@@ -21,6 +21,7 @@ interface CallState {
   setVideoOff: (off: boolean) => void;
   setIsCalleeRinging: (ringing: boolean) => void;
   startCallTimer: () => void;
+  startCallTimerAt: (initialSeconds: number) => void;
   stopCallTimer: () => void;
   endCallCleanup: () => void;
 }
@@ -49,6 +50,13 @@ export const useCallStore = create<CallState>((set, get) => ({
       set((state) => ({ callDuration: state.callDuration + 1 }));
     }, 1000);
     set({ callTimer: timer, callDuration: 0 });
+  },
+
+  startCallTimerAt: (initialSeconds: number) => {
+    const timer = setInterval(() => {
+      set((state) => ({ callDuration: state.callDuration + 1 }));
+    }, 1000);
+    set({ callTimer: timer, callDuration: initialSeconds });
   },
 
   stopCallTimer: () => {

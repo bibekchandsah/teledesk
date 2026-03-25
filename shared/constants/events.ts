@@ -41,6 +41,8 @@ export const SOCKET_EVENTS = {
   ACTIVE_STATUS_CHANGED: 'active_status_changed',
   MESSAGE_STATUS_CHANGED: 'message_status_changed',
   LIVE_TYPING_STATUS_CHANGED: 'live_typing_status_changed',
+  CALL_HANDLED_ELSEWHERE: 'call_handled_elsewhere',
+  CALL_USER_STATE: 'call_user_state',
 
   // Connection
   CONNECT: 'connect',

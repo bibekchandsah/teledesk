@@ -1456,6 +1456,8 @@ interface CallInitData {
   targetUserId: string;
   targetName?: string;
   targetAvatar?: string;
+  startTime?: number;
+  isContinuing?: boolean;
 }
 
 const createCallWindow = (initData: CallInitData) => {

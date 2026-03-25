@@ -1353,9 +1353,49 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const { messages, setMessages, activeChat, setActiveChat, typingUsers, userProfiles, onlineUsers, clearUnread, removeMessage, markMessageDeleted, updateMessage, liveTypingTexts, chats, setChats, updateChatPins, pinnedChatIds, togglePinChat, archivedChatIds, toggleArchiveChat, removeChat, nicknames, setNickname, lockedChatIds, toggleLockChat, setUserProfile } =
     useChatStore();
   const { currentUser, setCurrentUser } = useAuthStore();
-  const { startCall } = useCallContext();
+  const { startCall, continueCall } = useCallContext();
   const { activeCall } = useCallStore();
-  const isInCall = !!activeCall;
+
+  // ─── Get peer info for private chat header ────────────────────────────────
+  const peerInfo = useCallback(() => {
+    if (!activeChat || activeChat.type !== 'private') return null;
+    const isSelfChat = activeChat.members.every((m) => m === currentUser?.uid);
+    const peerId = isSelfChat
+      ? currentUser?.uid
+      : activeChat.members.find((m) => m !== currentUser?.uid);
+    if (!peerId) return null;
+
+    const peerProfile = peerId === currentUser?.uid
+      ? currentUser
+      : userProfiles[peerId];
+
+    // If the peer's profile is marked deleted, treat as deleted user (not self-chat)
+    const isDeleted = !isSelfChat && peerProfile?.isDeleted === true;
+
+    const isPeerVisible = peerProfile?.showActiveStatus !== false;
+    const online = isDeleted
+      ? false
+      : isSelfChat
+        ? currentUser?.showActiveStatus !== false
+        : onlineUsers.has(peerId) && isPeerVisible;
+
+    return {
+      uid: peerId,
+      isSelf: isSelfChat && !isDeleted,
+      isDeleted,
+      profile: peerProfile,
+      online,
+    };
+  }, [activeChat, currentUser, userProfiles, onlineUsers]);
+
+  const peer = peerInfo();
+
+  const isExternalCall = !!activeCall?.isExternal;
+  const isInCall = !!activeCall && !isExternalCall;
+  const isPeerInExternalCall = useMemo(() => {
+    if (!activeCall || !activeCall.isExternal || !peer) return false;
+    return activeCall.callerId === peer.uid || activeCall.receiverId === peer.uid;
+  }, [activeCall, peer]);
   const { liveTypingEnabled } = useUIStore();
   const { isUnlocked, setPinModal } = useUIStore();
   const { addBookmark, isBookmarked, removeBookmark, savedEntries } = useBookmarkStore();
@@ -2414,40 +2454,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     setShowScrollTop(el.scrollTop > 200);
     setShowScrollBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 400);
   }, [loadOlderMessages, hasMore]);
-
-  // ─── Get peer info for private chat header ────────────────────────────────
-  const peerInfo = useCallback(() => {
-    if (!activeChat || activeChat.type !== 'private') return null;
-    const isSelfChat = activeChat.members.every((m) => m === currentUser?.uid);
-    const peerId = isSelfChat
-      ? currentUser?.uid
-      : activeChat.members.find((m) => m !== currentUser?.uid);
-    if (!peerId) return null;
-
-    const peerProfile = peerId === currentUser?.uid
-      ? currentUser
-      : userProfiles[peerId];
-
-    // If the peer's profile is marked deleted, treat as deleted user (not self-chat)
-    const isDeleted = !isSelfChat && peerProfile?.isDeleted === true;
-
-    const isPeerVisible = peerProfile?.showActiveStatus !== false;
-    const online = isDeleted
-      ? false
-      : isSelfChat
-        ? currentUser?.showActiveStatus !== false
-        : onlineUsers.has(peerId) && isPeerVisible;
-
-    return {
-      uid: peerId,
-      isSelf: isSelfChat && !isDeleted,
-      isDeleted,
-      profile: peerProfile,
-      online,
-    };
-  }, [activeChat, currentUser, userProfiles, onlineUsers]);
-
-  const peer = peerInfo();
 
   // ─── Chat Theme Logic ─────────────────────────────────────────────────────
   const displayTheme = useMemo(() => {
@@ -4214,22 +4220,48 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
           {activeChat.type === 'private' && (
             <>
-              <button
-                onClick={() => !isInCall && handleStartCall('voice')}
-                title={isInCall ? 'Already in a call' : 'Voice call'}
-                disabled={isInCall}
-                style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
-              >
-                <Phone size={18} />
-              </button>
-              <button
-                onClick={() => !isInCall && handleStartCall('video')}
-                title={isInCall ? 'Already in a call' : 'Video call'}
-                disabled={isInCall}
-                style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
-              >
-                <Video size={18} />
-              </button>
+              {isPeerInExternalCall ? (
+                <button
+                  onClick={() => continueCall()}
+                  title="Continue call on this device"
+                  style={{
+                    ...headerBtnStyle,
+                    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                    color: '#22c55e',
+                    padding: '6px 16px',
+                    borderRadius: 20,
+                    width: 'auto',
+                    gap: 8,
+                    fontWeight: 600,
+                    fontSize: 13,
+                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <RefreshCw size={14} style={{ animation: 'spin 4s linear infinite' }} />
+                  Continue
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => !isInCall && handleStartCall('voice')}
+                    title={isInCall ? 'Already in a call' : 'Voice call'}
+                    disabled={isInCall}
+                    style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
+                  >
+                    <Phone size={18} />
+                  </button>
+                  <button
+                    onClick={() => !isInCall && handleStartCall('video')}
+                    title={isInCall ? 'Already in a call' : 'Video call'}
+                    disabled={isInCall}
+                    style={{ ...headerBtnStyle, opacity: isInCall ? 0.35 : 1, cursor: isInCall ? 'not-allowed' : 'pointer' }}
+                  >
+                    <Video size={18} />
+                  </button>
+                </>
+              )}
             </>
           )}
           <button
@@ -6422,26 +6454,38 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   <MessageCircle size={20} />
                   <span>Message</span>
                 </button>
-                {/* Voice call */}
-                <button
-                  onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('voice'); } }}
-                  title={isInCall ? 'Already in a call' : 'Voice call'}
-                  disabled={isInCall}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
-                >
-                  <Phone size={20} />
-                  <span>Call</span>
-                </button>
-                {/* Video call */}
-                <button
-                  onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('video'); } }}
-                  title={isInCall ? 'Already in a call' : 'Video call'}
-                  disabled={isInCall}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
-                >
-                  <Video size={20} />
-                  <span>Video</span>
-                </button>
+                {/* Voice call / Continue */}
+                {isPeerInExternalCall ? (
+                  <button
+                    onClick={() => { closeProfile(); continueCall(); }}
+                    title="Continue call on this device"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: 10, cursor: 'pointer', color: '#22c55e', fontSize: 11, fontWeight: 500, gridColumn: 'span 2' }}
+                  >
+                    <RefreshCw size={20} style={{ animation: 'spin 4s linear infinite' }} />
+                    <span>Continue Call</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('voice'); } }}
+                      title={isInCall ? 'Already in a call' : 'Voice call'}
+                      disabled={isInCall}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
+                    >
+                      <Phone size={20} />
+                      <span>Call</span>
+                    </button>
+                    <button
+                      onClick={() => { if (!isInCall) { closeProfile(); handleStartCall('video'); } }}
+                      title={isInCall ? 'Already in a call' : 'Video call'}
+                      disabled={isInCall}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 10, cursor: isInCall ? 'not-allowed' : 'pointer', color: isInCall ? 'var(--text-secondary)' : 'var(--accent)', fontSize: 11, fontWeight: 500, opacity: isInCall ? 0.45 : 1 }}
+                    >
+                      <Video size={20} />
+                      <span>Video</span>
+                    </button>
+                  </>
+                )}
                 {/* More */}
                 <button
                   onClick={() => setShowProfileMore((v) => !v)}

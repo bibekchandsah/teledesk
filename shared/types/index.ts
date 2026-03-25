@@ -137,8 +137,10 @@ export interface CallSession {
   receiverAvatar?: string;
   type: 'video' | 'voice';
   status: 'ringing' | 'active' | 'ended' | 'rejected' | 'missed';
-  startedAt?: string;
+  startedAt?: string; // ISO date string for DB
+  startTime?: number; // Millisecond timestamp for active sync
   endedAt?: string;
+  isExternal?: boolean; // true if the call is active on another device/tab
 }
 
 export interface TypingEvent {
