@@ -1662,7 +1662,7 @@ const CallWindowPage: React.FC = () => {
             transform: controlsVisible ? 'translateY(0)' : 'translateY(-12px)',
             transition: 'opacity 0.4s ease, transform 0.4s ease',
             pointerEvents: 'none',
-            zIndex: 45, // Above controls
+            zIndex: 45,
           }}>
             {!isMiniMode && <UserAvatar name={displayName} avatar={callData.targetAvatar} size={30} />}
             <span style={{ color: '#f1f5f9', fontSize: 13, fontWeight: 600 }}>{displayName}</span>
@@ -1762,16 +1762,14 @@ const CallWindowPage: React.FC = () => {
             >
               {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
-            {/* Camera toggle: only show in video call or if already enabled in voice call */}
-            {(isVideoCall || isLocalVideoEnabled) && (
-              <button 
-                onClick={handleToggleVideo} 
-                title={isVideoCall ? (isVideoOff ? 'Turn on camera' : 'Turn off camera') : 'Turn off camera'}
-                style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: (isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                {(isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? <VideoOff size={16} /> : <Video size={16} />}
-              </button>
-            )}
+            {/* Camera toggle: always show to allow upgrading voice call to video */}
+            <button 
+              onClick={handleToggleVideo} 
+              title={isVideoCall ? (isVideoOff ? 'Turn on camera' : 'Turn off camera') : 'Turn on camera'}
+              style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', backgroundColor: (isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? '#ef4444' : 'rgba(255,255,255,0.15)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+              {(isVideoCall ? isVideoOff : !isLocalVideoEnabled) ? <VideoOff size={16} /> : <Video size={16} />}
+            </button>
             <button 
               onClick={handleHangup} 
               title="End call"

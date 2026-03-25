@@ -487,6 +487,7 @@ const CallScreen: React.FC = () => {
 
     if (isAnyEdge) {
       isResizing.current = true;
+      document.body.style.userSelect = 'none';
       const sx = e.clientX, sy = e.clientY;
       const oW = miniSize.w, oH = miniSize.h, oT = miniPos.top, oL = miniPos.left;
       const onMove = (ev: PointerEvent) => {
@@ -508,12 +509,14 @@ const CallScreen: React.FC = () => {
       };
       const onUp = () => { 
         isResizing.current = false;
+        document.body.style.userSelect = '';
         window.removeEventListener('pointermove', onMove); 
         window.removeEventListener('pointerup', onUp); 
       };
       window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
     } else {
       isResizing.current = true;
+      document.body.style.userSelect = 'none';
       const sx = e.clientX, sy = e.clientY, oT = miniPos.top, oL = miniPos.left;
       const onMove = (ev: PointerEvent) => {
         const dx = ev.clientX - sx, dy = ev.clientY - sy;
@@ -521,6 +524,7 @@ const CallScreen: React.FC = () => {
       };
       const onUp = () => { 
         isResizing.current = false;
+        document.body.style.userSelect = '';
         window.removeEventListener('pointermove', onMove); 
         window.removeEventListener('pointerup', onUp); 
       };
