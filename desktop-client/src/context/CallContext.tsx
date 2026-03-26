@@ -93,11 +93,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signalsForThisCall = pendingSignalsRef.current.filter((s) => s.callId === currentCallId);
 
     if (signalsForThisCall.length > 0) {
-      console.log(`[Call] Processing ${signalsForThisCall.length} pending signals for call ${currentCallId}`);
+      console.log(`[Call] Processing ${signalsForThisCall.length} pending signals for call ${currentCallId}:`, 
+        signalsForThisCall.map(s => s.candidate ? 'candidate' : (s.offer ? 'offer' : (s.answer ? 'answer' : 'unknown')))
+      );
       signalsForThisCall.forEach((data) => {
-        if (data.candidate) processSignal(data.candidate);
-        else if (data.answer) processAnswer(data.answer);
-        else if (data.offer) processRenegotiationOffer(data.offer, data.from || '', data.callId || '');
+        try {
+          if (data.candidate) processSignal(data.candidate);
+          else if (data.answer) processAnswer(data.answer);
+          else if (data.offer) processRenegotiationOffer(data.offer, data.from || '', data.callId || '');
+        } catch (err) {
+          console.warn('[Call] Error processing pending signal:', err);
+        }
       });
       // Clear processed signals for this call only
       pendingSignalsRef.current = pendingSignalsRef.current.filter((s) => s.callId !== currentCallId);
@@ -239,32 +245,40 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // --------- WebRTC Answer ------------------------------------------------------------------------------------------------------------------------------------------------
     const handleAnswer = (data: { from: string; callId: string; answer: RTCSessionDescriptionInit }) => {
-      if (activeCallRef.current?.callId !== data.callId) return;
+      const ac = activeCallRef.current;
+      const ic = incomingCallRef.current;
+      if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+
+      console.log(`[Call] handleAnswer received for ${data.callId}`);
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
       } else {
-        if (hasPeer()) {
+        if (hasPeer() && ac?.status === 'active') {
           processAnswer(data.answer);
         } else {
-          // Buffer the answer with its callId
+          console.log('[Call] Buffering answer for', data.callId);
           pendingSignalsRef.current.push(data);
         }
       }
     };
 
-    // --------- ICE Candidates ---------------------------------------------------------------------------------------------------------------------------------------------
     const handleIceCandidate = (data: {
       from: string;
       callId: string;
       candidate: { candidate: string; sdpMLineIndex: number | null; sdpMid: string | null };
     }) => {
+      const ac = activeCallRef.current;
+      const ic = incomingCallRef.current;
+      if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+
+      console.log(`[Call] handleIceCandidate received from ${data.from} for ${data.callId}`);
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
       } else {
-        if (hasPeer()) {
+        if (hasPeer() && ac?.status === 'active') {
           processSignal(data.candidate);
         } else {
-          // Buffer the candidate with its callId
+          console.log('[Call] Buffering candidate for', data.callId, '(hasPeer:', hasPeer(), 'status:', ac?.status, ')');
           pendingSignalsRef.current.push(data);
         }
       }
@@ -334,8 +348,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.OFFER, data);
       } else {
-        // If the call is not yet fully active, buffer this offer
-        if (!hasPeer() || ac.status !== 'active') {
+        const ac = activeCallRef.current;
+        // If the call is still ringing, the initial offer is handled by 'handleOffer'
+        // in acceptIncomingCall. Ignore this duplicate signal to prevent InvalidStateError.
+        if (ac?.status === 'ringing') {
+          console.log('[Call] Ignoring redundant OFFER during ringing state');
+          return;
+        }
+
+        // Specific fix for Receiver: if we are still setting up the peer, 
+        // the initial offer is handled by handleOffer. Don't buffer it twice.
+        if (ac?.status === 'active' && !hasPeer() && ac.callerId !== currentUser?.uid) {
+          console.log('[Call] Ignoring potential initial offer in renegotiation handler');
+          return;
+        }
+
+        // If the call is not yet fully active (but not ringing, e.g. connecting), buffer it
+        if (!hasPeer() || ac?.status !== 'active') {
           console.log('[Call] Buffering renegotiation offer:', data.callId);
           pendingSignalsRef.current.push(data);
           return;

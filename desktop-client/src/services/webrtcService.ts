@@ -64,6 +64,12 @@ export const getLocalStream = async (callType: 'video' | 'voice'): Promise<Media
       audio: audioConstraint,
       video: videoConstraint,
     });
+    console.log(`[WebRTC] getLocalStream success. Tracks: ${localStream.getTracks().length}`);
+    localStream.getTracks().forEach(t => {
+      console.log(`[WebRTC] Local track: ${t.kind} ${t.id} (enabled:${t.enabled}, muted:${t.muted}, state:${t.readyState})`);
+      // Ensure it's enabled!
+      t.enabled = true;
+    });
     return localStream;
   } catch (err) {
     console.error('[WebRTC] getUserMedia failed, falling back to basic constraints:', err);
@@ -338,8 +344,9 @@ export const createInitiatorPeer = (
       firstRemoteStream = remoteStream;
       // Attach onunmute to all tracks for reliable UI refresh and resume cycles.
       remoteStream.getTracks().forEach((track) => {
+        console.log(`[WebRTC] Initial track: ${track.kind} ${track.id} (enabled:${track.enabled}, muted:${track.muted}, state:${track.readyState})`);
         track.onunmute = () => {
-          console.log(`[WebRTC] Initiator track ${track.kind} unmuted, refreshing stream`);
+          console.log(`[WebRTC] Initiator track ${track.kind} unmuted: ${track.id} (enabled:${track.enabled})`);
           if (!firstRemoteStream || !remoteStreamCallback) return;
           const clone = new MediaStream(firstRemoteStream.getTracks());
           firstRemoteStream = clone;
@@ -431,8 +438,9 @@ export const createReceiverPeer = (
       firstRemoteStream = remoteStream;
       // Attach onunmute to all tracks for reliable UI refresh and resume cycles.
       remoteStream.getTracks().forEach((track) => {
+        console.log(`[WebRTC] Receiver Initial track: ${track.kind} ${track.id} (enabled:${track.enabled}, muted:${track.muted}, state:${track.readyState})`);
         track.onunmute = () => {
-          console.log(`[WebRTC] Receiver track ${track.kind} unmuted, refreshing stream`);
+          console.log(`[WebRTC] Receiver track ${track.kind} unmuted: ${track.id} (enabled:${track.enabled})`);
           if (!firstRemoteStream || !remoteStreamCallback) return;
           const clone = new MediaStream(firstRemoteStream.getTracks());
           firstRemoteStream = clone;

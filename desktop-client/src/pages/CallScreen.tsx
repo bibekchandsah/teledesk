@@ -137,6 +137,14 @@ const CallScreen: React.FC = () => {
   const animFrameRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [volumeBars, setVolumeBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [isAudioBlocked, setIsAudioBlocked] = useState(false);
+  
+  const isVideo = activeCall?.type === 'video';
+  const remoteHasVideo = !!remoteStream && remoteStream.getVideoTracks().some(
+    (t) => t.readyState !== 'ended' && !t.muted,
+  );
+  const localHasVideo = (isVideo && !isVideoOff) || isLocalVideoEnabled;
+  const effectiveIsVideo = localHasVideo || remoteHasVideo;
 
   // Manage outgoing ringtone for calls initiated by current user
   useEffect(() => {
@@ -178,24 +186,49 @@ const CallScreen: React.FC = () => {
     window.addEventListener('pointerup', onMouseUp);
   };
 
-  // ─── Play remote stream through DOM <audio> element ───────────────────
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
-    if (!remoteStream || !remoteAudioRef.current) return;
+    // effectiveIsVideo must be a dependency so we re-bind srcObject when the <audio> tag is re-mounted
+    if (!remoteStream || !remoteAudioRef.current || effectiveIsVideo) {
+      if (!remoteStream) console.log('[CallScreen] No remote stream yet');
+      if (!remoteAudioRef.current) console.log('[CallScreen] No audio ref (video mode?)');
+      return;
+    }
+
     const audioEl = remoteAudioRef.current;
+    console.log(`[CallScreen] Binding remote stream to audio element. Tracks: A:${remoteStream.getAudioTracks().length} V:${remoteStream.getVideoTracks().length}`);
+    
     audioEl.srcObject = remoteStream;
-    audioEl.muted = false; // CRITICAL: ensure remote audio is NOT muted
+    audioEl.muted = false;
     audioEl.volume = 1.0;
+
     const savedSpeaker = localStorage.getItem('selectedSpeakerId');
     if (savedSpeaker && typeof (audioEl as any).setSinkId === 'function') {
       (audioEl as any).setSinkId(savedSpeaker).catch(() => { });
     }
-    audioEl.play().catch((e) => {
+
+    audioEl.play().then(() => {
+      setIsAudioBlocked(false);
+      console.log('[CallScreen] Audio playing successfully');
+    }).catch((e) => {
       if (e.name !== 'AbortError') {
-        console.error('[CallScreen] Audio autoplay failed:', e);
+        console.warn('[CallScreen] Audio autoplay blocked or failed:', e);
+        setIsAudioBlocked(true);
       }
     });
-  }, [remoteStream]);
+
+    // Also check tracks periodically for debugging
+    const interval = setInterval(() => {
+      if (remoteStream) {
+        const a = remoteStream.getAudioTracks();
+        if (a.length > 0 && a[0].readyState === 'ended') {
+          console.warn('[CallScreen] Remote audio track ended unexpectedly!');
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [remoteStream, effectiveIsVideo]);
   // Audio visualiser — analyses remote stream volume (analyser only, no destination)
   useEffect(() => {
     if (!remoteStream || remoteStream.getAudioTracks().length === 0) return;
@@ -291,22 +324,6 @@ const CallScreen: React.FC = () => {
     };
   }, [activeCall]);
 
-  // (Early return moved below to satisfy React Hook rules)
-  const isVideo = activeCall?.type === 'video';
-  // A voice call is effectively in video mode when the local user has enabled their camera
-  // OR when the remote peer is sending video (i.e. track is live AND not muted).
-  // After replaceTrack(null), the track stays 'live' but .muted becomes true — we treat
-  // that the same as no video so the UI correctly reverts to voice-call mode.
-  const remoteHasVideo = !!remoteStream && remoteStream.getVideoTracks().some(
-    (t) => t.readyState !== 'ended' && !t.muted,
-  );
-  // Local has video active when:
-  //   - native video call AND camera not turned off, OR
-  //   - voice call upgraded by the local user (isLocalVideoEnabled)
-  const localHasVideo = (isVideo && !isVideoOff) || isLocalVideoEnabled;
-  // Show video UI only when at least one side is actively sending video.
-  // When both users turn off their cameras the layout reverts to voice-call mode.
-  const effectiveIsVideo = localHasVideo || remoteHasVideo;
   const currentUid = currentUser?.uid ?? '';
   const peerUid = activeCall?.callerId === currentUid ? activeCall?.receiverId : activeCall?.callerId;
   const peerRawName =
@@ -589,12 +606,28 @@ const CallScreen: React.FC = () => {
       }}
       onClick={(e) => {
         // Accessibility/Autoplay safeguard: ensure audio/video is playing on first interaction
-        if (remoteAudioRef.current) remoteAudioRef.current.play().catch(() => {});
+        setIsAudioBlocked(false);
+        if (remoteAudioRef.current) {
+          console.log('[CallScreen] Manual play trigger for audio');
+          remoteAudioRef.current.play().catch(() => {});
+        }
         // Also find any video elements and play them
         const videos = (e.currentTarget as HTMLElement).querySelectorAll('video');
-        videos.forEach(v => v.play().catch(() => {}));
+        videos.forEach(v => {
+          console.log('[CallScreen] Manual play trigger for video');
+          v.play().catch(() => {});
+        });
       }}
     >
+      {isAudioBlocked && !effectiveIsVideo && (
+        <div style={{
+          position: 'absolute', top: 80, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(239,68,68,0.9)', color: '#fff', padding: '8px 16px',
+          borderRadius: 8, zIndex: 1000, fontSize: 13, pointerEvents: 'none'
+        }}>
+          Audio blocked by browser. Click anywhere to enable.
+        </div>
+      )}
       {/* ── DOM Audio Element for Remote Stream ────────────── */}
       {!effectiveIsVideo && (
         <audio ref={remoteAudioRef} autoPlay muted={false} style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} />

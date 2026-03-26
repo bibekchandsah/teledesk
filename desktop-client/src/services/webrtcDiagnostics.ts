@@ -22,8 +22,8 @@ export const addConnectionDiagnostics = (
   const pc = peer._pc as RTCPeerConnection;
   const candidates: RTCIceCandidate[] = [];
   
-  // Enhanced connection state monitoring
-  pc.onconnectionstatechange = () => {
+  // Enhanced connection state monitoring using addEventListener to avoid overwriting simple-peer's handlers
+  pc.addEventListener('connectionstatechange', () => {
     console.log(`[${label}] Connection state changed:`, pc.connectionState);
     
     if (pc.connectionState === 'failed') {
@@ -34,9 +34,9 @@ export const addConnectionDiagnostics = (
       console.log(`[${label}] Connection established successfully`);
       logSelectedCandidates(pc, label);
     }
-  };
+  });
   
-  pc.oniceconnectionstatechange = () => {
+  pc.addEventListener('iceconnectionstatechange', () => {
     console.log(`[${label}] ICE connection state:`, pc.iceConnectionState);
     
     if (pc.iceConnectionState === 'failed') {
@@ -46,14 +46,14 @@ export const addConnectionDiagnostics = (
       console.log(`[${label}] ICE connection established`);
       logSelectedCandidates(pc, label);
     }
-  };
+  });
   
-  pc.onicegatheringstatechange = () => {
+  pc.addEventListener('icegatheringstatechange', () => {
     console.log(`[${label}] ICE gathering state:`, pc.iceGatheringState);
-  };
+  });
   
-  // Track ICE candidates for diagnostics
-  pc.onicecandidate = (event) => {
+  // Track ICE candidates for diagnostics using addEventListener
+  pc.addEventListener('icecandidate', (event) => {
     if (event.candidate) {
       candidates.push(event.candidate);
       console.log(`[${label}] ICE candidate:`, {
@@ -63,7 +63,7 @@ export const addConnectionDiagnostics = (
         port: event.candidate.port
       });
     }
-  };
+  });
 };
 
 const logDiagnostics = (
