@@ -69,6 +69,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const localStreamRef = useRef<MediaStream | null>(null);
   // Track call duration at the time the call window closes (for summary)
   const callDurationRef = useRef(callDuration);
+  const pendingSignalsRef = useRef<any[]>([]);
 
   useEffect(() => { activeCallRef.current = activeCall; }, [activeCall]);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
@@ -81,6 +82,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (ringingTimerRef.current !== null) {
       clearTimeout(ringingTimerRef.current);
       ringingTimerRef.current = null;
+    }
+  };
+
+  const processPendingSignals = () => {
+    const activeCall = activeCallRef.current || incomingCallRef.current;
+    if (!activeCall || !hasPeer()) return;
+
+    const currentCallId = activeCall.callId;
+    const signalsForThisCall = pendingSignalsRef.current.filter((s) => s.callId === currentCallId);
+
+    if (signalsForThisCall.length > 0) {
+      console.log(`[Call] Processing ${signalsForThisCall.length} pending signals for call ${currentCallId}`);
+      signalsForThisCall.forEach((data) => {
+        if (data.candidate) processSignal(data.candidate);
+        else if (data.answer) processAnswer(data.answer);
+        else if (data.offer) processRenegotiationOffer(data.offer, data.from || '', data.callId || '');
+      });
+      // Clear processed signals for this call only
+      pendingSignalsRef.current = pendingSignalsRef.current.filter((s) => s.callId !== currentCallId);
     }
   };
 
@@ -162,7 +182,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         startCallTimer();
         const stream = localStreamRef.current;
         if (!stream) {
-          console.error('[Call] handleCallAccepted: localStream not ready yet, waiting...');
+          // If we are the caller but have no local stream, this tab is likely a secondary tab
+          // that didn't originate the call. Transition to external mode.
+          const isCaller = activeCallRef.current?.callerId === currentUser?.uid;
+          if (isCaller) {
+            console.log('[Call] handleCallAccepted: Secondary tab detected, transitioning to external mode');
+            setActiveCall({ ...activeCallRef.current!, status: 'active', isExternal: true });
+            startCallTimer();
+            return;
+          }
+
+          console.warn('[Call] handleCallAccepted: localStream not ready yet, waiting...');
           // Stream not ready yet — wait for it with a timeout
           const checkStream = setInterval(() => {
             const s = localStreamRef.current;
@@ -179,6 +209,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   endCallCleanup();
                 },
               );
+              processPendingSignals();
             }
           }, 100);
           // Timeout after 5 seconds
@@ -202,6 +233,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             endCallCleanup();
           },
         );
+        processPendingSignals();
       }
     };
 
@@ -211,7 +243,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.ANSWER, data);
       } else {
-        processAnswer(data.answer);
+        if (hasPeer()) {
+          processAnswer(data.answer);
+        } else {
+          // Buffer the answer with its callId
+          pendingSignalsRef.current.push(data);
+        }
       }
     };
 
@@ -224,7 +261,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.ICE_CANDIDATE, data);
       } else {
-        processSignal(data.candidate);
+        if (hasPeer()) {
+          processSignal(data.candidate);
+        } else {
+          // Buffer the candidate with its callId
+          pendingSignalsRef.current.push(data);
+        }
       }
     };
 
@@ -233,6 +275,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const ac = activeCallRef.current;
       const ic = incomingCallRef.current;
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
+      console.log(`[Call] handleCallEnded for ${data.callId}, byDisconnect: ${data.byDisconnect}`);
       const wasActive = ac?.status === 'active';
       clearRingingTimer();
       // Stop all ringtones when call ends
@@ -257,6 +300,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       stopCallTimer();
+      console.log('[Call] Calling endCallCleanup from handleCallEnded');
       endCallCleanup();
       showNotification({ title: 'TeleDesk', body: wasActive ? 'Call ended' : 'Call cancelled' });
     };
@@ -284,11 +328,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // --------- Renegotiation offer (e.g. screen share on voice call) ---------------------
     const handleRenegotiationOffer = (data: { from: string; callId: string; offer: RTCSessionDescriptionInit }) => {
-      if (activeCallRef.current?.callId !== data.callId) return;
+      const ac = activeCallRef.current;
+      if (ac?.callId !== data.callId) return;
+
       if (isElectron()) {
         relayToCallWindow(SOCKET_EVENTS.OFFER, data);
       } else {
-        if (!hasPeer()) return;
+        // If the call is not yet fully active, buffer this offer
+        if (!hasPeer() || ac.status !== 'active') {
+          console.log('[Call] Buffering renegotiation offer:', data.callId);
+          pendingSignalsRef.current.push(data);
+          return;
+        }
         processRenegotiationOffer(data.offer, data.from, data.callId);
       }
     };
@@ -304,11 +355,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // ─── Call Handled Elsewhere (accepted or rejected on another device) ───
-    const handleCallHandledElsewhere = (data: { callId: string }) => {
+    const handleCallHandledElsewhere = (data: { callId: string; handledBy?: string }) => {
       const ac = activeCallRef.current;
       const ic = incomingCallRef.current;
       if (ac?.callId !== data.callId && ic?.callId !== data.callId) return;
 
+      // SAFETY: Don't end the call if it was handled BY THIS SOCKET
+      const socket = getSocket();
+      if (data.handledBy && socket && data.handledBy === socket.id) {
+        console.log('[Call] Ignoring CALL_HANDLED_ELSEWHERE from self');
+        return;
+      }
+
+      console.log(`[Call] handleCallHandledElsewhere for ${data.callId}`);
       clearRingingTimer();
       callAudioService.stopAllRingtones();
       
@@ -323,6 +382,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         stopLocalStream();
       }
       
+      console.log('[Call] Calling endCallCleanup from handleCallHandledElsewhere');
       endCallCleanup();
     };
 
@@ -564,15 +624,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStreamRef.current = localStream;
     setLocalStream(localStream);
 
-    socket?.emit(SOCKET_EVENTS.ACCEPT_CALL, {
-      callId: incomingCall.callId,
-      callerId: incomingCall.callerId,
-    });
-
-    setActiveCall({ ...incomingCall, status: 'active' });
-    setIncomingCall(null);
-    startCallTimer();
-
     const handleOffer = (data: {
       from: string;
       callId: string;
@@ -592,9 +643,19 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           endCallCleanup();
         },
       );
+      processPendingSignals();
     };
 
     socket?.on(SOCKET_EVENTS.OFFER, handleOffer);
+
+    socket?.emit(SOCKET_EVENTS.ACCEPT_CALL, {
+      callId: incomingCall.callId,
+      callerId: incomingCall.callerId,
+    });
+
+    setActiveCall({ ...incomingCall, status: 'active' });
+    setIncomingCall(null);
+    startCallTimer();
   };
 
   // --------- rejectIncomingCall ---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -719,6 +780,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 endCallCleanup();
               },
             );
+            processPendingSignals();
           };
           
           socket.on(SOCKET_EVENTS.OFFER, handleOffer);

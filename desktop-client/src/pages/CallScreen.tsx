@@ -587,9 +587,18 @@ const CallScreen: React.FC = () => {
           transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
         })
       }}
+      onClick={(e) => {
+        // Accessibility/Autoplay safeguard: ensure audio/video is playing on first interaction
+        if (remoteAudioRef.current) remoteAudioRef.current.play().catch(() => {});
+        // Also find any video elements and play them
+        const videos = (e.currentTarget as HTMLElement).querySelectorAll('video');
+        videos.forEach(v => v.play().catch(() => {}));
+      }}
     >
       {/* ── DOM Audio Element for Remote Stream ────────────── */}
-      <audio ref={remoteAudioRef} autoPlay muted={false} style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} />
+      {!effectiveIsVideo && (
+        <audio ref={remoteAudioRef} autoPlay muted={false} style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} />
+      )}
 
       {/* ── Video / audio area ─────────────────────────────────────── */}
       <div

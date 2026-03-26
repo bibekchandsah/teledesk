@@ -25,6 +25,7 @@ let remoteStreamCallback: ((stream: MediaStream) => void) | null = null;
 let currentTargetUserId: string | null = null;
 let currentCallId: string | null = null;
 let hasReceivedInitialAnswer = false;
+let isInitiator = false;
 
 export const hasPeer = (): boolean => currentPeer !== null && !(currentPeer as any).destroyed;
 
@@ -231,8 +232,25 @@ function attachRenegotiationTrackListener(
   const pc: RTCPeerConnection = (currentPeer as any)._pc;
   if (!pc) return;
   pc.addEventListener('track', (event: RTCTrackEvent) => {
-    if (!firstRemoteStream) return; // initial stream not set yet — simple-peer handles it
-    const track = event.track;
+    const { track } = event;
+    if (!firstRemoteStream) {
+      // If the track event arrives before simple-peer's 'stream' event,
+      // initialize firstRemoteStream now so we don't lose the track.
+      if (track.kind === 'audio' || track.kind === 'video') {
+         firstRemoteStream = new MediaStream([track]);
+         // Attach onunmute for video tracks
+         if (track.kind === 'video') {
+           track.onunmute = () => {
+             if (!firstRemoteStream || !remoteStreamCallback) return;
+             const clone = new MediaStream(firstRemoteStream.getTracks());
+             firstRemoteStream = clone;
+             remoteStreamCallback(clone);
+           };
+         }
+         onRemoteStream(firstRemoteStream);
+      }
+      return;
+    }
 
     // Immediately add the track if it arrived after the initial stream grouping
     if (!firstRemoteStream.getTrackById(track.id)) {
@@ -273,7 +291,9 @@ export const createInitiatorPeer = (
   onRemoteStream: (stream: MediaStream) => void,
   onError: (err: Error) => void,
 ): SimplePeerInstance => {
+  console.log(`[WebRTC] Creating Initiator peer for call ${callId} to user ${targetUserId}`);
   destroyPeer();
+  isInitiator = true;
   firstRemoteStream = null;
   remoteStreamCallback = onRemoteStream;
 
@@ -290,6 +310,7 @@ export const createInitiatorPeer = (
   });
 
   currentPeer.on('signal', (data) => {
+    console.log(`[WebRTC] Initiator signal generated: ${data.type || 'candidate'}`);
     if (data.type === 'offer') {
       sendOffer(targetUserId, callId, { type: data.type, sdp: (data as { type: string; sdp?: string }).sdp });
     } else if ((data as unknown as { candidate?: unknown }).candidate) {
@@ -298,20 +319,27 @@ export const createInitiatorPeer = (
     }
   });
 
-  // Attach after simple-peer has set up its own listeners (next tick).
-  // Catches renegotiation video tracks A receives from B (e.g. B enables camera).
-  setTimeout(() => attachRenegotiationTrackListener(onRemoteStream), 0);
-
-  // Add connection diagnostics
-  setTimeout(() => addConnectionDiagnostics(currentPeer, onError, 'Initiator'), 0);
+  // Attach immediately to ensure no 'track' events are missed during initial handshake
+  attachRenegotiationTrackListener(onRemoteStream);
+  addConnectionDiagnostics(currentPeer, onError, 'Initiator');
 
   currentPeer.on('stream', (remoteStream) => {
     if (!firstRemoteStream) {
+      // BRUTE FORCE TRACK GATHERING: simple-peer notoriously drops tracks in modern Chrome
+      // if they arrive asynchronously. We query the raw receivers to guarantee nothing is lost!
+      const pc: RTCPeerConnection = (currentPeer as any)._pc;
+      if (pc) {
+        const allTracks = pc.getReceivers().map(r => r.track).filter(Boolean) as MediaStreamTrack[];
+        allTracks.forEach(t => {
+          if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+        });
+      }
+
       firstRemoteStream = remoteStream;
-      // Attach onunmute to existing video tracks so re-enable cycles (replaceTrack after
-      // replaceTrack(null)) trigger a React re-render even without renegotiation.
-      remoteStream.getVideoTracks().forEach((track) => {
+      // Attach onunmute to all tracks for reliable UI refresh and resume cycles.
+      remoteStream.getTracks().forEach((track) => {
         track.onunmute = () => {
+          console.log(`[WebRTC] Initiator track ${track.kind} unmuted, refreshing stream`);
           if (!firstRemoteStream || !remoteStreamCallback) return;
           const clone = new MediaStream(firstRemoteStream.getTracks());
           firstRemoteStream = clone;
@@ -325,8 +353,12 @@ export const createInitiatorPeer = (
   });
 
   currentPeer.on('error', (err) => {
-    console.error('[WebRTC] Peer error:', err);
+    console.error(`[WebRTC] Initiator peer error for ${callId}:`, err);
     onError(err);
+  });
+
+  currentPeer.on('close', () => {
+    console.log(`[WebRTC] Initiator peer closed for ${callId}`);
   });
 
   return currentPeer;
@@ -343,7 +375,9 @@ export const createReceiverPeer = (
   onRemoteStream: (stream: MediaStream) => void,
   onError: (err: Error) => void,
 ): SimplePeerInstance => {
+  console.log(`[WebRTC] Creating Receiver peer for call ${callId} from user ${callerId}`);
   destroyPeer();
+  isInitiator = false;
   firstRemoteStream = null;
   remoteStreamCallback = onRemoteStream;
 
@@ -359,17 +393,15 @@ export const createReceiverPeer = (
     },
   });
 
-  // Attach after simple-peer has set up its own listeners (next tick).
-  // Shared helper handles both renegotiation tracks and onunmute resume cycles.
-  setTimeout(() => attachRenegotiationTrackListener(onRemoteStream), 0);
-
-  // Add connection diagnostics
-  setTimeout(() => addConnectionDiagnostics(currentPeer, onError, 'Receiver'), 0);
+  // Attach immediately to ensure no 'track' events are missed during initial handshake
+  attachRenegotiationTrackListener(onRemoteStream);
+  addConnectionDiagnostics(currentPeer, onError, 'Receiver');
 
   // Process the incoming offer immediately
   currentPeer.signal(offer as unknown as import('simple-peer').SignalData);
 
   currentPeer.on('signal', (data) => {
+    console.log(`[WebRTC] Receiver signal generated: ${data.type || 'candidate'}`);
     if (data.type === 'answer') {
       sendAnswer(callerId, callId, { type: data.type, sdp: (data as { type: string; sdp?: string }).sdp });
     } else if ((data as unknown as { candidate?: unknown }).candidate) {
@@ -386,14 +418,21 @@ export const createReceiverPeer = (
       if (pc) {
         const allTracks = pc.getReceivers().map(r => r.track).filter(Boolean) as MediaStreamTrack[];
         allTracks.forEach(t => {
-          if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+          if (!remoteStream.getTrackById(t.id)) {
+            console.log(`[WebRTC] Receiver brute-force adding track: ${t.kind} ${t.id}`);
+            remoteStream.addTrack(t);
+          }
         });
+        // Clone to ensure UI recognizes the change immediately
+        const updated = new MediaStream(remoteStream.getTracks());
+        remoteStream = updated;
       }
       
       firstRemoteStream = remoteStream;
-      // Attach onunmute to initial video tracks for replaceTrack resume cycles.
-      remoteStream.getVideoTracks().forEach((track) => {
+      // Attach onunmute to all tracks for reliable UI refresh and resume cycles.
+      remoteStream.getTracks().forEach((track) => {
         track.onunmute = () => {
+          console.log(`[WebRTC] Receiver track ${track.kind} unmuted, refreshing stream`);
           if (!firstRemoteStream || !remoteStreamCallback) return;
           const clone = new MediaStream(firstRemoteStream.getTracks());
           firstRemoteStream = clone;
@@ -407,8 +446,12 @@ export const createReceiverPeer = (
   });
 
   currentPeer.on('error', (err) => {
-    console.error('[WebRTC] Peer error:', err);
+    console.error(`[WebRTC] Receiver peer error for ${callId}:`, err);
     onError(err);
+  });
+
+  currentPeer.on('close', () => {
+    console.log(`[WebRTC] Receiver peer closed for ${callId}`);
   });
 
   return currentPeer;
@@ -418,7 +461,12 @@ export const createReceiverPeer = (
  * Pass ICE candidate or answer signal to current peer
  */
 export const processSignal = (data: { type?: string; sdp?: string } | { candidate: string; sdpMLineIndex: number | null; sdpMid: string | null }): void => {
-  currentPeer?.signal(data as unknown as import('simple-peer').SignalData);
+  if (!currentPeer || (currentPeer as any).destroyed) {
+    console.warn('[WebRTC] Signal received but no active peer', data);
+    return;
+  }
+  console.log('[WebRTC] Processing signal:', (data as any).type || 'candidate');
+  currentPeer.signal(data as unknown as import('simple-peer').SignalData);
 };
 
 /**
@@ -441,10 +489,13 @@ export const processRenegotiationAnswer = async (answer: RTCSessionDescriptionIn
  * Process an incoming answer (can be initial or renegotiation).
  */
 export const processAnswer = (answer: RTCSessionDescriptionInit): void => {
-  if (!hasReceivedInitialAnswer) {
+  console.log('[WebRTC] processAnswer received:', answer.type, 'isInitiator:', isInitiator);
+  if (isInitiator && !hasReceivedInitialAnswer) {
+    console.log('[WebRTC] Handing initial answer to simple-peer');
     hasReceivedInitialAnswer = true;
     processSignal(answer as unknown as import('simple-peer').SignalData);
   } else {
+    console.log('[WebRTC] Handing answer to manual renegotiation handler');
     processRenegotiationAnswer(answer);
   }
 };
@@ -755,12 +806,17 @@ export const disableCallVideo = async (): Promise<void> => {
  * Destroy current peer connection
  */
 export const destroyPeer = (): void => {
-  if (currentPeer && !currentPeer.destroyed) {
-    currentPeer.destroy();
+  if (currentPeer) {
+    console.log('[WebRTC] Destroying peer connection');
+    if (!currentPeer.destroyed) {
+      currentPeer.destroy();
+    }
   }
   currentPeer = null;
   firstRemoteStream = null;
   remoteStreamCallback = null;
+  hasReceivedInitialAnswer = false;
+  isInitiator = false;
 };
 
 /**

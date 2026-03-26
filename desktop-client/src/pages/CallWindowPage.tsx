@@ -352,20 +352,33 @@ const CallWindowPage: React.FC = () => {
         }
       });
 
-      peer.on('stream', (stream: MediaStream) => {
-        firstRemoteStreamRef.current = stream;
-        setRemoteStream(stream);
+      peer.on('stream', (remoteStream: MediaStream) => {
+        // BRUTE FORCE TRACK GATHERING: simple-peer notoriously drops tracks in modern Chrome
+        // if they arrive asynchronously. We query the raw receivers to guarantee nothing is lost!
+        const pc: RTCPeerConnection = (peer as any)._pc;
+        if (pc) {
+          const allTracks = pc.getReceivers().map(r => r.track).filter(Boolean) as MediaStreamTrack[];
+          allTracks.forEach(t => {
+            if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+          });
+        }
+        firstRemoteStreamRef.current = remoteStream;
+        setRemoteStream(remoteStream);
       });
 
-      // Merge new video tracks added via renegotiation (e.g. remote enables camera during voice call)
+      // Unified track listener for both initial and renegotiation tracks
       peer.on('track', (track: MediaStreamTrack) => {
-        if (track.kind === 'video' && firstRemoteStreamRef.current) {
-          firstRemoteStreamRef.current.getVideoTracks().forEach((t) => {
-            if (t.id !== track.id) firstRemoteStreamRef.current!.removeTrack(t);
-          });
-          if (!firstRemoteStreamRef.current.getTrackById(track.id)) {
-            firstRemoteStreamRef.current.addTrack(track);
+        if (!firstRemoteStreamRef.current) {
+          firstRemoteStreamRef.current = new MediaStream([track]);
+          setRemoteStream(firstRemoteStreamRef.current);
+          return;
+        }
+        if (!firstRemoteStreamRef.current.getTrackById(track.id)) {
+          // Replace old video with new video if different
+          if (track.kind === 'video') {
+            firstRemoteStreamRef.current.getVideoTracks().forEach(t => firstRemoteStreamRef.current!.removeTrack(t));
           }
+          firstRemoteStreamRef.current.addTrack(track);
           const updated = new MediaStream(firstRemoteStreamRef.current.getTracks());
           firstRemoteStreamRef.current = updated;
           setRemoteStream(updated);
@@ -417,20 +430,31 @@ const CallWindowPage: React.FC = () => {
         }
       });
 
-      peer.on('stream', (stream: MediaStream) => {
-        firstRemoteStreamRef.current = stream;
-        setRemoteStream(stream);
+      peer.on('stream', (remoteStream: MediaStream) => {
+        // BRUTE FORCE TRACK GATHERING
+        const pc: RTCPeerConnection = (peer as any)._pc;
+        if (pc) {
+          const allTracks = pc.getReceivers().map(r => r.track).filter(Boolean) as MediaStreamTrack[];
+          allTracks.forEach(t => {
+            if (!remoteStream.getTrackById(t.id)) remoteStream.addTrack(t);
+          });
+        }
+        firstRemoteStreamRef.current = remoteStream;
+        setRemoteStream(remoteStream);
       });
 
-      // Merge new video tracks added via renegotiation (e.g. remote enables camera during voice call)
       peer.on('track', (track: MediaStreamTrack) => {
-        if (track.kind === 'video' && firstRemoteStreamRef.current) {
-          firstRemoteStreamRef.current.getVideoTracks().forEach((t) => {
-            if (t.id !== track.id) firstRemoteStreamRef.current!.removeTrack(t);
-          });
-          if (!firstRemoteStreamRef.current.getTrackById(track.id)) {
-            firstRemoteStreamRef.current.addTrack(track);
+        if (!firstRemoteStreamRef.current) {
+          firstRemoteStreamRef.current = new MediaStream([track]);
+          setRemoteStream(firstRemoteStreamRef.current);
+          return;
+        }
+        if (!firstRemoteStreamRef.current.getTrackById(track.id)) {
+          if (track.kind === 'video') {
+             // Replace old video with new video
+             firstRemoteStreamRef.current.getVideoTracks().forEach(t => firstRemoteStreamRef.current!.removeTrack(t));
           }
+          firstRemoteStreamRef.current.addTrack(track);
           const updated = new MediaStream(firstRemoteStreamRef.current.getTracks());
           firstRemoteStreamRef.current = updated;
           setRemoteStream(updated);
@@ -535,6 +559,9 @@ const CallWindowPage: React.FC = () => {
               );
             }
           }
+        } else {
+          // Queue until peer is created (crucial for WebRTC transfer racing)
+          pendingSignalsRef.current.push(answerData.answer);
         }
         return;
       }
