@@ -312,6 +312,7 @@ export const createInitiatorPeer = (
       iceTransportPolicy: WEBRTC_CONFIG.ICE_TRANSPORT_POLICY,
       bundlePolicy: WEBRTC_CONFIG.BUNDLE_POLICY,
       rtcpMuxPolicy: WEBRTC_CONFIG.RTCP_MUX_POLICY,
+      iceCandidatePoolSize: WEBRTC_CONFIG.ICE_CANDIDATE_POOL_SIZE,
     },
   });
 
@@ -397,6 +398,7 @@ export const createReceiverPeer = (
       iceTransportPolicy: WEBRTC_CONFIG.ICE_TRANSPORT_POLICY,
       bundlePolicy: WEBRTC_CONFIG.BUNDLE_POLICY,
       rtcpMuxPolicy: WEBRTC_CONFIG.RTCP_MUX_POLICY,
+      iceCandidatePoolSize: WEBRTC_CONFIG.ICE_CANDIDATE_POOL_SIZE,
     },
   });
 

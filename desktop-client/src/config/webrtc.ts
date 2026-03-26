@@ -1,11 +1,19 @@
 /**
  * WebRTC Configuration for Frontend
- * Includes TURN server configuration from environment variables
+ * Includes TURN server configuration from environment variables or defaults
  */
 
 // Helper function to get ICE servers from environment or defaults
 const getIceServers = (): RTCIceServer[] => {
   const servers: RTCIceServer[] = [];
+
+  // Add STUN servers (discovery) first as they are fastest and almost always needed
+  servers.push(
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' }
+  );
 
   // Add TURN servers from environment variables if available
   const turnUrl = import.meta.env.VITE_TURN_URL;
@@ -27,7 +35,34 @@ const getIceServers = (): RTCIceServer[] => {
       }
     );
   } else {
-    // No custom TURN - use free public TURN servers
+    // Primary: User-provided Metered.ca Global Relay with credentials
+    const meteredUsername = "a3eb2fae2839009d29924329";
+    const meteredSecret = "D+d8oMz/ZjBWc+eV";
+    
+    servers.push(
+      { 
+        urls: 'turn:global.relay.metered.ca:80',
+        username: meteredUsername,
+        credential: meteredSecret
+      },
+      { 
+        urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+        username: meteredUsername,
+        credential: meteredSecret
+      },
+      { 
+        urls: 'turns:global.relay.metered.ca:443',
+        username: meteredUsername,
+        credential: meteredSecret
+      },
+      { 
+        urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+        username: meteredUsername,
+        credential: meteredSecret
+      }
+    );
+
+    // Fallback: Public OpenRelay (shared credentials)
     servers.push(
       { 
         urls: 'turn:openrelay.metered.ca:80',
@@ -38,43 +73,9 @@ const getIceServers = (): RTCIceServer[] => {
         urls: 'turns:openrelay.metered.ca:443',
         username: 'openrelayproject',
         credential: 'openrelayproject'
-      },
-      { 
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80",
-        username: "a3eb2fae2839009d29924329",
-        credential: "D+d8oMz/ZjBWc+eV",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
-        username: "a3eb2fae2839009d29924329",
-        credential: "D+d8oMz/ZjBWc+eV",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:443",
-        username: "a3eb2fae2839009d29924329",
-        credential: "D+d8oMz/ZjBWc+eV",
-      },
-      {
-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
-        username: "a3eb2fae2839009d29924329",
-        credential: "D+d8oMz/ZjBWc+eV",
       }
     );
   }
-
-  // Add multiple reliable STUN servers
-  servers.push(
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun.relay.metered.ca:80' }
-  );
 
   return servers;
 };
@@ -87,6 +88,8 @@ export const WEBRTC_CONFIG = {
   BUNDLE_POLICY: 'max-bundle' as RTCBundlePolicy,
   // RTCP mux policy - require for better performance
   RTCP_MUX_POLICY: 'require' as RTCRtcpMuxPolicy,
+  // ICE candidate pool size - pre-gathers candidates for faster connection
+  ICE_CANDIDATE_POOL_SIZE: 10,
 } as const;
 
 // Log the configuration for debugging (only in development)
