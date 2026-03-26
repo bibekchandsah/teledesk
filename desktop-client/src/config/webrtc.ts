@@ -27,7 +27,7 @@ const getIceServers = (): RTCIceServer[] => {
       }
     );
   } else {
-    // No custom TURN - use free public TURN servers (limited but works for testing)
+    // No custom TURN - use free public TURN servers
     servers.push(
       { 
         urls: 'turn:openrelay.metered.ca:80',
@@ -38,13 +38,21 @@ const getIceServers = (): RTCIceServer[] => {
         urls: 'turn:openrelay.metered.ca:443',
         username: 'openrelayproject',
         credential: 'openrelayproject'
+      },
+      { 
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
       }
     );
   }
 
-  // Add ONE reliable STUN server (Google's primary)
-  // STUN is only needed for discovering public IP, one server is enough
-  servers.push({ urls: 'stun:stun.l.google.com:19302' });
+  // Add multiple reliable STUN servers
+  servers.push(
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.relay.metered.ca:80' }
+  );
 
   return servers;
 };
