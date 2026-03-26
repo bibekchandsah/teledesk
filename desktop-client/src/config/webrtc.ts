@@ -1,45 +1,57 @@
 /**
  * WebRTC Configuration for Frontend
- * Simplified for maximum reliability across restrictive networks
+ * Includes multiple TURN fallback servers for maximum reliability
  */
 
 const getIceServers = (): RTCIceServer[] => {
   const servers: RTCIceServer[] = [];
 
-  // 1. STUN servers (discovery)
+  // 1. Primary STUN servers
   servers.push(
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:global.relay.metered.ca:80' }
+    { urls: 'stun:stun.turnix.io:3478' }
   );
 
-  // 2. Metered.ca TURN (using user-provided credentials)
-  // We prioritize TLS (turns:) on 443 as it's the most likely to bypass firewalls
-  const meteredUsername = "a3eb2fae2839009d29924329";
-  const meteredSecret = "D+d8oMz/ZjBWc+eV";
+  // 2. TURN servers - High Priority (Turnix - valid until 2028)
+  servers.push({
+    urls: [
+      "turn:eu-central.turnix.io:3478?transport=udp",
+      "turn:eu-central.turnix.io:3478?transport=tcp",
+      "turns:eu-central.turnix.io:443?transport=udp",
+      "turns:eu-central.turnix.io:443?transport=tcp"
+    ],
+    username: "98826885-d2c5-4c2e-940b-d4491d20eeb4",
+    credential: "712cea9e21bee1018b80dffa397ff924"
+  });
 
-  servers.push(
-    { 
-      urls: 'turns:global.relay.metered.ca:443',
-      username: meteredUsername,
-      credential: meteredSecret
-    },
-    { 
-      urls: 'turn:global.relay.metered.ca:80',
-      username: meteredUsername,
-      credential: meteredSecret
-    }
-  );
+  // 3. TURN servers - Medium Priority (ExpressTurn)
+  servers.push({
+    urls: 'turn:free.expressturn.com:3478',
+    username: '000000002089881963',
+    credential: 'lcodSjMIrHW1RIENl/n5SMMSFVY='
+  });
 
-  // 3. Fallback public TURN
+  // 4. TURN servers - Fallback (OpenRelay Metered - might be over quota)
   servers.push(
     { 
       urls: 'turns:openrelay.metered.ca:443',
       username: 'openrelayproject',
       credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayprojectsecret'
     }
   );
+
+  // 5. TURN servers - Last Resort (Low Bandwidth fallback)
+  servers.push({
+    urls: 'turn:freestun.net:3478',
+    username: 'free',
+    credential: 'free'
+  });
 
   return servers;
 };
@@ -49,10 +61,10 @@ export const WEBRTC_CONFIG = {
   ICE_TRANSPORT_POLICY: 'all' as RTCIceTransportPolicy,
   BUNDLE_POLICY: 'max-bundle' as RTCBundlePolicy,
   RTCP_MUX_POLICY: 'require' as RTCRtcpMuxPolicy,
-  // Disable pool for now to prevent interface errors (701) on some devices
+  // Keep pool at 0 or small value if previous 701 errors occurred
   ICE_CANDIDATE_POOL_SIZE: 0,
 } as const;
 
 if (import.meta.env.DEV) {
-  console.log('[WebRTC Config] Simplified ICE Servers:', WEBRTC_CONFIG.ICE_SERVERS);
+  console.log('[WebRTC Config] Multi-Server ICE Config Loaded. Total servers:', WEBRTC_CONFIG.ICE_SERVERS.length);
 }
