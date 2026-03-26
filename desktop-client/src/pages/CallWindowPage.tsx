@@ -522,7 +522,9 @@ const CallWindowPage: React.FC = () => {
       if (event === SOCKET_EVENTS.ANSWER) {
         const answerData = data as { answer: import('simple-peer').SignalData };
         if (peerRef.current && !(peerRef.current as unknown as { destroyed: boolean }).destroyed) {
-          if (!hasReceivedInitialAnswerRef.current) {
+          // Only the Initiator ever receives an *initial* answer.
+          // The Receiver only ever receives answers during renegotiation.
+          if (cd?.isOutgoing && !hasReceivedInitialAnswerRef.current) {
             hasReceivedInitialAnswerRef.current = true;
             peerRef.current.signal(answerData.answer);
           } else {

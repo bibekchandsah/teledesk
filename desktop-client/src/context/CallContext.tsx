@@ -655,30 +655,29 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const socket = getSocket();
     if (!socket) return;
 
-    // Notify backend to take over (sends ACCEPT_CALL to peer)
     const targetUserId = call.callerId === currentUser?.uid ? call.receiverId : call.callerId;
-    socket.emit(SOCKET_EVENTS.ACCEPT_CALL, {
-      callId: call.callId,
-      callerId: targetUserId,
-    });
-
-    // Mark as local active call
-    const localCall = { ...call, isExternal: false, status: 'active' as const };
-    setActiveCall(localCall);
-    activeCallRef.current = localCall;
-
+    
     // Sync the call timer to match the ongoing call's duration
     const initialSecs = call.startTime ? Math.floor((Date.now() - call.startTime) / 1000) : 0;
 
     // Open call window
     if (isElectron()) {
+      socket.emit(SOCKET_EVENTS.ACCEPT_CALL, {
+        callId: call.callId,
+        callerId: targetUserId,
+      });
+
+      const localCall = { ...call, isExternal: false, status: 'active' as const };
+      setActiveCall(localCall);
+      activeCallRef.current = localCall;
+
       const isOutgoingTransfer = call.callerId === currentUser?.uid;
-      const targetUserId: string = (isOutgoingTransfer ? call.receiverId : call.callerId) || '';
+      const tId: string = (isOutgoingTransfer ? call.receiverId : call.callerId) || '';
       window.electronAPI!.openCallWindow!({
         callId: call.callId,
         callType: call.type,
         isOutgoing: isOutgoingTransfer,
-        targetUserId,
+        targetUserId: tId,
         targetName: (isOutgoingTransfer ? call.receiverName : call.callerName) || 'User',
         targetAvatar: isOutgoingTransfer ? call.receiverAvatar : call.callerAvatar,
         startTime: call.startTime,
@@ -687,6 +686,61 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       // Web fallback: start the WebRTC connection and timer in sync
       startCallTimerAt(initialSecs);
+      
+      const setupContinue = async () => {
+        try {
+          // 1. Get user media stream for the new device
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: call.type === 'video',
+            audio: true,
+          });
+          localStreamRef.current = stream;
+          setLocalStream(stream);
+
+          // 2. Listen for the OFFER from the caller (who is recreating their peer)
+          const handleOffer = (data: {
+            from: string;
+            callId: string;
+            offer: RTCSessionDescriptionInit;
+          }) => {
+            if (data.callId !== call.callId) return;
+            socket.off(SOCKET_EVENTS.OFFER, handleOffer);
+            setCallTarget(data.from, call.callId);
+            
+            // 3. Create the receiver peer with the incoming offer
+            createReceiverPeer(
+              stream,
+              call.callId,
+              data.from,
+              data.offer,
+              (remoteStream) => { setRemoteStream(remoteStream); },
+              (err) => {
+                console.error('[Call] Receiver peer error during continue:', err);
+                endCallCleanup();
+              },
+            );
+          };
+          
+          socket.on(SOCKET_EVENTS.OFFER, handleOffer);
+
+          // We're ready to receive OFFER: tell the caller to recreate their peer!
+          socket.emit(SOCKET_EVENTS.ACCEPT_CALL, {
+            callId: call.callId,
+            callerId: targetUserId,
+          });
+
+          // Update local state to active now that the UI should transition
+          const localCall = { ...call, isExternal: false, status: 'active' as const };
+          setActiveCall(localCall);
+          activeCallRef.current = localCall;
+
+        } catch (err) {
+          console.error('[Call] Failed to get local stream for continueCall:', err);
+          endCallCleanup();
+        }
+      };
+      
+      setupContinue();
     }
   };
 

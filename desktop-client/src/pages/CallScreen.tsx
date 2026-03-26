@@ -291,9 +291,8 @@ const CallScreen: React.FC = () => {
     };
   }, [activeCall]);
 
-  if (!activeCall || activeCall.isExternal) return null;
-
-  const isVideo = activeCall.type === 'video';
+  // (Early return moved below to satisfy React Hook rules)
+  const isVideo = activeCall?.type === 'video';
   // A voice call is effectively in video mode when the local user has enabled their camera
   // OR when the remote peer is sending video (i.e. track is live AND not muted).
   // After replaceTrack(null), the track stays 'live' but .muted becomes true — we treat
@@ -309,22 +308,23 @@ const CallScreen: React.FC = () => {
   // When both users turn off their cameras the layout reverts to voice-call mode.
   const effectiveIsVideo = localHasVideo || remoteHasVideo;
   const currentUid = currentUser?.uid ?? '';
-  const peerUid = activeCall.callerId === currentUid ? activeCall.receiverId : activeCall.callerId;
+  const peerUid = activeCall?.callerId === currentUid ? activeCall?.receiverId : activeCall?.callerId;
   const peerRawName =
-    activeCall.callerId === currentUid
-      ? (activeCall.receiverName || activeCall.receiverId)
-      : activeCall.callerName;
-  const peerName = nicknames[peerUid] || peerRawName;
+    activeCall?.callerId === currentUid
+      ? (activeCall?.receiverName || activeCall?.receiverId)
+      : activeCall?.callerName;
+  const peerName: string = (peerUid ? nicknames[peerUid] : null) || (peerRawName as string | undefined) || 'Unknown';
   const peerAvatar =
-    activeCall.callerId === currentUid
-      ? activeCall.receiverAvatar
-      : activeCall.callerAvatar;
+    activeCall?.callerId === currentUid
+      ? activeCall?.receiverAvatar
+      : activeCall?.callerAvatar;
 
   // Find the 1-on-1 chat between the two participants
   const callChat = useMemo(() => {
     return chats.find(
       (c) =>
         c.type === 'private' &&
+        peerUid &&
         c.members.includes(currentUid) &&
         c.members.includes(peerUid),
     );
@@ -338,21 +338,23 @@ const CallScreen: React.FC = () => {
   }, [callChat, selectedChatId]);
 
   const handleToggleMute = () => {
+    if (!activeCall) return;
     const newMuted = !isMuted;
     setMuted(newMuted);
     toggleAudio(!newMuted);
-    if (activeCall.status === 'active') {
+    if (activeCall.status === 'active' && peerUid) {
       sendCallMuteChanged(peerUid, activeCall.callId, newMuted);
     }
   };
 
   const handleToggleVideo = async () => {
+    if (!activeCall) return;
     if (activeCall.type === 'video') {
       // Standard video call: use replaceTrack so remote sees muted state change
       const newOff = !isVideoOff;
       setVideoOff(newOff);
       try { await toggleVideo(!newOff); } catch (e) { console.error('[Call] toggleVideo', e); }
-      if (activeCall.status === 'active') {
+      if (activeCall.status === 'active' && peerUid) {
         sendCallVideoChanged(peerUid, activeCall.callId, newOff);
       }
     } else {
@@ -361,13 +363,13 @@ const CallScreen: React.FC = () => {
         try {
           await disableCallVideo();
           setIsLocalVideoEnabled(false);
-          if (activeCall.status === 'active') sendCallVideoChanged(peerUid, activeCall.callId, true);
+          if (activeCall.status === 'active' && peerUid) sendCallVideoChanged(peerUid, activeCall.callId, true);
         } catch (e) { console.error('[Call] disableCallVideo', e); }
       } else {
         try {
           await enableCallVideo();
           setIsLocalVideoEnabled(true);
-          if (activeCall.status === 'active') sendCallVideoChanged(peerUid, activeCall.callId, false);
+          if (activeCall.status === 'active' && peerUid) sendCallVideoChanged(peerUid, activeCall.callId, false);
         } catch (e) { console.error('[Call] enableCallVideo', e); }
       }
     }
@@ -551,6 +553,9 @@ const CallScreen: React.FC = () => {
     
     if (cur !== mainCursor) setMainCursor(cur);
   };
+
+  // MUST BE PLACED HERE to satisfy React Hooks rules!
+  if (!activeCall || activeCall.isExternal) return null;
 
   return (
     <div
