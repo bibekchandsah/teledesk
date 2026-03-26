@@ -29,6 +29,21 @@ const getIceServers = (): RTCIceServer[] => {
   } else {
     // No custom TURN - use free public TURN servers
     servers.push(
+      { 
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      { 
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      { 
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
       {
         urls: "turn:global.relay.metered.ca:80",
         username: "a3eb2fae2839009d29924329",
@@ -48,21 +63,6 @@ const getIceServers = (): RTCIceServer[] => {
         urls: "turns:global.relay.metered.ca:443?transport=tcp",
         username: "a3eb2fae2839009d29924329",
         credential: "D+d8oMz/ZjBWc+eV",
-      },
-      { 
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      { 
-        urls: 'turns:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      { 
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
       }
     );
   }
