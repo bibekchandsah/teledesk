@@ -35,7 +35,7 @@ const getIceServers = (): RTCIceServer[] => {
         credential: 'openrelayproject'
       },
       { 
-        urls: 'turn:openrelay.metered.ca:443',
+        urls: 'turns:openrelay.metered.ca:443',
         username: 'openrelayproject',
         credential: 'openrelayproject'
       },
@@ -43,6 +43,26 @@ const getIceServers = (): RTCIceServer[] => {
         urls: 'turn:openrelay.metered.ca:443?transport=tcp',
         username: 'openrelayproject',
         credential: 'openrelayproject'
+      // },
+      // {
+      //   urls: "turn:global.relay.metered.ca:80",
+      //   username: "a3eb2fae2839009d29924329",
+      //   credential: "D+d8oMz/ZjBWc+eV",
+      // },
+      // {
+      //   urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      //   username: "a3eb2fae2839009d29924329",
+      //   credential: "D+d8oMz/ZjBWc+eV",
+      // },
+      // {
+      //   urls: "turn:global.relay.metered.ca:443",
+      //   username: "a3eb2fae2839009d29924329",
+      //   credential: "D+d8oMz/ZjBWc+eV",
+      // },
+      // {
+      //   urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      //   username: "a3eb2fae2839009d29924329",
+      //   credential: "D+d8oMz/ZjBWc+eV",
       }
     );
   }
@@ -51,6 +71,8 @@ const getIceServers = (): RTCIceServer[] => {
   servers.push(
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun.relay.metered.ca:80' }
   );
 

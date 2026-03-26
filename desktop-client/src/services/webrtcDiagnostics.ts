@@ -64,6 +64,15 @@ export const addConnectionDiagnostics = (
       });
     }
   });
+
+  pc.addEventListener('icecandidateerror', (event: any) => {
+    console.error(`[${label}] ICE Candidate Error:`, {
+      errorCode: event.errorCode,
+      errorText: event.errorText,
+      url: event.url,
+      hostCandidate: event.hostCandidate
+    });
+  });
 };
 
 const logDiagnostics = (
