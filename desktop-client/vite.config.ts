@@ -74,7 +74,9 @@ export default defineConfig({
       },
     }),
   ],
-  base: process.env.NODE_ENV === 'production' ? './' : '/',
+  // Use './' only for Electron builds (file:// protocol needs relative paths).
+  // Web/Vercel deployments must use '/' so asset paths resolve correctly on deep routes like /chats/:id.
+  base: process.env.ELECTRON_BUILD === 'true' ? './' : '/',
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

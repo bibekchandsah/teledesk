@@ -312,7 +312,7 @@ let pendingRelayEvents: Array<{ event: string; data: unknown }> = [];
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const VITE_DEV_SERVER_URL = 'http://localhost:5173';
 
-// Load .env file manually ΓÇö Vite-prefixed vars are renderer-only and never reach the main process
+// Load .env file manually  Vite-prefixed vars are renderer-only and never reach the main process
 const loadEnvFile = () => {
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   const envFileName = isDev ? '.env.development' : '.env.production';
@@ -751,10 +751,10 @@ const createTray = () => {
       { type: 'separator' },
     ];
 
-    // Account switcher submenu ΓÇö only shown when multiple accounts exist
+    // Account switcher submenu  only shown when multiple accounts exist
     if (trayAccounts.length > 1) {
       const accountSubmenu: Electron.MenuItemConstructorOptions[] = trayAccounts.map((account) => ({
-        label: `${account.uid === trayActiveAccountUid ? 'Γ£ô ' : '    '}${account.name} (${account.email})`,
+        label: `${account.uid === trayActiveAccountUid ? '✓ ' : '    '}${account.name} (${account.email})`,
         enabled: account.uid !== trayActiveAccountUid,
         click: () => {
           mainWindow?.show();
@@ -770,10 +770,10 @@ const createTray = () => {
       menuItems.push({ type: 'separator' });
     }
 
-    // App lock item ΓÇö only shown when app lock is enabled
+    // App lock item only shown when app lock is enabled
     if (appLockEnabled) {
       menuItems.push({
-        label: appLocked ? '≡ƒöô Unlock App' : '≡ƒöÆ Lock App',
+        label: appLocked ? '✓ Unlock App' : 'Lock App',
         click: () => {
           if (appLocked) {
             mainWindow?.show();
@@ -1009,7 +1009,7 @@ ipcMain.on(
       } else {
         // Windows / Linux: standard notification with avatar as icon
         // (toastXml requires the AUMID to be registered in the Windows registry,
-        //  which only happens in packaged builds ΓÇö use regular Notification in dev)
+        //  which only happens in packaged builds use regular Notification in dev)
         showBasic();
       }
     } catch (e) {
@@ -1594,7 +1594,7 @@ ipcMain.on('call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
 
-// Incoming call ΓÇö open directly as the merged call window (isOutgoing: false)
+// Incoming call  open directly as the merged call window (isOutgoing: false)
 ipcMain.on('incoming-call:open-window', (_e, initData: CallInitData) => {
   createCallWindow(initData);
 });
@@ -1604,11 +1604,11 @@ ipcMain.on('call:send-window-event', (_e, event: string) => {
   mainWindow?.webContents.send('call:window-event', event, {});
 });
 
-// Call window renderer is mounted and ready ΓÇö flush buffered relay events
+// Call window renderer is mounted and ready  flush buffered relay events
 ipcMain.on('call:window-ready', (event) => {
   if (callWindow && !callWindow.isDestroyed() && event.sender === callWindow.webContents) {
     callWindowReady = true;
-    // No longer send init-data (it's in URL params) ΓÇö only flush buffered relay events
+    // No longer send init-data (it's in URL params)  only flush buffered relay events
     pendingRelayEvents.forEach(({ event: e, data: d }) => {
       callWindow?.webContents.send('call:socket-event', e, d);
     });
