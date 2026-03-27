@@ -119,6 +119,9 @@ const CallWindowPage: React.FC = () => {
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
+  // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
+  // Defaults to 16/9 until we know the actual device ratio.
+  const pipAspectRef = useRef<number>(16 / 9);
   const [showCallChat, setShowCallChat] = useState(false);
   const [chatPanelWidth, setChatPanelWidth] = useState(380);
   const [viewMode, setViewMode] = useState<'chat' | 'list'>('chat');
@@ -635,10 +638,36 @@ const CallWindowPage: React.FC = () => {
           }
           const videoTrack = stream.getVideoTracks()[0];
           if (videoTrack) {
-            const currentCamId = videoTrack.getSettings().deviceId;
-            if (currentCamId) {
-              setActiveCamId(currentCamId);
-              if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', currentCamId);
+            const settings = videoTrack.getSettings();
+            if (settings.deviceId) {
+              setActiveCamId(settings.deviceId);
+              if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', settings.deviceId);
+            }
+            // Compute real camera aspect ratio and update PiP size to match.
+            // Some devices report 0 immediately — fall back to reading from a
+            // temporary video element once the track is actually streaming.
+            const applyAspect = (vw: number, vh: number) => {
+              if (vw > 0 && vh > 0) {
+                const aspect = vw / vh;
+                pipAspectRef.current = aspect;
+                const PIP_W = 240;
+                setPipSize({ w: PIP_W, h: Math.round(PIP_W / aspect) });
+              }
+            };
+            const vw = settings.width ?? 0;
+            const vh = settings.height ?? 0;
+            if (vw > 0 && vh > 0) {
+              applyAspect(vw, vh);
+            } else {
+              // Fallback: attach to a hidden video element and read dimensions on metadata load
+              const tmpVideo = document.createElement('video');
+              tmpVideo.srcObject = new MediaStream([videoTrack]);
+              tmpVideo.muted = true;
+              tmpVideo.onloadedmetadata = () => {
+                applyAspect(tmpVideo.videoWidth, tmpVideo.videoHeight);
+                tmpVideo.srcObject = null;
+              };
+              tmpVideo.play().catch(() => {});
             }
           }
           const savedSpeaker = localStorage.getItem('selectedSpeakerId');
@@ -1017,12 +1046,12 @@ const CallWindowPage: React.FC = () => {
     window.electronAPI?.setCallMiniMode(nextMode);
     // Adjust PiP size and position for mini mode
     if (nextMode) {
-      setPipSize({ w: 112, h: 63 });
-      setPipPos(null); // Reset to default (which will use mini-mode offsets)
+      setPipSize({ w: 112, h: Math.round(112 / pipAspectRef.current) });
+      setPipPos(null);
       setControlsVisible(false);
       setPipControlsVisible(false);
     } else {
-      setPipSize({ w: 240, h: 135 });
+      setPipSize({ w: 240, h: Math.round(240 / pipAspectRef.current) });
       setPipPos(null);
     }
   };
@@ -1641,8 +1670,8 @@ const CallWindowPage: React.FC = () => {
                           <button key={shape} 
                             onClick={() => { 
                               if (shape === 'rectangle' && pipShape === 'circle') {
-                                // Restore 16:9 ratio when switching back from circle
-                                setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w * 9 / 16) }));
+                                // Restore real camera ratio when switching back from circle
+                                setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w / pipAspectRef.current) }));
                               }
                               setPipShape(shape); 
                               setShowPipMenu(false); 
