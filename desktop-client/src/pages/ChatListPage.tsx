@@ -103,21 +103,31 @@ const ChatListPage: React.FC = () => {
 
   // ─── User search for new chat ──────────────────────────────────────────────
   useEffect(() => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
+    const trimmed = searchQuery.trim().toLowerCase();
+    
+    // Privacy requirement: Only search for exact emails or @usernames
+    const isEmail = trimmed.includes('@') && !trimmed.startsWith('@');
+    const isUsername = trimmed.startsWith('@') && trimmed.length >= 2;
+
+    if (!isEmail && !isUsername) {
       setSearchResults([]);
       return;
     }
 
     const timer = setTimeout(async () => {
       setIsSearching(true);
-      const res = await searchUsers(searchQuery);
+      const res = await searchUsers(trimmed);
       if (res.success && res.data) {
-        const q = searchQuery.toLowerCase();
-        const filtered = res.data.filter(u =>
-          u.name?.toLowerCase().startsWith(q) ||
-          u.email?.toLowerCase().startsWith(q) ||
-          u.username?.toLowerCase().startsWith(q)
-        );
+        // Enforce exact match filtering on frontend as well
+        const filtered = res.data.filter(u => {
+          if (isUsername) {
+            return u.username?.toLowerCase() === trimmed.slice(1);
+          }
+          if (isEmail) {
+            return u.email?.toLowerCase() === trimmed;
+          }
+          return false;
+        });
         setSearchResults(filtered);
       }
       setIsSearching(false);
@@ -227,7 +237,7 @@ const ChatListPage: React.FC = () => {
             </div>
             <input
               type="text"
-              placeholder="Search by name, username, or email..."
+              placeholder="Search by @username or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus

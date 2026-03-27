@@ -1800,7 +1800,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     // Slow path: resolve via API
     try {
       const { searchUsers, createPrivateChat, getChats } = await import('../services/apiService');
-      const res = await searchUsers(query);
+      const res = await searchUsers(type === 'username' ? `@${query}` : query);
       if (res.success && res.data && res.data.length > 0) {
         const user = res.data.find(matchesQuery);
 

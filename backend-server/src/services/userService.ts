@@ -127,12 +127,31 @@ export const getUserById = async (uid: string): Promise<User | null> => {
 };
 
 export const searchUsers = async (query: string, _requestingUid: string): Promise<User[]> => {
-  const q = `${query.toLowerCase()}%`;  // starts-with match only
+  const trimmed = query.trim().toLowerCase();
+  
+  // Requirement: Exact match only for privacy.
+  // Requirement: Usernames must be searched using @ prefix.
+  
+  let targetField: 'email' | 'username' | null = null;
+  let searchValue = trimmed;
+
+  if (trimmed.startsWith('@')) {
+    targetField = 'username';
+    searchValue = trimmed.slice(1);
+  } else if (trimmed.includes('@')) {
+    targetField = 'email';
+    searchValue = trimmed;
+  }
+
+  if (!targetField || !searchValue) {
+    return [];
+  }
+
   const { data } = await supabase
     .from('users')
     .select('*')
-    .or(`name.ilike.${q},email.ilike.${q},username.ilike.${q}`)
-    .limit(5); // 5  user search match list
+    .eq(targetField, searchValue)
+    .limit(1); // Exact match should only return 1 user anyway
 
   return ((data ?? []) as UserRow[]).map(rowToUser);
 };
