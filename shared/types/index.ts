@@ -26,6 +26,8 @@ export interface User {
   chatThemes?: Record<string, ChatTheme>; // per-chat theme customization, keyed by chatId
   twoFactorEnabled?: boolean; // if true, 2FA is enabled for this user
   twoFactorSecret?: string; // encrypted TOTP secret (only sent during setup, not in regular profile)
+  geminiApiKey?: string; // Gemini API Key for AI suggestions
+  aiSuggestionsEnabled?: boolean; // if true, AI text suggestions are shown in chat
 }
 
 export interface ChatTheme {

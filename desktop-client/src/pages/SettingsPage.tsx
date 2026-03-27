@@ -107,6 +107,12 @@ const SettingsPage: React.FC = () => {
   const [usernameMessage, setUsernameMessage] = useState('');
   const [isSavingUsername, setIsSavingUsername] = useState(false);
 
+  // AI Assistant states
+  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(currentUser?.aiSuggestionsEnabled === true);
+  const [geminiApiKey, setGeminiApiKey] = useState(currentUser?.geminiApiKey || '');
+  const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
+  const [geminiKeySavedMessage, setGeminiKeySavedMessage] = useState('');
+
   // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
   useEffect(() => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
@@ -114,7 +120,9 @@ const SettingsPage: React.FC = () => {
     setShowLiveTyping(currentUser?.showLiveTyping !== false);
     setUsernameInput(currentUser?.username ?? '');
     setNameInput(currentUser?.name ?? '');
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name]);
+    setAiSuggestionsEnabled(currentUser?.aiSuggestionsEnabled === true);
+    setGeminiApiKey(currentUser?.geminiApiKey || '');
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -368,6 +376,38 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleToggleAiSuggestions = async () => {
+    const newVal = !aiSuggestionsEnabled;
+    setAiSuggestionsEnabled(newVal);
+    try {
+      const res = await updateMyProfile({ aiSuggestionsEnabled: newVal });
+      if (res.success && res.data) setCurrentUser(res.data);
+    } catch (e) {
+      console.error('[Settings] Failed to update AI suggestions setting', e);
+      setAiSuggestionsEnabled(!newVal); // rollback on error
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    setIsSavingGeminiKey(true);
+    setGeminiKeySavedMessage('');
+    try {
+      const res = await updateMyProfile({ geminiApiKey: geminiApiKey.trim() });
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setGeminiKeySavedMessage('API Key saved successfully.');
+        setTimeout(() => setGeminiKeySavedMessage(''), 3000);
+      } else {
+        setGeminiKeySavedMessage('Failed to save API key.');
+      }
+    } catch (e) {
+      console.error('[Settings] Failed to save Gemini API key', e);
+      setGeminiKeySavedMessage('Failed to save API key.');
+    } finally {
+      setIsSavingGeminiKey(false);
+    }
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -559,6 +599,91 @@ const SettingsPage: React.FC = () => {
               ? <><Sun size={16} style={{ marginRight: 6 }} />Light Mode</>
               : <><Moon size={16} style={{ marginRight: 6 }} />Dark Mode</>}
           </button>
+        </SettingRow>
+      </Section>
+
+      {/* AI Assistant */}
+      <Section title="AI Assistant">
+        <SettingRow
+          label="Enable AI Suggestions"
+          description="Get smart message suggestions using Google's Gemini AI"
+        >
+          <button
+            onClick={handleToggleAiSuggestions}
+            style={{
+              width: 46,
+              height: 26,
+              borderRadius: 13,
+              border: 'none',
+              backgroundColor: aiSuggestionsEnabled ? 'var(--accent)' : 'var(--bg-tertiary)',
+              position: 'relative',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                backgroundColor: '#fff',
+                position: 'absolute',
+                left: aiSuggestionsEnabled ? 23 : 3,
+                transition: 'left 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              }}
+            />
+          </button>
+        </SettingRow>
+        
+        <SettingRow
+          label="Gemini API Key"
+          description="Your Gemini API key used for generating suggestions"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                placeholder="Enter Gemini API Key"
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  width: 200,
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleSaveGeminiKey}
+                disabled={isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  backgroundColor: geminiApiKey !== currentUser.geminiApiKey ? 'var(--accent)' : 'var(--bg-tertiary)',
+                  color: geminiApiKey !== currentUser.geminiApiKey ? '#fff' : 'var(--text-secondary)',
+                  border: 'none',
+                  opacity: (isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey) ? 0.7 : 1,
+                  cursor: (isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey) ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {isSavingGeminiKey ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {geminiKeySavedMessage && (
+              <span style={{ fontSize: 11, color: geminiKeySavedMessage.includes('Failed') ? '#ef4444' : '#22c55e' }}>
+                {geminiKeySavedMessage}
+              </span>
+            )}
+          </div>
         </SettingRow>
       </Section>
 

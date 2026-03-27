@@ -51,13 +51,15 @@ export const syncUser = async (req: Request, res: Response): Promise<void> => {
 export const updateMe = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const { name, avatar, showActiveStatus, showMessageStatus, showLiveTyping } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean; showLiveTyping?: boolean };
+    const { name, avatar, showActiveStatus, showMessageStatus, showLiveTyping, geminiApiKey, aiSuggestionsEnabled } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean; showLiveTyping?: boolean; geminiApiKey?: string; aiSuggestionsEnabled?: boolean };
     const updates: Partial<SharedUser> = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
     if (avatar !== undefined) updates.avatar = String(avatar);
     if (showActiveStatus !== undefined) updates.showActiveStatus = Boolean(showActiveStatus);
     if (showMessageStatus !== undefined) updates.showMessageStatus = Boolean(showMessageStatus);
     if (showLiveTyping !== undefined) updates.showLiveTyping = Boolean(showLiveTyping);
+    if (geminiApiKey !== undefined) updates.geminiApiKey = String(geminiApiKey);
+    if (aiSuggestionsEnabled !== undefined) updates.aiSuggestionsEnabled = Boolean(aiSuggestionsEnabled);
     
     const user = await upsertUser(uid, updates);
 

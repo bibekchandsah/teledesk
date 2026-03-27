@@ -23,7 +23,7 @@ import ErrorModal from '../components/modals/ErrorModal';
 import { useCallStore } from '../store/callStore';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
-import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff, Scissors, Clipboard, ClipboardPaste, Bold, Italic, Underline, Strikethrough, Code, List, ListOrdered, Quote, Link, EyeOff as SpoilerIcon } from 'lucide-react';
+import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff, Scissors, Clipboard, ClipboardPaste, Bold, Italic, Underline, Strikethrough, Code, List, ListOrdered, Quote, Link, EyeOff as SpoilerIcon, Sparkles } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatLastSeen, formatFileSize, formatDuration } from '../utils/formatters';
 
 import data from '@emoji-mart/data';
@@ -2005,6 +2005,49 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const typingList = typingUsers[chatId!] || [];
   const liveTexts = liveTypingTexts?.[chatId!] || [];
 
+  // ─── AI Assistant State ────────────────────────────────────────────────────
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isGeneratingAiSuggestion, setIsGeneratingAiSuggestion] = useState(false);
+
+  // AI Suggestion generation logic
+  useEffect(() => {
+    if (!currentUser?.aiSuggestionsEnabled || !currentUser?.geminiApiKey) {
+      setAiSuggestions([]);
+      return;
+    }
+
+    // Only generate suggestion if the last message is from the *other* person, and we haven't typed anything yet
+    const validMessages = chatMessages.filter(m => !m.deleted);
+    const lastMsg = validMessages[validMessages.length - 1];
+    
+    if (!lastMsg || lastMsg.senderId === currentUser.uid || inputText.trim().length > 0) {
+      setAiSuggestions([]);
+      return;
+    }
+
+    // Avoid spamming the API on rapid chat switching or incoming messages
+    const timer = setTimeout(async () => {
+      setIsGeneratingAiSuggestion(true);
+      try {
+        const { generateMessageSuggestion } = await import('../services/geminiService');
+        const suggestions = await generateMessageSuggestion(
+          currentUser.geminiApiKey!,
+          validMessages, // Pass messages for context
+          currentUser.uid
+        );
+        // Ensure input is still empty before showing
+        setAiSuggestions(suggestions);
+      } catch (err) {
+        console.error('Failed to generate AI suggestion:', err);
+        setAiSuggestions([]);
+      } finally {
+        setIsGeneratingAiSuggestion(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [chatMessages, currentUser, inputText]);
+
   // ─── Search match indices ─────────────────────────────────────────────────
   const searchMatchIndices = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -2885,15 +2928,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   };
 
   // ─── Send text message ────────────────────────────────────────────────────
-  const handleSend = () => {
-    // Note: We don't trim here anymore to respect the user's deliberate whitespace
-    if (!inputText || !chatId || !currentUser) return;
-    if (inputText.trim().length === 0) return; // Still guard against purely whitespace/empty messages if needed
+  const handleSend = (textOverride?: string) => {
+    const textToSend = textOverride !== undefined ? textOverride : inputText;
+    if (!textToSend || !chatId || !currentUser) return;
+    if (textToSend.trim().length === 0) return;
 
     // ── Edit mode: save the edit instead of sending a new message ────────
     if (editingMsg) {
-      if (inputText !== editingMsg.content) {
-        handleEditMessage(editingMsg.messageId, inputText);
+      if (textToSend !== editingMsg.content) {
+        handleEditMessage(editingMsg.messageId, textToSend);
       }
       setEditingMsg(null);
       setInputText('');
@@ -2908,7 +2951,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       senderId: currentUser.uid,
       senderName: currentUser.name,
       senderAvatar: currentUser.avatar,
-      content: inputText,
+      content: textToSend,
       type: 'text',
       timestamp: new Date().toISOString(),
       readBy: [currentUser.uid],
@@ -2932,7 +2975,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     sendMessage({
       messageId,
       chatId,
-      content: inputText,
+      content: textToSend,
       type: 'text',
       senderName: currentUser.name,
       senderAvatar: currentUser.avatar,
@@ -5238,6 +5281,108 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </button>
         </div>
       )}
+
+      {/* AI Suggestions Pills */}
+      {aiSuggestions.length > 0 && !inputText.trim() && !isGeneratingAiSuggestion && !isRecording && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            padding: '12px 16px',
+            borderTop: '1px solid var(--border)',
+            backgroundColor: 'rgba(var(--accent-rgb), 0.03)',
+            zIndex: 1,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              AI Suggested Replies
+            </span>
+            <div style={{ flex: 1 }} />
+            <button 
+              onClick={() => setAiSuggestions([])}
+              style={{ ...iconBtnStyle, width: 20, height: 20, opacity: 0.6 }}
+              title="Dismiss"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <div style={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: 8,
+            maxHeight: 120,
+            overflowY: 'auto'
+          }}>
+            {aiSuggestions.map((suggestion, idx) => (
+              <div
+                key={idx}
+                className="ai-suggestion-pill"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  borderRadius: 18,
+                  backgroundColor: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  maxWidth: 'fit-content',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span style={{ 
+                  fontSize: 13, 
+                  color: 'var(--text-primary)',
+                  maxWidth: 250,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {suggestion}
+                </span>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button
+                    onClick={() => {
+                      setInputText(suggestion);
+                      setAiSuggestions([]);
+                      setTimeout(() => {
+                        if (inputRef.current) {
+                          inputRef.current.focus();
+                          inputRef.current.style.height = 'auto';
+                          inputRef.current.style.height = inputRef.current.scrollHeight + 'px';
+                        }
+                      }, 0);
+                    }}
+                    style={{ ...iconBtnStyle, width: 26, height: 26, backgroundColor: 'var(--bg-tertiary)' }}
+                    title="Edit suggestion"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSend(suggestion);
+                    }}
+                    style={{ 
+                      ...iconBtnStyle, 
+                      width: 26, height: 26, 
+                      backgroundColor: 'var(--accent)', 
+                      color: '#fff' 
+                    }}
+                    title="Send instantly"
+                  >
+                    <Send size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* Input */}
       <div

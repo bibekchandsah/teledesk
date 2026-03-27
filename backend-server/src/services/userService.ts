@@ -33,6 +33,8 @@ type UserRow = {
   two_factor_backup_codes: string[] | null;
   two_factor_pending_secret: string | null;
   two_factor_pending_backup_codes: string[] | null;
+  gemini_api_key: string | null;
+  ai_suggestions_enabled: boolean | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -58,6 +60,8 @@ const rowToUser = (r: UserRow): User => ({
   chatThemes: r.chat_themes ?? {},
   twoFactorEnabled: r.two_factor_enabled ?? false,
   // Note: two_factor_secret is intentionally not included in regular user profile for security
+  geminiApiKey: r.gemini_api_key ?? undefined,
+  aiSuggestionsEnabled: r.ai_suggestions_enabled ?? false,
   isDeleted: r.email?.endsWith('@deleted.local') && r.name === 'Deleted User',
 });
 
@@ -95,6 +99,8 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       two_factor_backup_codes: null,
       two_factor_pending_secret: null,
       two_factor_pending_backup_codes: null,
+      gemini_api_key: null,
+      ai_suggestions_enabled: false,
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -109,6 +115,8 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
   if (data.showActiveStatus !== undefined) updates.show_active_status = data.showActiveStatus;
   if (data.showMessageStatus !== undefined) updates.show_message_status = data.showMessageStatus;
   if (data.showLiveTyping !== undefined) updates.show_live_typing = data.showLiveTyping;
+  if (data.geminiApiKey !== undefined) updates.gemini_api_key = data.geminiApiKey;
+  if (data.aiSuggestionsEnabled !== undefined) updates.ai_suggestions_enabled = data.aiSuggestionsEnabled;
 
   const { data: updated } = await supabase
     .from('users')

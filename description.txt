@@ -872,6 +872,10 @@ use own r2 bucket 10GB for more secure data
 restart in deploy isn't working, it's not restarting when clicked restart
 account selection delete icon not trigger
 in mobile device show the actual resolution of the video not 16:9 (web & desktop)
+text suggestion using gemini api
+pofile edit in profile 
+add camera selection and preview in setting page
+encrypt audio and video 
 
 
 
