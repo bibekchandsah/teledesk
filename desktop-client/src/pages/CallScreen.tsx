@@ -77,6 +77,8 @@ const CallScreen: React.FC = () => {
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
+  // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
+  const pipAspectRef = useRef<number>(16 / 9);
   const [gridView, setGridView] = useState(false);
   const [gridSwapped, setGridSwapped] = useState(false);
   const [gridSplit, setGridSplit] = useState(50); // percent for left panel
@@ -277,7 +279,7 @@ const CallScreen: React.FC = () => {
     return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
   }, [handleInteraction]);
 
-  // Sync active device IDs when localStream changes
+  // Sync active device IDs when localStream changes, and read real camera aspect ratio
   useEffect(() => {
     if (!localStream) return;
     const audioTrack = localStream.getAudioTracks()[0];
@@ -290,10 +292,33 @@ const CallScreen: React.FC = () => {
     }
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
-      const currentCamId = videoTrack.getSettings().deviceId;
-      if (currentCamId) {
-        setActiveCamId(currentCamId);
-        if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', currentCamId);
+      const settings = videoTrack.getSettings();
+      if (settings.deviceId) {
+        setActiveCamId(settings.deviceId);
+        if (!localStorage.getItem('selectedCameraId')) localStorage.setItem('selectedCameraId', settings.deviceId);
+      }
+      // Apply real camera aspect ratio to PiP
+      const applyAspect = (vw: number, vh: number) => {
+        if (vw > 0 && vh > 0) {
+          const aspect = vw / vh;
+          pipAspectRef.current = aspect;
+          setPipSize({ w: 240, h: Math.round(240 / aspect) });
+        }
+      };
+      const vw = settings.width ?? 0;
+      const vh = settings.height ?? 0;
+      if (vw > 0 && vh > 0) {
+        applyAspect(vw, vh);
+      } else {
+        // Fallback: read from a hidden video element once metadata is available
+        const tmpVideo = document.createElement('video');
+        tmpVideo.srcObject = new MediaStream([videoTrack]);
+        tmpVideo.muted = true;
+        tmpVideo.onloadedmetadata = () => {
+          applyAspect(tmpVideo.videoWidth, tmpVideo.videoHeight);
+          tmpVideo.srcObject = null;
+        };
+        tmpVideo.play().catch(() => {});
       }
     }
   }, [localStream]);
@@ -942,8 +967,8 @@ const CallScreen: React.FC = () => {
                           key={shape}
                           onClick={() => { 
                             if (shape === 'rectangle' && pipShape === 'circle') {
-                              // Restore 16:9 ratio when switching back from circle
-                              setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w * 9 / 16) }));
+                              // Restore real camera ratio when switching back from circle
+                              setPipSize(prev => ({ w: prev.w, h: Math.round(prev.w / pipAspectRef.current) }));
                             }
                             setPipShape(shape); 
                             setShowPipMenu(false); 
