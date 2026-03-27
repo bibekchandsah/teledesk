@@ -50,7 +50,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,webp,woff2}'],
-        navigateFallback: null,
+        navigateFallback: '/index.html',
         navigateFallbackAllowlist: [/^\/call-window/, /^\/incoming-call-window/, /^(?!\/__).*/],
         runtimeCaching: [
           {

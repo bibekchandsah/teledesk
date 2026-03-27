@@ -609,6 +609,27 @@ const createWindow = () => {
       }
     }
 
+    // Hard reload: Ctrl+Shift+R or Ctrl+F5
+    if (isCtrlOrCmd && input.shift && (input.key === 'r' || input.key === 'R')) {
+      event.preventDefault();
+      if (isDev) {
+        mainWindow.loadURL(VITE_DEV_SERVER_URL);
+      } else {
+        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+      }
+      return;
+    }
+    // Soft reload: Ctrl+R or F5
+    if ((isCtrlOrCmd && (input.key === 'r' || input.key === 'R')) || input.key === 'F5') {
+      event.preventDefault();
+      if (isDev) {
+        mainWindow.loadURL(VITE_DEV_SERVER_URL);
+      } else {
+        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+      }
+      return;
+    }
+
     // Zoom In: Ctrl/Cmd + Plus or =
     if (isCtrlOrCmd && (input.key === '+' || input.key === '=')) {
       event.preventDefault();
@@ -630,6 +651,25 @@ const createWindow = () => {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show();
     mainWindow?.focus();
+  });
+
+  // Recover from renderer crashes — reload instead of showing blank screen
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Main] Renderer process gone:', details.reason);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (isDev) {
+        mainWindow.loadURL(VITE_DEV_SERVER_URL);
+      } else {
+        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+      }
+    }
+  });
+
+  mainWindow.on('unresponsive', () => {
+    console.warn('[Main] Window unresponsive, reloading...');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.forcefullyCrashRenderer();
+    }
   });
 
   // Prevent navigation to external URLs
