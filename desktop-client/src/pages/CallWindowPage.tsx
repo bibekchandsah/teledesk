@@ -246,6 +246,7 @@ const CallWindowPage: React.FC = () => {
   // ─── Chat panel resize drag ─────────────────────────────────────────────────
   const handleChatResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     chatResizingRef.current = true;
     const startX = e.clientX;
     const startWidth = chatPanelWidth;
@@ -253,7 +254,8 @@ const CallWindowPage: React.FC = () => {
       if (!chatResizingRef.current) return;
       setChatPanelWidth(Math.min(700, Math.max(280, startWidth - (ev.clientX - startX))));
     };
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
+      (e.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
       chatResizingRef.current = false;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -1059,6 +1061,7 @@ const CallWindowPage: React.FC = () => {
   // ─── Grid resize ──────────────────────────────────────────────────────────
   const handleGridResizePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     gridResizingRef.current = true;
     const containerEl = (e.currentTarget as HTMLElement).parentElement;
     const onMove = (ev: PointerEvent) => {
@@ -1070,7 +1073,12 @@ const CallWindowPage: React.FC = () => {
         setGridSplit(Math.min(80, Math.max(20, ((ev.clientY - rect.top) / rect.height) * 100)));
       }
     };
-    const onUp = () => { gridResizingRef.current = false; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    const onUp = (ev: PointerEvent) => { 
+      (e.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
+      gridResizingRef.current = false; 
+      window.removeEventListener('pointermove', onMove); 
+      window.removeEventListener('pointerup', onUp); 
+    };
     window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
   };
 
@@ -1503,7 +1511,7 @@ const CallWindowPage: React.FC = () => {
                     onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.5)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
                   >
-                    <button onMouseDown={(e) => e.stopPropagation()} onClick={() => setGridSwapped((v) => !v)} title="Swap sides"
+                    <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setGridSwapped((v) => !v)} title="Swap sides"
                       style={{ position: 'absolute', width: 32, height: 32, borderRadius: '50%', background: 'rgba(15,23,42,0.9)', border: '1.5px solid rgba(255,255,255,0.25)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, padding: 0, zIndex: 10 }}
                     >⇄</button>
                   </div>
@@ -1571,6 +1579,8 @@ const CallWindowPage: React.FC = () => {
               const pos = pipPos ?? { top: window.innerHeight - PIP_H - defaultBottomGap, left: window.innerWidth - PIP_W - defaultRightGap };
 
               const handlePipPointerDown = (e: React.PointerEvent) => {
+                e.preventDefault();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
                 const isCircle = pipShape === 'circle';
@@ -1593,21 +1603,46 @@ const CallWindowPage: React.FC = () => {
                     }
                     setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                   };
-                  const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-                  window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+                  const onUp = (ev: PointerEvent) => {
+                    (e.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                  };
+                  window.addEventListener('pointermove', onMove);
+                  window.addEventListener('pointerup', onUp);
                   return;
                 }
                 pipMovedRef.current = false;
                 pipDragRef.current = { startX: e.clientX, startY: e.clientY, origTop: pos.top, origLeft: pos.left };
                 const onMove = (ev: PointerEvent) => {
                   if (!pipDragRef.current) return;
-                  const dx = ev.clientX - pipDragRef.current.startX, dy = ev.clientY - pipDragRef.current.startY;
-                  if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+                  const dx = ev.clientX - pipDragRef.current.startX;
+                  const dy = ev.clientY - pipDragRef.current.startY;
+                  if (!pipMovedRef.current && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
                   pipMovedRef.current = true;
-                  setPipPos({ top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx)) });
+                  // Use transform for hardware-accelerated, buttery smooth movement
+                  (e.currentTarget as HTMLElement).style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
                 };
-                const onUp = () => { pipDragRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-                window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+                const onUp = (ev: PointerEvent) => {
+                  const target = e.currentTarget as HTMLElement;
+                  target.releasePointerCapture(ev.pointerId);
+                  target.style.transform = ''; // Clear temporary transform
+                  
+                  if (pipDragRef.current) {
+                    const dx = ev.clientX - pipDragRef.current.startX;
+                    const dy = ev.clientY - pipDragRef.current.startY;
+                    // Final position sync to React state
+                    setPipPos({
+                      top: Math.max(0, Math.min(window.innerHeight - PIP_H, pipDragRef.current.origTop + dy)),
+                      left: Math.max(0, Math.min(window.innerWidth - PIP_W, pipDragRef.current.origLeft + dx))
+                    });
+                  }
+                  pipDragRef.current = null;
+                  window.removeEventListener('pointermove', onMove);
+                  window.removeEventListener('pointerup', onUp);
+                };
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
               };
 
               if (pipHidden) {
@@ -1636,7 +1671,7 @@ const CallWindowPage: React.FC = () => {
                   }}
                   onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                   title="Drag · Click to swap"
-                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none', ['WebkitAppRegion' as any]: 'no-drag' }}
+                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none', willChange: 'transform, top, left', ['WebkitAppRegion' as any]: 'no-drag' }}
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream
@@ -1654,7 +1689,7 @@ const CallWindowPage: React.FC = () => {
                     onMouseLeave={() => {
                       setShowPipMenu(false);
                     }}
-                    onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
                     style={{ 
                       position: 'absolute', bottom: pipShape === 'circle' ? '10%' : 6, left: '50%', transform: 'translateX(-50%)', 
                       zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center',

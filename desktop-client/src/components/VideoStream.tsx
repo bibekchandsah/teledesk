@@ -84,4 +84,4 @@ const VideoStream: React.FC<VideoStreamProps> = ({
   );
 };
 
-export default VideoStream;
+export default React.memo(VideoStream);

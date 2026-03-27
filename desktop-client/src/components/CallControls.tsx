@@ -378,4 +378,4 @@ const CallControls: React.FC<CallControlsProps> = ({
   );
 };
 
-export default CallControls;
+export default React.memo(CallControls);

@@ -141,6 +141,10 @@ const CallScreen: React.FC = () => {
   const [volumeBars, setVolumeBars] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
   
+  const mainContainerRef = useRef<HTMLDivElement | null>(null);
+  const pipContainerRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; oT: number; oL: number } | null>(null);
+  
   const isVideo = activeCall?.type === 'video';
   const remoteHasVideo = !!remoteStream && remoteStream.getVideoTracks().some(
     (t) => t.readyState !== 'ended' && !t.muted,
@@ -518,8 +522,13 @@ const CallScreen: React.FC = () => {
   ) => { /* replaced by border-drag resize in handlePipMouseDown */ };
 
   const handleMainPointerDown = (e: React.PointerEvent) => {
-    if (!isMiniMode) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (!isMiniMode || !mainContainerRef.current) return;
+    // Prevent buttons/inputs inside the window from starting a drag
+    if ((e.target as HTMLElement).closest('button, input, select')) return;
+    // Suppress default touch scroll / context-menu so touch drag works reliably
+    e.preventDefault();
+
+    const rect = mainContainerRef.current.getBoundingClientRect();
     const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
     const edges = {
       left: lx <= 12,
@@ -530,49 +539,71 @@ const CallScreen: React.FC = () => {
     const isAnyEdge = edges.left || edges.right || edges.top || edges.bottom;
 
     if (isAnyEdge) {
+      // ── RESIZE ──────────────────────────────────────────────────────
       isResizing.current = true;
       document.body.style.userSelect = 'none';
       const sx = e.clientX, sy = e.clientY;
       const oW = miniSize.w, oH = miniSize.h, oT = miniPos.top, oL = miniPos.left;
+
       const onMove = (ev: PointerEvent) => {
+        ev.preventDefault();
         const dx = ev.clientX - sx, dy = ev.clientY - sy;
         let nW = oW, nH = oH, nT = oT, nL = oL;
-        if (edges.right) nW = Math.max(240, oW + dx);
-        if (edges.left) { nW = Math.max(240, oW - dx); nL = oL + (oW - nW); }
+        if (edges.right)  nW = Math.max(240, oW + dx);
+        if (edges.left)  { nW = Math.max(240, oW - dx); nL = oL + (oW - nW); }
         if (edges.bottom) nH = Math.max(135, oH + dy);
-        if (edges.top) { nH = Math.max(135, oH - dy); nT = oT + (oH - nH); }
+        if (edges.top)   { nH = Math.max(135, oH - dy); nT = oT + (oH - nH); }
         setMiniSize({ w: nW, h: nH });
         setMiniPos({ top: nT, left: nL });
-        // Keep PiP attached to bottom-right during main window resize
         setPipPos((prev) => {
           if (!prev) return prev;
-          const distR = oW - prev.left;
-          const distB = oH - prev.top;
-          return { top: nH - distB, left: nW - distR };
+          return { top: nH - (oH - prev.top), left: nW - (oW - prev.left) };
         });
       };
-      const onUp = () => { 
+
+      const onUp = () => {
         isResizing.current = false;
         document.body.style.userSelect = '';
-        window.removeEventListener('pointermove', onMove); 
-        window.removeEventListener('pointerup', onUp); 
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
       };
-      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+
     } else {
+      // ── DRAG / MOVE ─────────────────────────────────────────────────
       isResizing.current = true;
       document.body.style.userSelect = 'none';
-      const sx = e.clientX, sy = e.clientY, oT = miniPos.top, oL = miniPos.left;
+
+      const target = mainContainerRef.current;
+      const sx = e.clientX, sy = e.clientY;
+      const oT = miniPos.top, oL = miniPos.left;
+      dragRef.current = { startX: sx, startY: sy, oT, oL };
+
       const onMove = (ev: PointerEvent) => {
-        const dx = ev.clientX - sx, dy = ev.clientY - sy;
-        setMiniPos({ top: oT + dy, left: oL + dx });
+        ev.preventDefault();
+        if (!dragRef.current) return;
+        const dx = ev.clientX - dragRef.current.startX;
+        const dy = ev.clientY - dragRef.current.startY;
+        // Bypass React render loop — GPU-composited direct transform
+        target.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
       };
-      const onUp = () => { 
+
+      const onUp = (ev: PointerEvent) => {
         isResizing.current = false;
         document.body.style.userSelect = '';
-        window.removeEventListener('pointermove', onMove); 
-        window.removeEventListener('pointerup', onUp); 
+        if (dragRef.current) {
+          const dx = ev.clientX - dragRef.current.startX;
+          const dy = ev.clientY - dragRef.current.startY;
+          setMiniPos({ top: dragRef.current.oT + dy, left: dragRef.current.oL + dx });
+          target.style.transform = '';
+          dragRef.current = null;
+        }
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
       };
-      window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
     }
   };
 
@@ -601,6 +632,7 @@ const CallScreen: React.FC = () => {
 
   return (
     <div
+      ref={mainContainerRef}
       onPointerDown={handleMainPointerDown}
       onPointerMove={handleMainMouseMove}
       onMouseMove={handleInteraction}
@@ -624,6 +656,8 @@ const CallScreen: React.FC = () => {
           boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
           border: '1px solid rgba(255,255,255,0.1)',
           transition: isResizing.current ? 'none' : 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
+          willChange: 'transform',
+          touchAction: 'none',
         } : {
           inset: 0,
           transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)',
@@ -774,45 +808,68 @@ const CallScreen: React.FC = () => {
 
             const handlePipPointerDown = (e: React.PointerEvent) => {
               e.stopPropagation();
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              e.preventDefault(); // suppress touch scroll/context-menu
+              const target = pipContainerRef.current;
+              if (!target) return;
+
+              const rect = target.getBoundingClientRect();
               const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
               const isCircle = pipShape === 'circle';
               const edges = getPipResizeEdges(lx, ly, PIP_W, PIP_H, isCircle);
+
               if (edges) {
+                // RESIZING
                 pipMovedRef.current = true;
                 const sx = e.clientX, sy = e.clientY, oW = PIP_W, oH = PIP_H, oT = pos.top, oL = pos.left;
                 const MIN = 80, MAX = 640;
+
                 const onMove = (ev: PointerEvent) => {
+                  ev.preventDefault();
                   const dx = ev.clientX - sx, dy = ev.clientY - sy;
                   let nW = oW, nH = oH, nT = oT, nL = oL;
                   if (edges.right)  nW = Math.max(MIN, Math.min(MAX, oW + dx));
                   if (edges.left) { nW = Math.max(MIN, Math.min(MAX, oW - dx)); nL = oL + (oW - nW); }
                   if (edges.bottom) nH = Math.max(MIN, Math.min(MAX, oH + dy));
                   if (edges.top)  { nH = Math.max(MIN, Math.min(MAX, oH - dy)); nT = oT + (oH - nH); }
-                  if (isCircle) { 
-                    const s = Math.max(nW, nH); 
-                    nW = s; 
-                    nH = oH; // Restore the previous rectangular height so it's not lost
+                  if (isCircle) {
+                    const s = Math.max(nW, nH);
+                    nW = s;
+                    nH = oH;
                   }
-                  setPipSize({ w: nW, h: nH }); setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
+                  setPipSize({ w: nW, h: nH });
+                  setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
                 };
-                const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-                window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
-                return;
+
+                const onUp = () => {
+                  window.removeEventListener('pointermove', onMove);
+                  window.removeEventListener('pointerup', onUp);
+                };
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+              } else {
+                // DRAGGING (MOVE)
+                pipMovedRef.current = false;
+                const sx = e.clientX, sy = e.clientY, oT = pos.top, oL = pos.left;
+
+                const onMove = (ev: PointerEvent) => {
+                  ev.preventDefault();
+                  const dx = ev.clientX - sx, dy = ev.clientY - sy;
+                  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) pipMovedRef.current = true;
+                  target.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+                };
+
+                const onUp = (ev: PointerEvent) => {
+                  const dx = ev.clientX - sx, dy = ev.clientY - sy;
+                  if (pipMovedRef.current) {
+                    setPipPos({ top: oT + dy, left: oL + dx });
+                  }
+                  target.style.transform = '';
+                  window.removeEventListener('pointermove', onMove);
+                  window.removeEventListener('pointerup', onUp);
+                };
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
               }
-              pipMovedRef.current = false;
-              pipDragRef.current = { startX: e.clientX, startY: e.clientY, origTop: pos.top, origLeft: pos.left };
-              const onMove = (ev: PointerEvent) => {
-                if (!pipDragRef.current) return;
-                const dx = ev.clientX - pipDragRef.current.startX, dy = ev.clientY - pipDragRef.current.startY;
-                if (!pipMovedRef.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-                pipMovedRef.current = true;
-                const limitW = isMiniMode ? miniSize.w : window.innerWidth;
-                const limitH = isMiniMode ? miniSize.h : window.innerHeight;
-                setPipPos({ top: Math.max(0, Math.min(limitH - PIP_H, pipDragRef.current.origTop + dy)), left: Math.max(0, Math.min(limitW - PIP_W, pipDragRef.current.origLeft + dx)) });
-              };
-              const onUp = () => { pipDragRef.current = null; window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-              window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
             };
 
             // Hidden state: snap reveal tab to the nearest horizontal edge
@@ -860,7 +917,9 @@ const CallScreen: React.FC = () => {
             return (
               <div
                 key="pip"
+                ref={pipContainerRef}
                 onPointerDown={handlePipPointerDown}
+                onContextMenu={(e) => { e.preventDefault(); setShowPipMenu(true); }}
                 onMouseMove={(e) => { 
                   handleInteraction();
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); 
