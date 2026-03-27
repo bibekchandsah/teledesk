@@ -132,11 +132,19 @@ const logSelectedCandidates = async (pc: RTCPeerConnection, label: string): Prom
         ) as any; // RTCIceCandidateStats type varies by browser
         
         if (localCandidate && remoteCandidate) {
-          console.log(`[${label}] Connection path:`, {
+          const pathInfo: any = {
             local: `${localCandidate.candidateType} ${localCandidate.address}:${localCandidate.port}`,
             remote: `${remoteCandidate.candidateType} ${remoteCandidate.address}:${remoteCandidate.port}`,
             protocol: localCandidate.protocol
-          });
+          };
+          
+          // For relay candidates, the stats often contain the relay server URL
+          if (localCandidate.url) {
+            pathInfo.relayServer = localCandidate.url;
+            console.log(`%c[${label}] ACTIVE RELAY SERVER: ${localCandidate.url}`, 'color: #00ff00; font-weight: bold;');
+          }
+
+          console.log(`[${label}] Connection path:`, pathInfo);
         }
       });
     }
