@@ -9,7 +9,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "cross-env ELECTRON_BUILD=true tsc && vite build && tsc -p tsconfig.electron.json && electron-builder",
     "electron:dev": "tsc -p tsconfig.electron.json && concurrently \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development npx electron .\"",
     "electron:build": "cross-env ELECTRON_BUILD=true vite build && tsc -p tsconfig.electron.json && electron-builder",
     "preview": "vite preview",

@@ -29,8 +29,8 @@ const authFetch = async <T>(
       const errorData = await response.clone().json();
       if (errorData.error === 'SESSION_REVOKED') {
         console.warn('[API] Session revoked. Forcing logout...');
-        const message = encodeURIComponent(errorData.message || 'Your session has been revoked from another device.');
-        window.location.href = `/login?logout=true&revoked=true&message=${message}`;
+        const message = errorData.message || 'Your session has been revoked from another device.';
+        window.dispatchEvent(new CustomEvent('auth:session-expired', { detail: { revoked: true, message } }));
         return errorData as ApiResponse<T>;
       }
     } catch (e) {
@@ -58,7 +58,6 @@ const authFetch = async <T>(
           if (refreshData.success && refreshData.data?.token) {
             console.log('[API] Backend issued new custom token. Re-authenticating Firebase...');
             const { signInWithCustomToken } = await import('./firebaseService');
-            // This exchanges the custom token for a fresh ID token and restores Firebase state
             const fbUser = await signInWithCustomToken(refreshData.data.token);
             freshToken = await fbUser.getIdToken(true);
           }
@@ -66,8 +65,8 @@ const authFetch = async <T>(
            const errData = await refreshRes.clone().json().catch(() => ({}));
            if (errData.error === 'SESSION_REVOKED') {
              console.warn('[API] Backend refresh denied. Session revoked.');
-             const message = encodeURIComponent(errData.message || 'Your session has been revoked or expired.');
-             window.location.href = `/login?logout=true&revoked=true&message=${message}`;
+             const message = errData.message || 'Your session has been revoked or expired.';
+             window.dispatchEvent(new CustomEvent('auth:session-expired', { detail: { revoked: true, message } }));
              return errData as ApiResponse<T>;
            }
         }
@@ -79,6 +78,10 @@ const authFetch = async <T>(
     if (freshToken) {
       headers['Authorization'] = `Bearer ${freshToken}`;
       response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+    } else {
+      // All refresh attempts failed — session is truly expired
+      console.warn('[API] All token refresh attempts failed. Session expired.');
+      window.dispatchEvent(new CustomEvent('auth:session-expired', { detail: { revoked: false, message: 'Your session has expired. Please log in again.' } }));
     }
   }
 

@@ -653,8 +653,28 @@ const createWindow = () => {
     mainWindow?.focus();
   });
 
+  // If the page fails to load (e.g. wrong path in packaged build), retry once
+  // Only handle main-frame navigation failures, not sub-resource errors
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return; // ignore sub-resource failures (fetch, XHR, etc.)
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // -3 = aborted (user navigated away), -105 = name not resolved (offline) — don't retry these
+    if (errorCode === -3 || errorCode === -105) return;
+    console.error('[Main] Main frame failed to load:', errorCode, errorDescription, validatedURL);
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (isDev) {
+        mainWindow.loadURL(VITE_DEV_SERVER_URL);
+      } else {
+        mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+      }
+    }, 1000);
+  });
+
   // Recover from renderer crashes — reload instead of showing blank screen
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    // 'clean-exit' means intentional exit (e.g. window.close()), don't reload
+    if (details.reason === 'clean-exit') return;
     console.error('[Main] Renderer process gone:', details.reason);
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (isDev) {
@@ -662,13 +682,6 @@ const createWindow = () => {
       } else {
         mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
       }
-    }
-  });
-
-  mainWindow.on('unresponsive', () => {
-    console.warn('[Main] Window unresponsive, reloading...');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.forcefullyCrashRenderer();
     }
   });
 

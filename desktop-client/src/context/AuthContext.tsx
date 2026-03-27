@@ -290,6 +290,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, []);
 
+  // Handle session expiry events dispatched by apiService (avoids hard page reloads)
+  useEffect(() => {
+    const handleSessionExpired = async (e: Event) => {
+      const detail = (e as CustomEvent<{ revoked: boolean; message: string }>).detail;
+      console.warn('[Auth] Session expired event received:', detail.message);
+      // Clear stored account so next startup doesn't try to restore it
+      try {
+        await multiAccountAuthService.clearActiveAccount();
+      } catch (_) { /* best-effort */ }
+      setCachedToken(null);
+      setCurrentUser(null);
+      disconnectSocket();
+      clearAllKeys();
+      storeLogout();
+    };
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
+  }, [setCurrentUser, storeLogout]);
+
   // Complete login after 2FA verification (or if 2FA not enabled)
   const completeLogin = async (fbUser: FirebaseUser) => {
     // ── Step 1: Unblock the UI immediately with data we already have ──────

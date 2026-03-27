@@ -26,6 +26,7 @@ class ErrorBoundary extends Component<
 }
 import { SocketProvider } from './context/SocketContext';
 import { CallProvider } from './context/CallContext';
+import { useAuth } from './context/AuthContext';
 import { useAuthStore } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import UserAvatar from './components/UserAvatar';
@@ -56,6 +57,7 @@ import UpdateBanner from './components/UpdateBanner';
 // ─── Inner App (has access to stores) ────────────────────────────────────
 const AppInner: React.FC = () => {
   const { isAuthenticated, isLoading, setLoading, currentUser, setCurrentUser } = useAuthStore();
+  const { logout } = useAuth();
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId, appLockModal, setAppLockModal } = useUIStore();
   const { activeCall, incomingCall} = useCallStore();
   // const { activeCall, incomingCall } = useCallStore();
@@ -169,22 +171,13 @@ const AppInner: React.FC = () => {
   useEffect(() => {
     if (!window.electronAPI?.onTraySwitchAccount) return;
     const cleanup = window.electronAPI.onTraySwitchAccount(async (uid) => {
-      const { switchToAccount } = await import('./services/multiAccountService');
-      const { setActiveAccount } = useMultiAccountStore.getState();
       const account = useMultiAccountStore.getState().accounts.find(a => a.uid === uid);
       if (!account) return;
-      try {
-        await switchToAccount(account);
-        setActiveAccount(uid);
-        window.location.href = '/';
-      } catch {
-        // fallback to login page
-        const { useAuth: _useAuth } = await import('./context/AuthContext');
-        window.location.href = `/login?switch=${encodeURIComponent(account.email)}&uid=${uid}`;
-      }
+      const { switchAccountWithUI } = await import('./services/accountSwitchService');
+      await switchAccountWithUI(account, logout);
     });
     return cleanup;
-  }, []);
+  }, [logout]);
 
   // Apply theme immediately (before first paint)
   document.documentElement.setAttribute('data-theme', theme);

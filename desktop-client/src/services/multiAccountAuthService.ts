@@ -169,6 +169,15 @@ class MultiAccountAuthService {
     await this.saveAccounts(storage);
   }
 
+  // Clear the active account (on session expiry) without removing it from the list
+  async clearActiveAccount(): Promise<void> {
+    const storage = await this.loadAccounts();
+    if (!storage) return;
+    storage.activeAccountUid = null;
+    storage.lastUpdated = new Date().toISOString();
+    await this.saveAccounts(storage);
+  }
+
   // Clear all accounts
   async clearAllAccounts(): Promise<void> {
     console.log('[MultiAccountAuth] Clearing all accounts...');

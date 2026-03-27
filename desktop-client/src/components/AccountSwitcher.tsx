@@ -86,62 +86,13 @@ export const AccountSwitcher: React.FC = () => {
 
       // Try seamless account switching first
       try {
-        const { switchToAccount } = await import('../services/multiAccountService');
-        console.log('[AccountSwitcher] Attempting seamless switch from', activeAccountUid, 'to', uid);
-        
-        // This will throw an error if token is expired
-        await switchToAccount(account);
-
-        // Token is valid - now sign out from Firebase to clear its session
-        // Otherwise Firebase will auto-restore the previous account
-        console.log('[AccountSwitcher] Token valid, signing out from Firebase before switch');
-        await logout(true); // true = switching account
-        
-        // Small delay to ensure Firebase signout completes
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // Set as active account in Zustand store
-        setActiveAccount(uid);
-
-        // Verify the active account was set in storage before reload
-        const { multiAccountAuthService } = await import('../services/multiAccountAuthService');
-        const verification = await multiAccountAuthService.getActiveAccount();
-        console.log('[AccountSwitcher] Verification - active account:', verification?.uid);
-        
-        if (verification?.uid !== uid) {
-          throw new Error('Failed to set active account in storage');
-        }
-
-        // Longer delay to ensure state is fully saved
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        console.log('[AccountSwitcher] Reloading to switch to account:', account.email);
-        
-        // Reload the page to reinitialize with new account
-        window.location.reload();
-      } catch (tokenError) {
-        // Token is expired or invalid - need to re-authenticate
-        console.warn('[AccountSwitcher] Seamless switch failed, redirecting to login:', tokenError);
-        
-        // Remove overlay
+        const { switchAccountWithUI } = await import('../services/accountSwitchService');
+        await switchAccountWithUI(account, logout);
+      } catch {
+        // switchAccountWithUI handles all errors internally, this is a safety net
         const overlay = document.getElementById('account-switching-overlay');
         if (overlay) overlay.remove();
-        
         setSwitching(false);
-        
-        // Show error modal explaining the situation
-        console.log('[AccountSwitcher] Setting error modal state to show expired token message');
-        setErrorModal({
-          isOpen: true,
-          message: `${(tokenError as Error).message}. You will be redirected to log in again.`,
-        });
-        console.log('[AccountSwitcher] Error modal state set:', { isOpen: true });
-        
-        // Store the account info for redirect
-        (window as any).__pendingAccountSwitch = {
-          account,
-          uid,
-        };
       }
     } catch (error) {
       console.error('Failed to switch account:', error);
@@ -199,37 +150,8 @@ export const AccountSwitcher: React.FC = () => {
     }
   };
 
-  const handleErrorModalClose = async () => {
+  const handleErrorModalClose = () => {
     setErrorModal({ isOpen: false, message: '' });
-
-    // Handle pending account switch if exists
-    const pendingSwitch = (window as any).__pendingAccountSwitch;
-    if (pendingSwitch) {
-      const { account, uid } = pendingSwitch;
-      delete (window as any).__pendingAccountSwitch;
-      
-      // Remove the expired account from storage
-      // User will need to re-add it with fresh credentials
-      const { multiAccountAuthService } = await import('../services/multiAccountAuthService');
-      await multiAccountAuthService.removeAccount(uid);
-      
-      // Also remove from Zustand store
-      removeAccount(uid);
-      
-      // Clear the active account so auto-restore doesn't happen
-      const storage = await multiAccountAuthService.loadAccounts();
-      if (storage) {
-        storage.activeAccountUid = null; // Clear active account to prevent auto-restore
-        await multiAccountAuthService.saveAccounts(storage);
-      }
-      
-      // Logout current user
-      await logout(true);
-      
-      // Redirect to login page
-      // The user will log in and it will be added as a fresh account
-      window.location.href = '/login';
-    }
   };
 
   const handleAddAccount = async () => {
