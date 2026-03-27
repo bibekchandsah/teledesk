@@ -7,7 +7,7 @@ import UserAvatar from './UserAvatar';
 import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon, getMessagePreviewColor } from '../utils/formatters';
 import { Chat } from '@shared/types';
 import { deleteChat as deleteChatApi } from '../services/apiService';
-import { Users, PenSquare, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock } from 'lucide-react';
+import { Users, UserPlus, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const PREVIEW_ICON_MAP = { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff } as const;
@@ -381,7 +381,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
                 <Users size={18} />
               </button>
               <button onClick={onNewChat} title="New chat" style={iconBtnStyle}>
-                <PenSquare size={18} />
+                <UserPlus size={18} />
               </button>
             </div>
           </>
