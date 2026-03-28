@@ -2027,6 +2027,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       return;
     }
 
+    // Skip if input is too short to provide a useful suggestion
+    if (inputText.trim().length > 0 && inputText.trim().length < 2) {
+      return;
+    }
+
     // Generate suggestions based on current context and draft
     const validMessages = chatMessages.filter(m => !m.deleted);
     
@@ -2037,8 +2042,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       setIsGeneratingAiSuggestion(true);
       try {
         const { generateMessageSuggestion } = await import('../services/geminiService');
-        const suggestions = await generateMessageSuggestion(
-          currentUser.geminiApiKey!,
+        const { suggestions, usedIndex } = await generateMessageSuggestion(
+          currentUser.geminiApiKeys?.length ? currentUser.geminiApiKeys : [currentUser.geminiApiKey!],
           validMessages, 
           currentUser.uid,
           inputText // Pass current typing text for autocomplete
@@ -2052,15 +2057,32 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         let lastReset = currentUser.aiUsageLastReset ? new Date(currentUser.aiUsageLastReset) : null;
         let resetTimestamp = currentUser.aiUsageLastReset || now.toISOString();
 
+        // Handle per-key usages
+        const totalKeys = currentUser.geminiApiKeys?.length || 1;
+        let newUsageCounts = [...(currentUser.aiUsageCounts || [])];
+        if (newUsageCounts.length < totalKeys) {
+          while (newUsageCounts.length < totalKeys) newUsageCounts.push(0);
+        }
+
         // Reset if more than 24 hours passed or no last reset exists
         if (!lastReset || (now.getTime() - lastReset.getTime() > 24 * 60 * 60 * 1000)) {
           newCount = 1;
           resetTimestamp = now.toISOString();
+          newUsageCounts = newUsageCounts.map(() => 0); // Reset all per-key counts
+        }
+        
+        // Increment the specific key used
+        if (usedIndex >= 0 && usedIndex < newUsageCounts.length) {
+          newUsageCounts[usedIndex]++;
+        } else if (usedIndex >= 0) {
+          // This handles cases where array was shorter than usedIndex
+          newUsageCounts[usedIndex] = 1;
         }
 
         updateMyProfile({ 
           aiUsageCount: newCount, 
-          aiUsageLastReset: resetTimestamp 
+          aiUsageLastReset: resetTimestamp,
+          aiUsageCounts: newUsageCounts
         }).then(res => {
           if (res.success && res.data) {
             // Update context ref BEFORE updating user to avoid loop
@@ -2089,10 +2111,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       } finally {
         setIsGeneratingAiSuggestion(false);
       }
-    }, currentContextKey === `${lastMessageId}-` ? 500 : 1500); // Shorter delay for new chats, longer for typing
+    }, currentContextKey === `${lastMessageId}-` ? 800 : 2000); // Shorter for initial load, longer for typing debounce
 
     return () => clearTimeout(timer);
-  }, [currentContextKey, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.uid, chatMessages, currentUser?.aiUsageCount]);
+  }, [currentContextKey, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.uid, chatMessages]);
 
   // ─── Search match indices ─────────────────────────────────────────────────
   const searchMatchIndices = useMemo(() => {

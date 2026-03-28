@@ -26,11 +26,13 @@ export interface User {
   chatThemes?: Record<string, ChatTheme>; // per-chat theme customization, keyed by chatId
   twoFactorEnabled?: boolean; // if true, 2FA is enabled for this user
   twoFactorSecret?: string; // encrypted TOTP secret (only sent during setup, not in regular profile)
-  geminiApiKey?: string; // Gemini API Key for AI suggestions
+  geminiApiKey?: string; // Gemini API Key for AI suggestions (Legacy)
+  geminiApiKeys?: string[]; // Multiple Gemini API Keys for AI suggestions (Failover)
   aiSuggestionsEnabled?: boolean; // if true, AI text suggestions are shown in chat
   aiUsageCount?: number; // current AI requests used today
   aiUsageLimit?: number; // max AI requests allowed per day
   aiUsageLastReset?: string; // timestamp of the last counter reset
+  aiUsageCounts?: number[]; // individual counts for each key in geminiApiKeys
 }
 
 export interface ChatTheme {

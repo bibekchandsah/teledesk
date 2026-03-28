@@ -109,7 +109,8 @@ const SettingsPage: React.FC = () => {
 
   // AI Assistant states
   const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(currentUser?.aiSuggestionsEnabled === true);
-  const [geminiApiKey, setGeminiApiKey] = useState(currentUser?.geminiApiKey || '');
+  const [geminiApiKeys, setGeminiApiKeys] = useState<string[]>(currentUser?.geminiApiKeys || (currentUser?.geminiApiKey ? [currentUser.geminiApiKey] : []));
+  const [newKeyInput, setNewKeyInput] = useState('');
   const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
   const [geminiKeySavedMessage, setGeminiKeySavedMessage] = useState('');
 
@@ -121,8 +122,8 @@ const SettingsPage: React.FC = () => {
     setUsernameInput(currentUser?.username ?? '');
     setNameInput(currentUser?.name ?? '');
     setAiSuggestionsEnabled(currentUser?.aiSuggestionsEnabled === true);
-    setGeminiApiKey(currentUser?.geminiApiKey || '');
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey]);
+    setGeminiApiKeys(currentUser?.geminiApiKeys || (currentUser?.geminiApiKey ? [currentUser.geminiApiKey] : []));
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -388,23 +389,54 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleSaveGeminiKey = async () => {
+  const handleAddGeminiKey = async () => {
+    const trimmed = newKeyInput.trim();
+    if (!trimmed || !currentUser) return;
+    if (geminiApiKeys.includes(trimmed)) {
+      setGeminiKeySavedMessage('Key already added');
+      return;
+    }
+    
+    const updatedKeys = [...geminiApiKeys, trimmed];
     setIsSavingGeminiKey(true);
-    setGeminiKeySavedMessage('');
     try {
-      const res = await updateMyProfile({ geminiApiKey: geminiApiKey.trim() });
+      const res = await updateMyProfile({ 
+        geminiApiKeys: updatedKeys,
+        geminiApiKey: updatedKeys[0] // sync first key to legacy field
+      });
       if (res.success && res.data) {
         setCurrentUser(res.data);
-        setGeminiKeySavedMessage('API Key saved successfully.');
-        setTimeout(() => setGeminiKeySavedMessage(''), 3000);
+        setNewKeyInput('');
+        setGeminiKeySavedMessage('Key added successfully');
       } else {
-        setGeminiKeySavedMessage('Failed to save API key.');
+        setGeminiKeySavedMessage('Failed to add key');
       }
-    } catch (e) {
-      console.error('[Settings] Failed to save Gemini API key', e);
-      setGeminiKeySavedMessage('Failed to save API key.');
+    } catch (err) {
+      setGeminiKeySavedMessage('Error adding key');
     } finally {
       setIsSavingGeminiKey(false);
+      setTimeout(() => setGeminiKeySavedMessage(''), 3000);
+    }
+  };
+
+  const handleRemoveGeminiKey = async (keyToRemove: string) => {
+    if (!currentUser) return;
+    const updatedKeys = geminiApiKeys.filter(k => k !== keyToRemove);
+    setIsSavingGeminiKey(true);
+    try {
+      const res = await updateMyProfile({ 
+        geminiApiKeys: updatedKeys,
+        geminiApiKey: updatedKeys[0] || '' // sync or clear legacy field
+      });
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setGeminiKeySavedMessage('Key removed');
+      }
+    } catch (err) {
+      setGeminiKeySavedMessage('Error removing key');
+    } finally {
+      setIsSavingGeminiKey(false);
+      setTimeout(() => setGeminiKeySavedMessage(''), 3000);
     }
   };
 
@@ -415,7 +447,7 @@ const SettingsPage: React.FC = () => {
       className="responsive-scroll-page"
       style={{
         flex: 1,
-        overflowY: 'auto',
+        // overflowY: 'auto',
         padding: 32,
         maxWidth: 600,
         margin: '0 auto',
@@ -638,45 +670,125 @@ const SettingsPage: React.FC = () => {
         </SettingRow>
         
         <SettingRow
-          label="Gemini API Key"
-          description="Your Gemini API key used for generating suggestions"
+          label="Gemini API Keys"
+          description={`Add multiple keys for automatic failover. Currently: ${geminiApiKeys.length} keys`}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 350 }}>
+            {/* New key input */}
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 type="password"
-                placeholder="Enter Gemini API Key"
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
+                placeholder="Add new Gemini API Key"
+                value={newKeyInput}
+                onChange={(e) => setNewKeyInput(e.target.value)}
                 style={{
-                  padding: '6px 10px',
+                  padding: '8px 12px',
                   borderRadius: 8,
                   border: '1px solid var(--border)',
                   backgroundColor: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
                   fontSize: 13,
-                  width: 200,
+                  flex: 1,
                   outline: 'none',
                 }}
               />
               <button
-                onClick={handleSaveGeminiKey}
-                disabled={isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey}
+                onClick={handleAddGeminiKey}
+                disabled={isSavingGeminiKey || !newKeyInput.trim()}
                 style={{
-                  padding: '6px 12px',
+                  padding: '8px 16px',
                   borderRadius: 8,
-                  backgroundColor: geminiApiKey !== currentUser.geminiApiKey ? 'var(--accent)' : 'var(--bg-tertiary)',
-                  color: geminiApiKey !== currentUser.geminiApiKey ? '#fff' : 'var(--text-secondary)',
+                  backgroundColor: newKeyInput.trim() ? 'var(--accent)' : 'var(--bg-tertiary)',
+                  color: newKeyInput.trim() ? '#fff' : 'var(--text-secondary)',
                   border: 'none',
-                  opacity: (isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey) ? 0.7 : 1,
-                  cursor: (isSavingGeminiKey || geminiApiKey === currentUser.geminiApiKey) ? 'not-allowed' : 'pointer',
+                  cursor: (isSavingGeminiKey || !newKeyInput.trim()) ? 'not-allowed' : 'pointer',
                   fontSize: 13,
-                  fontWeight: 500,
+                  fontWeight: 600,
                   transition: 'all 0.2s',
                 }}
               >
-                {isSavingGeminiKey ? 'Saving...' : 'Save'}
+                {isSavingGeminiKey ? '...' : 'Add'}
               </button>
+            </div>
+
+            {/* List of keys */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {geminiApiKeys.map((key, index) => {
+                const usage = (currentUser?.aiUsageCounts && currentUser.aiUsageCounts[index]) || 0;
+                const limit = 1500; // Standard free tier limit
+                const percentage = Math.min(100, (usage / limit) * 100);
+                
+                let barColor = '#22c55e'; // Green
+                if (percentage > 80) barColor = '#ef4444'; // Red
+                else if (percentage > 50) barColor = '#eab308'; // Yellow
+
+                return (
+                  <div key={index} style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div 
+                          title={index === 0 ? 'Primary Key' : 'Backup Key'}
+                          style={{ 
+                            width: 6, 
+                            height: 6, 
+                            borderRadius: '50%', 
+                            backgroundColor: index === 0 ? '#22c55e' : 'var(--text-secondary)',
+                          }} 
+                        />
+                        <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                          ••••••••{key.slice(-4)}
+                        </span>
+                        <span style={{ fontSize: 10, color: 'var(--text-secondary)', opacity: 0.8 }}>
+                          ({usage}/{limit})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveGeminiKey(key)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          padding: 4,
+                          opacity: 0.7,
+                          zIndex: 2
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    {/* Progress Bar */}
+                    <div style={{ 
+                      height: 2, 
+                      width: '100%', 
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      marginTop: -2 
+                    }}>
+                      <div style={{ 
+                        height: '100%', 
+                        width: `${percentage}%`, 
+                        backgroundColor: barColor,
+                        transition: 'width 0.3s ease, background-color 0.3s ease'
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             
             <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
@@ -699,7 +811,7 @@ const SettingsPage: React.FC = () => {
             </div>
 
             {geminiKeySavedMessage && (
-              <span style={{ fontSize: 11, color: geminiKeySavedMessage.includes('Failed') ? '#ef4444' : '#22c55e' }}>
+              <span style={{ fontSize: 11, color: geminiKeySavedMessage.includes('Failed') || geminiKeySavedMessage.includes('Error') ? '#ef4444' : '#22c55e' }}>
                 {geminiKeySavedMessage}
               </span>
             )}

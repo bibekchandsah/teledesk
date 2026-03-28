@@ -34,10 +34,12 @@ type UserRow = {
   two_factor_pending_secret: string | null;
   two_factor_pending_backup_codes: string[] | null;
   gemini_api_key: string | null;
+  gemini_api_keys: string[] | null;
   ai_suggestions_enabled: boolean | null;
   ai_usage_count: number | null;
   ai_usage_limit: number | null;
   ai_usage_last_reset: string | null;
+  ai_usage_counts: number[] | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -64,10 +66,12 @@ const rowToUser = (r: UserRow): User => ({
   twoFactorEnabled: r.two_factor_enabled ?? false,
   // Note: two_factor_secret is intentionally not included in regular user profile for security
   geminiApiKey: r.gemini_api_key ?? undefined,
+  geminiApiKeys: r.gemini_api_keys ?? [],
   aiSuggestionsEnabled: r.ai_suggestions_enabled ?? false,
   aiUsageCount: r.ai_usage_count ?? 0,
   aiUsageLimit: r.ai_usage_limit ?? 1500,
   aiUsageLastReset: r.ai_usage_last_reset ?? undefined,
+  aiUsageCounts: r.ai_usage_counts ?? [],
   isDeleted: r.email?.endsWith('@deleted.local') && r.name === 'Deleted User',
 });
 
@@ -106,10 +110,12 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       two_factor_pending_secret: null,
       two_factor_pending_backup_codes: null,
       gemini_api_key: null,
+      gemini_api_keys: [],
       ai_suggestions_enabled: false,
       ai_usage_count: 0,
       ai_usage_limit: 1500,
       ai_usage_last_reset: now(),
+      ai_usage_counts: [],
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -125,10 +131,12 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
   if (data.showMessageStatus !== undefined) updates.show_message_status = data.showMessageStatus;
   if (data.showLiveTyping !== undefined) updates.show_live_typing = data.showLiveTyping;
   if (data.geminiApiKey !== undefined) updates.gemini_api_key = data.geminiApiKey;
+  if (data.geminiApiKeys !== undefined) updates.gemini_api_keys = data.geminiApiKeys;
   if (data.aiSuggestionsEnabled !== undefined) updates.ai_suggestions_enabled = data.aiSuggestionsEnabled;
   if (data.aiUsageCount !== undefined) updates.ai_usage_count = data.aiUsageCount;
   if (data.aiUsageLimit !== undefined) updates.ai_usage_limit = data.aiUsageLimit;
   if (data.aiUsageLastReset !== undefined) updates.ai_usage_last_reset = data.aiUsageLastReset;
+  if (data.aiUsageCounts !== undefined) updates.ai_usage_counts = data.aiUsageCounts;
 
   const { data: updated } = await supabase
     .from('users')

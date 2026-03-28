@@ -53,13 +53,14 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
     const uid = req.user!.uid;
     const { 
       name, avatar, showActiveStatus, showMessageStatus, showLiveTyping, 
-      geminiApiKey, aiSuggestionsEnabled, 
-      aiUsageCount, aiUsageLimit, aiUsageLastReset 
+      geminiApiKey, geminiApiKeys, aiSuggestionsEnabled, 
+      aiUsageCount, aiUsageLimit, aiUsageLastReset, aiUsageCounts 
     } = req.body as { 
       name?: string; avatar?: string; showActiveStatus?: boolean; 
       showMessageStatus?: boolean; showLiveTyping?: boolean; 
-      geminiApiKey?: string; aiSuggestionsEnabled?: boolean;
-      aiUsageCount?: number; aiUsageLimit?: number; aiUsageLastReset?: string
+      geminiApiKey?: string; geminiApiKeys?: string[]; aiSuggestionsEnabled?: boolean;
+      aiUsageCount?: number; aiUsageLimit?: number; aiUsageLastReset?: string;
+      aiUsageCounts?: number[];
     };
     const updates: any = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
@@ -68,10 +69,12 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
     if (showMessageStatus !== undefined) updates.showMessageStatus = Boolean(showMessageStatus);
     if (showLiveTyping !== undefined) updates.showLiveTyping = Boolean(showLiveTyping);
     if (geminiApiKey !== undefined) updates.geminiApiKey = String(geminiApiKey);
+    if (geminiApiKeys !== undefined) updates.geminiApiKeys = Array.isArray(geminiApiKeys) ? geminiApiKeys.map(k => String(k).trim()) : [];
     if (aiSuggestionsEnabled !== undefined) updates.aiSuggestionsEnabled = Boolean(aiSuggestionsEnabled);
     if (aiUsageCount !== undefined) updates.aiUsageCount = Number(aiUsageCount);
     if (aiUsageLimit !== undefined) updates.aiUsageLimit = Number(aiUsageLimit);
     if (aiUsageLastReset !== undefined) updates.aiUsageLastReset = String(aiUsageLastReset);
+    if (aiUsageCounts !== undefined) updates.aiUsageCounts = Array.isArray(aiUsageCounts) ? aiUsageCounts.map(n => Number(n)) : [];
     
     const user = await upsertUser(uid, updates);
 
