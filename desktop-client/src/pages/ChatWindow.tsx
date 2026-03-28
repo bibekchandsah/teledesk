@@ -2008,6 +2008,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   // ─── AI Assistant State ────────────────────────────────────────────────────
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [isGeneratingAiSuggestion, setIsGeneratingAiSuggestion] = useState(false);
+  const [aiStatus, setAiStatus] = useState<'idle' | 'generating' | 'error_quota' | 'error_auth' | 'error_model' | 'error_generic'>('idle');
 
   // AI Suggestion generation logic
   const lastMessageId = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1].messageId : 'empty';
@@ -2043,6 +2044,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           inputText // Pass current typing text for autocomplete
         );
         setAiSuggestions(suggestions);
+        setAiStatus('idle');
 
         // --- Usage Tracking & Daily Reset ---
         const now = new Date();
@@ -2066,8 +2068,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             setCurrentUser(res.data);
           }
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to generate AI suggestion:', err);
+        const errorMsg = err?.message || '';
+        
+        if (errorMsg === 'GEMINI_QUOTA_EXCEEDED') {
+          setAiStatus('error_quota');
+          // Sync quota exhausted status immediately
+          updateMyProfile({ aiUsageCount: currentUser?.aiUsageLimit || 1500 }).then(res => {
+            if (res.success && res.data) setCurrentUser(res.data);
+          });
+        } else if (errorMsg === 'GEMINI_AUTH_ERROR') {
+          setAiStatus('error_auth');
+        } else if (errorMsg === 'GEMINI_MODEL_NOT_FOUND') {
+          setAiStatus('error_model');
+        } else {
+          setAiStatus('error_generic');
+        }
         setAiSuggestions([]);
       } finally {
         setIsGeneratingAiSuggestion(false);
@@ -5346,6 +5363,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             maxHeight: 120,
             overflowY: 'auto'
           }}>
+            {aiStatus === 'error_quota' && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: 16,
+                color: '#ef4444',
+                fontSize: 12,
+                fontWeight: 600,
+                whiteSpace: 'nowrap'
+              }}>
+                <AlertCircle size={14} />
+                Daily API Limit Reached
+              </div>
+            )}
+
+            {(aiStatus === 'error_auth' || aiStatus === 'error_model') && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.2)',
+                borderRadius: 16,
+                color: '#f59e0b',
+                fontSize: 12,
+                fontWeight: 600,
+                whiteSpace: 'nowrap'
+              }}>
+                <AlertCircle size={14} />
+                API Configuration Error
+              </div>
+            )}
+
             {aiSuggestions.map((suggestion, idx) => (
               <div
                 key={idx}

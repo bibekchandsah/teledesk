@@ -51,8 +51,17 @@ export const syncUser = async (req: Request, res: Response): Promise<void> => {
 export const updateMe = async (req: Request, res: Response): Promise<void> => {
   try {
     const uid = req.user!.uid;
-    const { name, avatar, showActiveStatus, showMessageStatus, showLiveTyping, geminiApiKey, aiSuggestionsEnabled } = req.body as { name?: string; avatar?: string; showActiveStatus?: boolean; showMessageStatus?: boolean; showLiveTyping?: boolean; geminiApiKey?: string; aiSuggestionsEnabled?: boolean };
-    const updates: Partial<SharedUser> = {};
+    const { 
+      name, avatar, showActiveStatus, showMessageStatus, showLiveTyping, 
+      geminiApiKey, aiSuggestionsEnabled, 
+      aiUsageCount, aiUsageLimit, aiUsageLastReset 
+    } = req.body as { 
+      name?: string; avatar?: string; showActiveStatus?: boolean; 
+      showMessageStatus?: boolean; showLiveTyping?: boolean; 
+      geminiApiKey?: string; aiSuggestionsEnabled?: boolean;
+      aiUsageCount?: number; aiUsageLimit?: number; aiUsageLastReset?: string
+    };
+    const updates: any = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
     if (avatar !== undefined) updates.avatar = String(avatar);
     if (showActiveStatus !== undefined) updates.showActiveStatus = Boolean(showActiveStatus);
@@ -60,6 +69,9 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
     if (showLiveTyping !== undefined) updates.showLiveTyping = Boolean(showLiveTyping);
     if (geminiApiKey !== undefined) updates.geminiApiKey = String(geminiApiKey);
     if (aiSuggestionsEnabled !== undefined) updates.aiSuggestionsEnabled = Boolean(aiSuggestionsEnabled);
+    if (aiUsageCount !== undefined) updates.aiUsageCount = Number(aiUsageCount);
+    if (aiUsageLimit !== undefined) updates.aiUsageLimit = Number(aiUsageLimit);
+    if (aiUsageLastReset !== undefined) updates.aiUsageLastReset = String(aiUsageLastReset);
     
     const user = await upsertUser(uid, updates);
 

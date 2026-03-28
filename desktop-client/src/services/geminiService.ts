@@ -12,39 +12,55 @@ export const generateMessageSuggestion = async (
   
   const genAI = new GoogleGenerativeAI(trimmedKey);
   
+  const findPreferredModel = (models: any[]): string => {
+    const availableModels = models.filter((m: any) => 
+      !m.supportedMethods || m.supportedMethods.includes('generateContent')
+    );
+    
+    const preferredKeywords = [
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash',
+      'flash-latest',
+      'gemini-pro'
+    ];
+
+    for (const keyword of preferredKeywords) {
+      const found = availableModels.find((m: any) => m.name.includes(keyword));
+      if (found) return found.name.replace('models/', '');
+    }
+
+    if (availableModels.length > 0) {
+      return availableModels[0].name.replace('models/', '');
+    }
+    return 'gemini-1.5-flash-latest';
+  };
+
   const getBestModel = async (): Promise<string> => {
     try {
+      // Try v1beta first
       const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${trimmedKey}`;
       const res = await fetch(url);
-      const data = await res.json();
       
-      const rawModels = data.models || [];
-      const availableModels = rawModels.filter((m: any) => 
-        !m.supportedMethods || m.supportedMethods.includes('generateContent')
-      );
-      
-      const preferredKeywords = [
-        'gemini-3.1-flash',
-        'gemini-3-flash',
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash',
-        'flash-latest',
-        'gemini-pro'
-      ];
-
-      for (const keyword of preferredKeywords) {
-        const found = availableModels.find((m: any) => m.name.includes(keyword));
-        if (found) return found.name.replace('models/', '');
+      if (res.status === 403 || res.status === 404) {
+        // Fallback to v1 list if v1beta is restricted or 404
+        const v1Url = `https://generativelanguage.googleapis.com/v1/models?key=${trimmedKey}`;
+        const v1Res = await fetch(v1Url);
+        if (v1Res.ok) {
+          const v1Data = await v1Res.json();
+          return findPreferredModel(v1Data.models || []);
+        }
       }
 
-      if (availableModels.length > 0) {
-        return availableModels[0].name.replace('models/', '');
+      if (res.ok) {
+        const data = await res.json();
+        return findPreferredModel(data.models || []);
       }
     } catch (err) {
-      console.warn('[Gemini] Failed to list models via fetch:', err);
+      console.warn('[Gemini] Model discovery failed, using safe fallback:', err);
     }
-    return 'gemini-1.5-flash';
+    // Safe hardcoded fallbacks that usually exist in v1beta
+    return 'gemini-1.5-flash-latest';
   };
 
   const modelName = await getBestModel();
@@ -98,8 +114,22 @@ Ensure the suggestions flow naturally from the user's current draft.`;
     // Fallback: split by newlines if it's not JSON
     const lines = text.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('[')).slice(0, 3);
     return lines.length > 0 ? lines : [text.trim()];
-  } catch (error) {
-    console.error('Error generating AI suggestion:', error);
-    throw new Error('Failed to generate suggestion');
+  } catch (error: any) {
+    const status = error?.status;
+    const message = error?.message || '';
+    
+    console.error(`[Gemini] Error [${status}]:`, message);
+
+    if (status === 429 || message.includes('quota') || message.includes('429')) {
+      throw new Error('GEMINI_QUOTA_EXCEEDED');
+    }
+    if (status === 401 || status === 403 || message.includes('401') || message.includes('403')) {
+      throw new Error('GEMINI_AUTH_ERROR');
+    }
+    if (status === 404 || message.includes('404')) {
+      throw new Error('GEMINI_MODEL_NOT_FOUND');
+    }
+    
+    throw new Error('GEMINI_GENERIC_ERROR');
   }
 };
