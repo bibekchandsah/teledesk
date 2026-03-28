@@ -14,7 +14,7 @@ import UserAvatar from '../components/UserAvatar';
 import { listenToMessages } from '../services/firebaseService';
 import { sendMessage, sendTyping, sendLiveTyping, sendReadReceipt, joinChatRoom, leaveChatRoom, sendReaction, removeReaction, getSocket } from '../services/socketService';
 import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../services/fileService';
-import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi } from '../services/apiService';
+import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi, updateMyProfile } from '../services/apiService';
 import { Message } from '@shared/types';
 import { useCallContext } from '../context/CallContext';
 import { APP_CONFIG } from '@shared/constants/config';
@@ -2010,9 +2010,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const [isGeneratingAiSuggestion, setIsGeneratingAiSuggestion] = useState(false);
 
   // AI Suggestion generation logic
+  const lastMessageId = chatMessages.length > 0 ? chatMessages[chatMessages.length - 1].messageId : 'empty';
+  const currentContextKey = `${lastMessageId}-${inputText}`;
+  const prevContextKeyRef = useRef('');
+
   useEffect(() => {
     if (!currentUser?.aiSuggestionsEnabled || !currentUser?.geminiApiKey) {
       setAiSuggestions([]);
+      prevContextKeyRef.current = '';
+      return;
+    }
+
+    // Only proceed if the context has actually changed (new message or new typing)
+    if (currentContextKey === prevContextKeyRef.current) {
       return;
     }
 
@@ -2033,16 +2043,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           inputText // Pass current typing text for autocomplete
         );
         setAiSuggestions(suggestions);
+
+        // --- Usage Tracking & Daily Reset ---
+        const now = new Date();
+        let newCount = (currentUser.aiUsageCount || 0) + 1;
+        let lastReset = currentUser.aiUsageLastReset ? new Date(currentUser.aiUsageLastReset) : null;
+        let resetTimestamp = currentUser.aiUsageLastReset || now.toISOString();
+
+        // Reset if more than 24 hours passed or no last reset exists
+        if (!lastReset || (now.getTime() - lastReset.getTime() > 24 * 60 * 60 * 1000)) {
+          newCount = 1;
+          resetTimestamp = now.toISOString();
+        }
+
+        updateMyProfile({ 
+          aiUsageCount: newCount, 
+          aiUsageLastReset: resetTimestamp 
+        }).then(res => {
+          if (res.success && res.data) {
+            // Update context ref BEFORE updating user to avoid loop
+            prevContextKeyRef.current = currentContextKey;
+            setCurrentUser(res.data);
+          }
+        });
       } catch (err) {
         console.error('Failed to generate AI suggestion:', err);
         setAiSuggestions([]);
       } finally {
         setIsGeneratingAiSuggestion(false);
       }
-    }, 1500);
+    }, currentContextKey === `${lastMessageId}-` ? 500 : 1500); // Shorter delay for new chats, longer for typing
 
     return () => clearTimeout(timer);
-  }, [chatMessages, currentUser, inputText]);
+  }, [currentContextKey, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.uid, chatMessages, currentUser?.aiUsageCount]);
 
   // ─── Search match indices ─────────────────────────────────────────────────
   const searchMatchIndices = useMemo(() => {

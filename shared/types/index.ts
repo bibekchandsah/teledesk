@@ -28,6 +28,9 @@ export interface User {
   twoFactorSecret?: string; // encrypted TOTP secret (only sent during setup, not in regular profile)
   geminiApiKey?: string; // Gemini API Key for AI suggestions
   aiSuggestionsEnabled?: boolean; // if true, AI text suggestions are shown in chat
+  aiUsageCount?: number; // current AI requests used today
+  aiUsageLimit?: number; // max AI requests allowed per day
+  aiUsageLastReset?: string; // timestamp of the last counter reset
 }
 
 export interface ChatTheme {

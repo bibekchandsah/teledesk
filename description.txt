@@ -876,6 +876,7 @@ text suggestion using gemini api
 pofile edit in profile 
 add camera selection and preview in setting page
 encrypt audio and video 
+ask before closing the audio/video call
 
 
 

@@ -35,6 +35,9 @@ type UserRow = {
   two_factor_pending_backup_codes: string[] | null;
   gemini_api_key: string | null;
   ai_suggestions_enabled: boolean | null;
+  ai_usage_count: number | null;
+  ai_usage_limit: number | null;
+  ai_usage_last_reset: string | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -62,6 +65,9 @@ const rowToUser = (r: UserRow): User => ({
   // Note: two_factor_secret is intentionally not included in regular user profile for security
   geminiApiKey: r.gemini_api_key ?? undefined,
   aiSuggestionsEnabled: r.ai_suggestions_enabled ?? false,
+  aiUsageCount: r.ai_usage_count ?? 0,
+  aiUsageLimit: r.ai_usage_limit ?? 1500,
+  aiUsageLastReset: r.ai_usage_last_reset ?? undefined,
   isDeleted: r.email?.endsWith('@deleted.local') && r.name === 'Deleted User',
 });
 
@@ -101,6 +107,9 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       two_factor_pending_backup_codes: null,
       gemini_api_key: null,
       ai_suggestions_enabled: false,
+      ai_usage_count: 0,
+      ai_usage_limit: 1500,
+      ai_usage_last_reset: now(),
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -117,6 +126,9 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
   if (data.showLiveTyping !== undefined) updates.show_live_typing = data.showLiveTyping;
   if (data.geminiApiKey !== undefined) updates.gemini_api_key = data.geminiApiKey;
   if (data.aiSuggestionsEnabled !== undefined) updates.ai_suggestions_enabled = data.aiSuggestionsEnabled;
+  if (data.aiUsageCount !== undefined) updates.ai_usage_count = data.aiUsageCount;
+  if (data.aiUsageLimit !== undefined) updates.ai_usage_limit = data.aiUsageLimit;
+  if (data.aiUsageLastReset !== undefined) updates.ai_usage_last_reset = data.aiUsageLastReset;
 
   const { data: updated } = await supabase
     .from('users')

@@ -4,9 +4,9 @@ import { useAuthStore } from '../store/authStore';
 import { useChatStore } from '../store/chatStore';
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
-import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA, requestEmailVerification } from '../services/apiService';
+import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA, requestEmailVerification, getMyProfile } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
-import { Pencil, Sun, Moon, Trash2 } from 'lucide-react';
+import { Pencil, Sun, Moon, Trash2, Sparkles, RefreshCw } from 'lucide-react';
 import { firebaseAuth } from '../services/firebaseService';
 import TwoFactorSetupModal from '../components/modals/TwoFactorSetupModal';
 import VerificationModal from '../components/modals/VerificationModal';
@@ -685,6 +685,123 @@ const SettingsPage: React.FC = () => {
             )}
           </div>
         </SettingRow>
+
+        {/* AI Usage Tracker */}
+        {aiSuggestionsEnabled && currentUser.geminiApiKey && (
+          <div style={{ 
+            marginTop: 8, 
+            padding: '16px', 
+            borderRadius: 12, 
+            backgroundColor: 'var(--bg-tertiary)', 
+            border: '1px solid var(--border)',
+            animation: 'fadeIn 0.3s ease-out'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Request Usage
+                </span>
+              </div>
+              <button 
+                onClick={async () => {
+                  try {
+                    const res = await getMyProfile();
+                    if (res.success && res.data) setCurrentUser(res.data);
+                  } catch (e) {}
+                }}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  color: 'var(--accent)', 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  padding: 4,
+                  borderRadius: 4,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(var(--accent-rgb), 0.1)'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="Refresh usage statistics"
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+            
+            <div style={{ 
+              position: 'relative', 
+              height: 10, 
+              width: '100%', 
+              backgroundColor: 'rgba(var(--accent-rgb), 0.1)', 
+              borderRadius: 5, 
+              overflow: 'hidden', 
+              marginBottom: 10,
+              border: '1px solid rgba(var(--accent-rgb), 0.05)'
+            }}>
+              <div style={{ 
+                position: 'absolute', 
+                left: 0, 
+                top: 0, 
+                height: '100%', 
+                width: `${Math.min(100, ((currentUser.aiUsageCount || 0) / (currentUser.aiUsageLimit || 1500)) * 100)}%`, 
+                background: 'linear-gradient(90deg, var(--accent) 0%, #818cf8 100%)',
+                transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: '0 0 10px rgba(99, 102, 241, 0.3)'
+              }} />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              <span style={{ color: 'var(--text-primary)' }}>
+                <strong>{currentUser.aiUsageCount || 0}</strong> / {currentUser.aiUsageLimit || 1500} requests
+              </span>
+              <span style={{ fontSize: 11, opacity: 0.8 }}>Resets every 24h</span>
+            </div>
+
+            <div style={{ 
+              marginTop: 16, 
+              paddingTop: 12, 
+              borderTop: '1px solid var(--border)',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Daily Strategy</div>
+                <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Adjust limit based on your API tier</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, backgroundColor: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>MAX:</span>
+                <input 
+                  type="number"
+                  min="1"
+                  max="10000"
+                  value={currentUser.aiUsageLimit || 1500}
+                  onChange={async (e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val)) {
+                      try {
+                        const res = await updateMyProfile({ aiUsageLimit: val });
+                        if (res.success && res.data) setCurrentUser(res.data);
+                      } catch (e) {}
+                    }
+                  }}
+                  style={{ 
+                    width: 55, 
+                    padding: '2px 4px', 
+                    fontSize: 12, 
+                    fontWeight: 700,
+                    background: 'transparent', 
+                    border: 'none', 
+                    color: 'var(--accent)',
+                    textAlign: 'right',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Privacy & Security */}
