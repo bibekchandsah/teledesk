@@ -6,7 +6,7 @@ import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
 import { updateMyProfile, uploadAvatar, get2FAStatus, disable2FA, requestEmailVerification, getMyProfile } from '../services/apiService';
 import { emitActiveStatusChange } from '../services/socketService';
-import { Pencil, Sun, Moon, Trash2, Sparkles, RefreshCw } from 'lucide-react';
+import { Pencil, Sun, Moon, Trash2, Sparkles, RefreshCw, ExternalLink } from 'lucide-react';
 import { firebaseAuth } from '../services/firebaseService';
 import TwoFactorSetupModal from '../components/modals/TwoFactorSetupModal';
 import VerificationModal from '../components/modals/VerificationModal';
@@ -678,6 +678,26 @@ const SettingsPage: React.FC = () => {
                 {isSavingGeminiKey ? 'Saving...' : 'Save'}
               </button>
             </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+              <a 
+                href="https://aistudio.google.com/app/apikey" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                Get API Key <ExternalLink size={10} />
+              </a>
+              <a 
+                href="https://aistudio.google.com/app/usage" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                Check official usage <ExternalLink size={10} />
+              </a>
+            </div>
+
             {geminiKeySavedMessage && (
               <span style={{ fontSize: 11, color: geminiKeySavedMessage.includes('Failed') ? '#ef4444' : '#22c55e' }}>
                 {geminiKeySavedMessage}
