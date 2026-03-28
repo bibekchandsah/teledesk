@@ -40,6 +40,8 @@ type UserRow = {
   ai_usage_limit: number | null;
   ai_usage_last_reset: string | null;
   ai_usage_counts: number[] | null;
+  groq_api_keys: string[] | null;
+  groq_usage_counts: number[] | null;
 };
 
 const rowToUser = (r: UserRow): User => ({
@@ -72,6 +74,8 @@ const rowToUser = (r: UserRow): User => ({
   aiUsageLimit: r.ai_usage_limit ?? 1500,
   aiUsageLastReset: r.ai_usage_last_reset ?? undefined,
   aiUsageCounts: r.ai_usage_counts ?? [],
+  groqApiKeys: r.groq_api_keys ?? [],
+  groqUsageCounts: r.groq_usage_counts ?? [],
   isDeleted: r.email?.endsWith('@deleted.local') && r.name === 'Deleted User',
 });
 
@@ -116,6 +120,8 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
       ai_usage_limit: 1500,
       ai_usage_last_reset: now(),
       ai_usage_counts: [],
+      groq_api_keys: [],
+      groq_usage_counts: [],
     };
     await supabase.from('users').insert(newUser);
     logger.info(`New user created: ${uid}`);
@@ -137,6 +143,8 @@ export const upsertUser = async (uid: string, data: Partial<User>): Promise<User
   if (data.aiUsageLimit !== undefined) updates.ai_usage_limit = data.aiUsageLimit;
   if (data.aiUsageLastReset !== undefined) updates.ai_usage_last_reset = data.aiUsageLastReset;
   if (data.aiUsageCounts !== undefined) updates.ai_usage_counts = data.aiUsageCounts;
+  if (data.groqApiKeys !== undefined) updates.groq_api_keys = data.groqApiKeys;
+  if (data.groqUsageCounts !== undefined) updates.groq_usage_counts = data.groqUsageCounts;
 
   const { data: updated } = await supabase
     .from('users')

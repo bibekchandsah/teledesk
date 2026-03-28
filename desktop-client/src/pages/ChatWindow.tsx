@@ -2041,13 +2041,62 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     const timer = setTimeout(async () => {
       setIsGeneratingAiSuggestion(true);
       try {
-        const { generateMessageSuggestion } = await import('../services/geminiService');
-        const { suggestions, usedIndex, exhaustedIndices } = await generateMessageSuggestion(
-          currentUser.geminiApiKeys?.length ? currentUser.geminiApiKeys : [currentUser.geminiApiKey!],
-          validMessages, 
-          currentUser.uid,
-          inputText // Pass current typing text for autocomplete
-        );
+        let suggestions: string[] | null = null;
+        let finalUsedIndex: number = -1;
+        let usedProvider: 'gemini' | 'groq' | null = null;
+        let geminiExhausted: number[] = [];
+        let groqExhausted: number[] = [];
+        let lastErrorMsg = '';
+
+        const geminiKeys = currentUser.geminiApiKeys?.length ? currentUser.geminiApiKeys : (currentUser.geminiApiKey ? [currentUser.geminiApiKey] : []);
+        const hasGeminiKeys = geminiKeys.length > 0;
+        
+        const groqKeys = currentUser.groqApiKeys || [];
+        const hasGroqKeys = groqKeys.length > 0;
+
+        if (!hasGeminiKeys && !hasGroqKeys) {
+            throw new Error('No API keys configured');
+        }
+
+        // 1. Try Gemini
+        if (hasGeminiKeys) {
+          try {
+            const { generateMessageSuggestion } = await import('../services/geminiService');
+            const result = await generateMessageSuggestion(geminiKeys, validMessages, currentUser.uid, inputText);
+            suggestions = result.suggestions;
+            finalUsedIndex = result.usedIndex;
+            geminiExhausted = result.exhaustedIndices || [];
+            usedProvider = 'gemini';
+          } catch (err: any) {
+            console.warn('[AI] Gemini failed:', err);
+            lastErrorMsg = err?.message || 'GEMINI_GENERIC_ERROR';
+            geminiExhausted = err?.exhaustedIndices || [];
+          }
+        }
+
+        // 2. Fallback to Groq
+        if (!suggestions && hasGroqKeys) {
+          try {
+            const { generateGroqMessageSuggestion } = await import('../services/groqService');
+            const result = await generateGroqMessageSuggestion(groqKeys, validMessages, currentUser.uid, inputText);
+            suggestions = result.suggestions;
+            finalUsedIndex = result.usedIndex;
+            groqExhausted = result.exhaustedIndices || [];
+            usedProvider = 'groq';
+          } catch (err: any) {
+            console.warn('[AI] Groq failed:', err);
+            lastErrorMsg = err?.message || 'GROQ_GENERIC_ERROR';
+            groqExhausted = err?.exhaustedIndices || [];
+          }
+        }
+
+        if (!suggestions) {
+            const err = new Error(lastErrorMsg || 'ALL_PROVIDERS_FAILED');
+            (err as any).geminiExhausted = geminiExhausted;
+            (err as any).groqExhausted = groqExhausted;
+            throw err;
+        }
+
         setAiSuggestions(suggestions);
         setAiStatus('idle');
 
@@ -2057,45 +2106,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
         let lastReset = currentUser.aiUsageLastReset ? new Date(currentUser.aiUsageLastReset) : null;
         let resetTimestamp = currentUser.aiUsageLastReset || now.toISOString();
 
-        // Handle per-key usages
-        const totalKeys = currentUser.geminiApiKeys?.length || 1;
-        let newUsageCounts = [...(currentUser.aiUsageCounts || [])];
-        if (newUsageCounts.length < totalKeys) {
-          while (newUsageCounts.length < totalKeys) newUsageCounts.push(0);
-        }
+        const totalGeminiKeys = geminiKeys.length || 1;
+        let newGeminiUsageCounts = [...(currentUser.aiUsageCounts || [])];
+        while (newGeminiUsageCounts.length < totalGeminiKeys) newGeminiUsageCounts.push(0);
 
-        // Reset if more than 24 hours passed or no last reset exists
+        const totalGroqKeys = groqKeys.length || 1;
+        let newGroqUsageCounts = [...(currentUser.groqUsageCounts || [])];
+        while (newGroqUsageCounts.length < totalGroqKeys) newGroqUsageCounts.push(0);
+
         if (!lastReset || (now.getTime() - lastReset.getTime() > 24 * 60 * 60 * 1000)) {
           newCount = 1;
           resetTimestamp = now.toISOString();
-          newUsageCounts = newUsageCounts.map(() => 0); // Reset all per-key counts
-        }
-        
-        // Mark exhausted keys if any occurred during failover before success
-        if (exhaustedIndices && exhaustedIndices.length > 0) {
-          exhaustedIndices.forEach(idx => {
-            if (idx >= 0 && idx < newUsageCounts.length) {
-              newUsageCounts[idx] = currentUser.aiUsageLimit || 1500;
-            }
-          });
+          newGeminiUsageCounts = newGeminiUsageCounts.map(() => 0);
+          newGroqUsageCounts = newGroqUsageCounts.map(() => 0);
         }
 
-        // Increment the specific key used
-        if (usedIndex >= 0 && usedIndex < newUsageCounts.length) {
-          if (newUsageCounts[usedIndex] < (currentUser.aiUsageLimit || 1500)) {
-             newUsageCounts[usedIndex]++;
-          }
-        } else if (usedIndex >= 0) {
-          newUsageCounts[usedIndex] = 1;
+        // Mark any exhausted keys accumulated during failovers
+        geminiExhausted.forEach(idx => { if (idx >= 0 && idx < newGeminiUsageCounts.length) newGeminiUsageCounts[idx] = currentUser.aiUsageLimit || 1500; });
+        groqExhausted.forEach(idx => { if (idx >= 0 && idx < newGroqUsageCounts.length) newGroqUsageCounts[idx] = currentUser.aiUsageLimit || 1500; });
+
+        // Increment the successful key
+        if (usedProvider === 'gemini' && finalUsedIndex >= 0 && finalUsedIndex < newGeminiUsageCounts.length) {
+            if (newGeminiUsageCounts[finalUsedIndex] < (currentUser.aiUsageLimit || 1500)) newGeminiUsageCounts[finalUsedIndex]++;
+        } else if (usedProvider === 'groq' && finalUsedIndex >= 0 && finalUsedIndex < newGroqUsageCounts.length) {
+            if (newGroqUsageCounts[finalUsedIndex] < (currentUser.aiUsageLimit || 1500)) newGroqUsageCounts[finalUsedIndex]++;
         }
 
         updateMyProfile({ 
           aiUsageCount: newCount, 
           aiUsageLastReset: resetTimestamp,
-          aiUsageCounts: newUsageCounts
+          aiUsageCounts: newGeminiUsageCounts,
+          groqUsageCounts: newGroqUsageCounts
         }).then(res => {
           if (res.success && res.data) {
-            // Update context ref BEFORE updating user to avoid loop
             prevContextKeyRef.current = currentContextKey;
             setCurrentUser(res.data);
           }
@@ -2103,40 +2146,45 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       } catch (err: any) {
         console.error('Failed to generate AI suggestion:', err);
         const errorMsg = err?.message || '';
-        const exhaustedIndices: number[] = err?.exhaustedIndices || [];
+        const geminiExhausted: number[] = err?.geminiExhausted || [];
+        const groqExhausted: number[] = err?.groqExhausted || [];
         
-        if (errorMsg === 'GEMINI_QUOTA_EXCEEDED') {
-          setAiStatus('error_quota');
-          
-          let newUsageCounts = [...(currentUser?.aiUsageCounts || [])];
-          const totalKeys = currentUser?.geminiApiKeys?.length || 1;
-          while (newUsageCounts.length < totalKeys) newUsageCounts.push(0);
-          
-          if (exhaustedIndices.length > 0) {
-            exhaustedIndices.forEach(idx => {
-              if (idx >= 0 && idx < newUsageCounts.length) {
-                newUsageCounts[idx] = currentUser?.aiUsageLimit || 1500;
-              }
-            });
-          } else {
-             // If all failed and no specific indices returned (fallback)
-             newUsageCounts = newUsageCounts.map(() => currentUser?.aiUsageLimit || 1500);
-          }
+        let newGeminiUsageCounts = [...(currentUser?.aiUsageCounts || [])];
+        const totalGeminiKeys = currentUser?.geminiApiKeys?.length || 1;
+        while (newGeminiUsageCounts.length < totalGeminiKeys) newGeminiUsageCounts.push(0);
 
-          // Sync quota exhausted status immediately
-          updateMyProfile({ 
-            aiUsageCount: currentUser?.aiUsageLimit || 1500,
-            aiUsageCounts: newUsageCounts
-          }).then(res => {
-            if (res.success && res.data) setCurrentUser(res.data);
-          });
-        } else if (errorMsg === 'GEMINI_AUTH_ERROR') {
+        let newGroqUsageCounts = [...(currentUser?.groqUsageCounts || [])];
+        const totalGroqKeys = currentUser?.groqApiKeys?.length || 1;
+        while (newGroqUsageCounts.length < totalGroqKeys) newGroqUsageCounts.push(0);
+
+        geminiExhausted.forEach(idx => { if (idx >= 0 && idx < newGeminiUsageCounts.length) newGeminiUsageCounts[idx] = currentUser?.aiUsageLimit || 1500; });
+        groqExhausted.forEach(idx => { if (idx >= 0 && idx < newGroqUsageCounts.length) newGroqUsageCounts[idx] = currentUser?.aiUsageLimit || 1500; });
+
+        if (errorMsg.includes('QUOTA') || errorMsg === 'ALL_PROVIDERS_FAILED') {
+          setAiStatus('error_quota');
+          // If a fatal quota fallback occurred, blanket flush arrays if completely exhausted
+          if (geminiExhausted.length === 0 && (errorMsg === 'GEMINI_QUOTA_EXCEEDED' || errorMsg === 'ALL_PROVIDERS_FAILED')) {
+              newGeminiUsageCounts = newGeminiUsageCounts.map(() => currentUser?.aiUsageLimit || 1500);
+          }
+          if (errorMsg === 'ALL_PROVIDERS_FAILED' && currentUser?.groqApiKeys && currentUser.groqApiKeys.length > 0 && groqExhausted.length === 0) {
+              newGroqUsageCounts = newGroqUsageCounts.map(() => currentUser?.aiUsageLimit || 1500);
+          }
+        } else if (errorMsg.includes('AUTH_ERROR') || errorMsg === 'No API keys configured') {
           setAiStatus('error_auth');
-        } else if (errorMsg === 'GEMINI_MODEL_NOT_FOUND') {
+        } else if (errorMsg.includes('MODEL_NOT_FOUND')) {
           setAiStatus('error_model');
         } else {
           setAiStatus('error_generic');
         }
+
+        updateMyProfile({ 
+          aiUsageCount: currentUser?.aiUsageLimit || 1500,
+          aiUsageCounts: newGeminiUsageCounts,
+          groqUsageCounts: newGroqUsageCounts
+        }).then(res => {
+          if (res.success && res.data) setCurrentUser(res.data);
+        });
+
         setAiSuggestions([]);
       } finally {
         setIsGeneratingAiSuggestion(false);
@@ -2144,7 +2192,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     }, currentContextKey === `${lastMessageId}-` ? 800 : 2000); // Shorter for initial load, longer for typing debounce
 
     return () => clearTimeout(timer);
-  }, [currentContextKey, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.uid, chatMessages]);
+  }, [currentContextKey, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys, currentUser?.groqApiKeys, currentUser?.uid, chatMessages]);
 
   // ─── Search match indices ─────────────────────────────────────────────────
   const searchMatchIndices = useMemo(() => {

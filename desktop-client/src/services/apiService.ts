@@ -114,7 +114,9 @@ export const updateMyProfile = (updates: {
   aiUsageCount?: number; 
   aiUsageLimit?: number; 
   aiUsageLastReset?: string,
-  aiUsageCounts?: number[]
+  aiUsageCounts?: number[],
+  groqApiKeys?: string[],
+  groqUsageCounts?: number[]
 }) =>
   authFetch<User>('/api/users/me', {
     method: 'PATCH',

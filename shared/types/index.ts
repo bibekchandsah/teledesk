@@ -33,6 +33,8 @@ export interface User {
   aiUsageLimit?: number; // max AI requests allowed per day
   aiUsageLastReset?: string; // timestamp of the last counter reset
   aiUsageCounts?: number[]; // individual counts for each key in geminiApiKeys
+  groqApiKeys?: string[]; // Multiple Groq API Keys for failover
+  groqUsageCounts?: number[]; // individual counts for each Groq key
 }
 
 export interface ChatTheme {

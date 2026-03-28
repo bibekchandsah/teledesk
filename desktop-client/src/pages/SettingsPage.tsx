@@ -115,6 +115,14 @@ const SettingsPage: React.FC = () => {
   const [geminiKeySavedMessage, setGeminiKeySavedMessage] = useState('');
   const [selectedKeyIndex, setSelectedKeyIndex] = useState(0);
 
+  const [groqApiKeys, setGroqApiKeys] = useState<string[]>(currentUser?.groqApiKeys || []);
+  const [newGroqKeyInput, setNewGroqKeyInput] = useState('');
+  const [isSavingGroqKey, setIsSavingGroqKey] = useState(false);
+  const [groqKeySavedMessage, setGroqKeySavedMessage] = useState('');
+  const [selectedGroqKeyIndex, setSelectedGroqKeyIndex] = useState(0);
+
+  const [activeTrackerTab, setActiveTrackerTab] = useState<'gemini' | 'groq'>('gemini');
+
   // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
   useEffect(() => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
@@ -127,7 +135,11 @@ const SettingsPage: React.FC = () => {
     if (selectedKeyIndex >= (currentUser?.geminiApiKeys?.length || 1)) {
       setSelectedKeyIndex(0);
     }
-  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys]);
+    setGroqApiKeys(currentUser?.groqApiKeys || []);
+    if (selectedGroqKeyIndex >= (currentUser?.groqApiKeys?.length || 1)) {
+      setSelectedGroqKeyIndex(0);
+    }
+  }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys, currentUser?.groqApiKeys]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -441,6 +453,51 @@ const SettingsPage: React.FC = () => {
     } finally {
       setIsSavingGeminiKey(false);
       setTimeout(() => setGeminiKeySavedMessage(''), 3000);
+    }
+  };
+
+  const handleAddGroqKey = async () => {
+    const trimmed = newGroqKeyInput.trim();
+    if (!trimmed || !currentUser) return;
+    if (groqApiKeys.includes(trimmed)) {
+      setGroqKeySavedMessage('Key already added');
+      return;
+    }
+    
+    const updatedKeys = [...groqApiKeys, trimmed];
+    setIsSavingGroqKey(true);
+    try {
+      const res = await updateMyProfile({ groqApiKeys: updatedKeys });
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setNewGroqKeyInput('');
+        setGroqKeySavedMessage('Key added successfully');
+      } else {
+        setGroqKeySavedMessage('Failed to add key');
+      }
+    } catch (err) {
+      setGroqKeySavedMessage('Error adding key');
+    } finally {
+      setIsSavingGroqKey(false);
+      setTimeout(() => setGroqKeySavedMessage(''), 3000);
+    }
+  };
+
+  const handleRemoveGroqKey = async (keyToRemove: string) => {
+    if (!currentUser) return;
+    const updatedKeys = groqApiKeys.filter(k => k !== keyToRemove);
+    setIsSavingGroqKey(true);
+    try {
+      const res = await updateMyProfile({ groqApiKeys: updatedKeys });
+      if (res.success && res.data) {
+        setCurrentUser(res.data);
+        setGroqKeySavedMessage('Key removed');
+      }
+    } catch (err) {
+      setGroqKeySavedMessage('Error removing key');
+    } finally {
+      setIsSavingGroqKey(false);
+      setTimeout(() => setGroqKeySavedMessage(''), 3000);
     }
   };
 
@@ -834,8 +891,161 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 24, padding: '0 8px' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Groq API Keys</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Ultra-fast fallback when Gemini hits limits. Currently: {groqApiKeys.length} keys</div>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+            {/* New key input */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                placeholder="Add new Groq API Key (gsk_...)"
+                value={newGroqKeyInput}
+                onChange={(e) => setNewGroqKeyInput(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  flex: 1,
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleAddGroqKey}
+                disabled={isSavingGroqKey || !newGroqKeyInput.trim()}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  backgroundColor: newGroqKeyInput.trim() ? '#f55036' : 'var(--bg-tertiary)', // Groq orange
+                  color: newGroqKeyInput.trim() ? '#fff' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: (isSavingGroqKey || !newGroqKeyInput.trim()) ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {isSavingGroqKey ? '...' : 'Add'}
+              </button>
+            </div>
+
+            {/* List of keys */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {groqApiKeys.map((key, index) => {
+                const usage = (currentUser?.groqUsageCounts && currentUser.groqUsageCounts[index]) || 0;
+                const limit = 1500; // Tracked limit mirroring Gemini
+                const percentage = Math.min(100, (usage / limit) * 100);
+                
+                let barColor = '#22c55e'; // Green
+                if (percentage > 80) barColor = '#ef4444'; // Red
+                else if (percentage > 50) barColor = '#eab308'; // Yellow
+
+                const isSelected = selectedGroqKeyIndex === index;
+
+                return (
+                  <div 
+                    key={index} 
+                    onClick={() => setSelectedGroqKeyIndex(index)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? 'rgba(245, 80, 54, 0.05)' : 'var(--bg-secondary)',
+                      border: `1px solid ${isSelected ? '#f55036' : 'var(--border)'}`,
+                      overflow: 'hidden',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div 
+                          title="Backup Key"
+                          style={{ 
+                            width: 6, 
+                            height: 6, 
+                            borderRadius: '50%', 
+                            backgroundColor: '#f55036',
+                          }} 
+                        />
+                        <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                          ••••••••{key.slice(-4)}
+                        </span>
+                        <span style={{ fontSize: 10, color: 'var(--text-secondary)', opacity: 0.8 }}>
+                          ({usage}/{limit})
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveGroqKey(key);
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          padding: 4,
+                          opacity: 0.7,
+                          zIndex: 2
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    {/* Progress Bar */}
+                    <div style={{ 
+                      height: 2, 
+                      width: '100%', 
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      marginTop: -2 
+                    }}>
+                      <div style={{ 
+                        height: '100%', 
+                        width: `${percentage}%`, 
+                        backgroundColor: barColor,
+                        transition: 'width 0.3s ease, background-color 0.3s ease'
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+              <a 
+                href="https://console.groq.com/keys" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, color: '#f55036', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                Get Groq Key <ExternalLink size={10} />
+              </a>
+            </div>
+
+            {groqKeySavedMessage && (
+              <span style={{ fontSize: 11, color: groqKeySavedMessage.includes('Failed') || groqKeySavedMessage.includes('Error') ? '#ef4444' : '#22c55e' }}>
+                {groqKeySavedMessage}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* AI Usage Tracker */}
-        {aiSuggestionsEnabled && currentUser.geminiApiKey && (
+        {aiSuggestionsEnabled && (geminiApiKeys.length > 0 || groqApiKeys.length > 0) && (
           <div style={{ 
             marginTop: 8, 
             padding: '16px', 
@@ -845,12 +1055,50 @@ const SettingsPage: React.FC = () => {
             animation: 'fadeIn 0.3s ease-out'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={16} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Request Usage
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={16} style={{ color: 'var(--accent)' }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Request Usage
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', backgroundColor: 'var(--bg-secondary)', borderRadius: 8, padding: 2, border: '1px solid var(--border)' }}>
+                  <button 
+                    onClick={() => setActiveTrackerTab('gemini')}
+                    style={{ 
+                      padding: '4px 10px', 
+                      fontSize: 11, 
+                      fontWeight: 700, 
+                      borderRadius: 6,
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: activeTrackerTab === 'gemini' ? 'var(--accent)' : 'transparent',
+                      color: activeTrackerTab === 'gemini' ? '#fff' : 'var(--text-secondary)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Gemini
+                  </button>
+                  <button 
+                    onClick={() => setActiveTrackerTab('groq')}
+                    style={{ 
+                      padding: '4px 10px', 
+                      fontSize: 11, 
+                      fontWeight: 700, 
+                      borderRadius: 6,
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: activeTrackerTab === 'groq' ? '#f55036' : 'transparent',
+                      color: activeTrackerTab === 'groq' ? '#fff' : 'var(--text-secondary)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Groq
+                  </button>
+                </div>
               </div>
+              
               <button 
                 onClick={async () => {
                   try {
@@ -877,34 +1125,61 @@ const SettingsPage: React.FC = () => {
               </button>
             </div>
             
-            <div style={{ 
-              position: 'relative', 
-              height: 10, 
-              width: '100%', 
-              backgroundColor: 'rgba(var(--accent-rgb), 0.1)', 
-              borderRadius: 5, 
-              overflow: 'hidden', 
-              marginBottom: 10,
-              border: '1px solid rgba(var(--accent-rgb), 0.05)'
-            }}>
-              <div style={{ 
-                position: 'absolute', 
-                left: 0, 
-                top: 0, 
-                height: '100%', 
-                width: `${Math.min(100, (((currentUser.aiUsageCounts && currentUser.aiUsageCounts[selectedKeyIndex]) || 0) / (currentUser.aiUsageLimit || 1500)) * 100)}%`, 
-                background: 'linear-gradient(90deg, var(--accent) 0%, #818cf8 100%)',
-                transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: '0 0 10px rgba(99, 102, 241, 0.3)'
-              }} />
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
-              <span style={{ color: 'var(--text-primary)' }}>
-                <strong>{(currentUser.aiUsageCounts && currentUser.aiUsageCounts[selectedKeyIndex]) || 0}</strong> / {currentUser.aiUsageLimit || 1500} requests
-              </span>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>Resets every 24h</span>
-            </div>
+            {/* Stat Row */}
+            {(() => {
+              const isGemini = activeTrackerTab === 'gemini';
+              const keys = isGemini ? geminiApiKeys : groqApiKeys;
+              const idx = isGemini ? selectedKeyIndex : selectedGroqKeyIndex;
+              const counts = isGemini ? currentUser.aiUsageCounts : currentUser.groqUsageCounts;
+              const usage = (counts && counts[idx]) || 0;
+              const limit = currentUser.aiUsageLimit || 1500;
+              const percentage = Math.min(100, (usage / limit) * 100);
+              const accentColor = isGemini ? 'var(--accent)' : '#f55036';
+
+              if (keys.length === 0) {
+                return (
+                  <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+                    No {isGemini ? 'Gemini' : 'Groq'} keys configured.
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  <div style={{ 
+                    position: 'relative', 
+                    height: 10, 
+                    width: '100%', 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                    borderRadius: 5, 
+                    overflow: 'hidden', 
+                    marginBottom: 10,
+                    border: '1px solid var(--border)'
+                  }}>
+                    <div style={{ 
+                      position: 'absolute', 
+                      left: 0, 
+                      top: 0, 
+                      height: '100%', 
+                      width: `${percentage}%`, 
+                      background: isGemini 
+                        ? 'linear-gradient(90deg, var(--accent) 0%, #818cf8 100%)'
+                        : 'linear-gradient(90deg, #f55036 0%, #fa7c68 100%)',
+                      transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: `0 0 10px ${isGemini ? 'rgba(99, 102, 241, 0.3)' : 'rgba(245, 80, 54, 0.3)'}`
+                    }} />
+                  </div>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: accentColor }} />
+                      Key #{idx + 1}: <strong>{usage}</strong> / {limit} requests
+                    </span>
+                    <span style={{ fontSize: 11, opacity: 0.8 }}>Resets every 24h</span>
+                  </div>
+                </>
+              );
+            })()}
 
             <div style={{
               marginTop: 16, 

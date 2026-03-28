@@ -54,13 +54,16 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
     const { 
       name, avatar, showActiveStatus, showMessageStatus, showLiveTyping, 
       geminiApiKey, geminiApiKeys, aiSuggestionsEnabled, 
-      aiUsageCount, aiUsageLimit, aiUsageLastReset, aiUsageCounts 
+      aiUsageCount, aiUsageLimit, aiUsageLastReset, aiUsageCounts,
+      groqApiKeys, groqUsageCounts
     } = req.body as { 
       name?: string; avatar?: string; showActiveStatus?: boolean; 
       showMessageStatus?: boolean; showLiveTyping?: boolean; 
       geminiApiKey?: string; geminiApiKeys?: string[]; aiSuggestionsEnabled?: boolean;
       aiUsageCount?: number; aiUsageLimit?: number; aiUsageLastReset?: string;
       aiUsageCounts?: number[];
+      groqApiKeys?: string[];
+      groqUsageCounts?: number[];
     };
     const updates: any = {};
     if (name !== undefined) updates.name = String(name).trim().slice(0, 100);
@@ -75,6 +78,8 @@ export const updateMe = async (req: Request, res: Response): Promise<void> => {
     if (aiUsageLimit !== undefined) updates.aiUsageLimit = Number(aiUsageLimit);
     if (aiUsageLastReset !== undefined) updates.aiUsageLastReset = String(aiUsageLastReset);
     if (aiUsageCounts !== undefined) updates.aiUsageCounts = Array.isArray(aiUsageCounts) ? aiUsageCounts.map(n => Number(n)) : [];
+    if (groqApiKeys !== undefined) updates.groqApiKeys = Array.isArray(groqApiKeys) ? groqApiKeys.map(k => String(k).trim()) : [];
+    if (groqUsageCounts !== undefined) updates.groqUsageCounts = Array.isArray(groqUsageCounts) ? groqUsageCounts.map(n => Number(n)) : [];
     
     const user = await upsertUser(uid, updates);
 
