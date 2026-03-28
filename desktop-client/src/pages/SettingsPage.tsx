@@ -113,6 +113,7 @@ const SettingsPage: React.FC = () => {
   const [newKeyInput, setNewKeyInput] = useState('');
   const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
   const [geminiKeySavedMessage, setGeminiKeySavedMessage] = useState('');
+  const [selectedKeyIndex, setSelectedKeyIndex] = useState(0);
 
   // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
   useEffect(() => {
@@ -123,6 +124,9 @@ const SettingsPage: React.FC = () => {
     setNameInput(currentUser?.name ?? '');
     setAiSuggestionsEnabled(currentUser?.aiSuggestionsEnabled === true);
     setGeminiApiKeys(currentUser?.geminiApiKeys || (currentUser?.geminiApiKey ? [currentUser.geminiApiKey] : []));
+    if (selectedKeyIndex >= (currentUser?.geminiApiKeys?.length || 1)) {
+      setSelectedKeyIndex(0);
+    }
   }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys]);
   const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
   const [isSavingName, setIsSavingName] = useState(false);
@@ -669,11 +673,13 @@ const SettingsPage: React.FC = () => {
           </button>
         </SettingRow>
         
-        <SettingRow
-          label="Gemini API Keys"
-          description={`Add multiple keys for automatic failover. Currently: ${geminiApiKeys.length} keys`}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 350 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 24, padding: '0 8px' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>Gemini API Keys</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Add multiple keys for automatic failover. Currently: {geminiApiKeys.length} keys</div>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
             {/* New key input */}
             <div style={{ display: 'flex', gap: 8 }}>
               <input
@@ -722,16 +728,23 @@ const SettingsPage: React.FC = () => {
                 if (percentage > 80) barColor = '#ef4444'; // Red
                 else if (percentage > 50) barColor = '#eab308'; // Yellow
 
+                const isSelected = selectedKeyIndex === index;
+
                 return (
-                  <div key={index} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    borderRadius: 8,
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)',
-                    overflow: 'hidden',
-                    position: 'relative'
-                  }}>
+                  <div 
+                    key={index} 
+                    onClick={() => setSelectedKeyIndex(index)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? 'rgba(var(--accent-rgb), 0.05)' : 'var(--bg-secondary)',
+                      border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                      overflow: 'hidden',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}>
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -756,7 +769,10 @@ const SettingsPage: React.FC = () => {
                         </span>
                       </div>
                       <button
-                        onClick={() => handleRemoveGeminiKey(key)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveGeminiKey(key);
+                        }}
                         style={{
                           border: 'none',
                           background: 'none',
@@ -816,7 +832,7 @@ const SettingsPage: React.FC = () => {
               </span>
             )}
           </div>
-        </SettingRow>
+        </div>
 
         {/* AI Usage Tracker */}
         {aiSuggestionsEnabled && currentUser.geminiApiKey && (
@@ -876,7 +892,7 @@ const SettingsPage: React.FC = () => {
                 left: 0, 
                 top: 0, 
                 height: '100%', 
-                width: `${Math.min(100, ((currentUser.aiUsageCount || 0) / (currentUser.aiUsageLimit || 1500)) * 100)}%`, 
+                width: `${Math.min(100, (((currentUser.aiUsageCounts && currentUser.aiUsageCounts[selectedKeyIndex]) || 0) / (currentUser.aiUsageLimit || 1500)) * 100)}%`, 
                 background: 'linear-gradient(90deg, var(--accent) 0%, #818cf8 100%)',
                 transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
                 boxShadow: '0 0 10px rgba(99, 102, 241, 0.3)'
@@ -885,12 +901,12 @@ const SettingsPage: React.FC = () => {
             
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>
               <span style={{ color: 'var(--text-primary)' }}>
-                <strong>{currentUser.aiUsageCount || 0}</strong> / {currentUser.aiUsageLimit || 1500} requests
+                <strong>{(currentUser.aiUsageCounts && currentUser.aiUsageCounts[selectedKeyIndex]) || 0}</strong> / {currentUser.aiUsageLimit || 1500} requests
               </span>
               <span style={{ fontSize: 11, opacity: 0.8 }}>Resets every 24h</span>
             </div>
 
-            <div style={{ 
+            <div style={{
               marginTop: 16, 
               paddingTop: 12, 
               borderTop: '1px solid var(--border)',
