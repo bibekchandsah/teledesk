@@ -4,7 +4,8 @@ import { Message } from '../../../shared/types';
 export const generateMessageSuggestion = async (
   apiKey: string,
   chatMessages: Message[],
-  currentUserUid: string
+  currentUserUid: string,
+  currentInput: string = ''
 ): Promise<string[]> => {
   const trimmedKey = (apiKey || '').trim();
   if (!trimmedKey) throw new Error('Gemini API Key is empty or missing');
@@ -47,14 +48,12 @@ export const generateMessageSuggestion = async (
   };
 
   const modelName = await getBestModel();
-  // Using v1beta for everything since it is more reliable for JSON mode in many cases
   const model = genAI.getGenerativeModel(
     { model: modelName },
     { apiVersion: 'v1beta' }
   );
 
   const recentMessages = chatMessages.slice(-10);
-  if (recentMessages.length === 0) return ['Hello! How can I help you today?', 'Hi there!', 'Greetings!'];
   
   const contextText = recentMessages.map(msg => {
     const role = msg.senderId === currentUserUid ? 'Me' : 'Other Person';
@@ -62,20 +61,28 @@ export const generateMessageSuggestion = async (
     return `${role}: ${content}`;
   }).join('\n');
 
-  const prompt = `You are an AI assistant helping a user write a reply in a chat application.
+  let prompt = `You are an AI assistant helping a user write a reply in a chat application.
 Here is the recent conversation history:
-${contextText}
+${contextText || "No previous messages."}
 
-Generate exactly 3 diverse, natural, helpful, and concise single-message replies that the user ("Me") could send next. 
+Generate exactly 3 diverse, natural, helpful, and concise single-message response options that the user ("Me") could send next. 
 Your response must be a valid JSON array of strings, like this: ["suggestion 1", "suggestion 2", "suggestion 3"].
-Do not include any other text, markdown blocks, or formatting. Only return the JSON array string.
 Maintain the tone of the conversation. If the user was asked a question, suggest appropriate varied answers.`;
+
+  if (currentInput.trim()) {
+    prompt += `\n\nCRITICAL: The user has already started typing: "${currentInput.trim()}". 
+Your suggestions MUST be direct completions or logical extensions of this exact text. 
+For example, if the user typed "I am", suggest things like "I am on my way", "I am looking into it", etc.
+Ensure the suggestions flow naturally from the user's current draft.`;
+  }
+
+  prompt += `\n\nOnly return the JSON array string. No other text or markdown.`;
 
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
     
-    // Attempt to extract JSON from the response (sometimes AI wraps it in code blocks)
+    // Attempt to extract JSON from the response
     const jsonMatch = text.match(/\[.*\]/s);
     if (jsonMatch) {
       try {

@@ -2016,25 +2016,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       return;
     }
 
-    // Generate suggestions if input is empty and we have a valid chat context (even if empty)
+    // Generate suggestions based on current context and draft
     const validMessages = chatMessages.filter(m => !m.deleted);
     
-    if (inputText.trim().length > 0) {
-      setAiSuggestions([]);
-      return;
-    }
+    // Avoid spamming the API on rapid typing
 
-    // Avoid spamming the API on rapid chat switching or incoming messages
+    // Avoid spamming the API on rapid typing
     const timer = setTimeout(async () => {
       setIsGeneratingAiSuggestion(true);
       try {
         const { generateMessageSuggestion } = await import('../services/geminiService');
         const suggestions = await generateMessageSuggestion(
           currentUser.geminiApiKey!,
-          validMessages, // Pass messages for context
-          currentUser.uid
+          validMessages, 
+          currentUser.uid,
+          inputText // Pass current typing text for autocomplete
         );
-        // Ensure input is still empty before showing
         setAiSuggestions(suggestions);
       } catch (err) {
         console.error('Failed to generate AI suggestion:', err);
@@ -5282,7 +5279,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       )}
 
       {/* AI Suggestions Pills */}
-      {aiSuggestions.length > 0 && !inputText.trim() && !isGeneratingAiSuggestion && !isRecording && (
+      {aiSuggestions.length > 0 && !isGeneratingAiSuggestion && !isRecording && (
         <div
           style={{
             display: 'flex',
@@ -5303,10 +5300,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             <div style={{ flex: 1 }} />
             <button 
               onClick={() => setAiSuggestions([])}
-              style={{ ...iconBtnStyle, width: 20, height: 20, opacity: 0.6 }}
-              title="Dismiss"
+              style={{ ...iconBtnStyle, width: 28, height: 28, opacity: 0.8 }}
+              title="Dismiss AI suggestions"
             >
-              <X size={12} />
+              <X size={16} />
             </button>
           </div>
           <div style={{ 
