@@ -2016,11 +2016,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       return;
     }
 
-    // Only generate suggestion if the last message is from the *other* person, and we haven't typed anything yet
+    // Generate suggestions if input is empty and we have a valid chat context (even if empty)
     const validMessages = chatMessages.filter(m => !m.deleted);
-    const lastMsg = validMessages[validMessages.length - 1];
     
-    if (!lastMsg || lastMsg.senderId === currentUser.uid || inputText.trim().length > 0) {
+    if (inputText.trim().length > 0) {
       setAiSuggestions([]);
       return;
     }
@@ -5321,6 +5320,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               <div
                 key={idx}
                 className="ai-suggestion-pill"
+                title={suggestion}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
