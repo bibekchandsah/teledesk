@@ -6,19 +6,20 @@ export const generateMessageSuggestion = async (
   chatMessages: Message[],
   currentUserUid: string,
   currentInput: string = ''
-): Promise<{ suggestions: string[]; usedIndex: number }> => {
+): Promise<{ suggestions: string[]; usedIndex: number; exhaustedIndices: number[] }> => {
   const keys = Array.isArray(apiKeys) ? apiKeys : [apiKeys];
   const activeKeys = keys.map(k => (k || '').trim()).filter(Boolean);
   
   if (activeKeys.length === 0) throw new Error('Gemini API Key is empty or missing');
 
   let lastError: Error | null = null;
+  const exhaustedIndices: number[] = [];
 
   for (let i = 0; i < activeKeys.length; i++) {
     const apiKey = activeKeys[i];
     try {
       const suggestions = await _generateWithSingleKey(apiKey, chatMessages, currentUserUid, currentInput);
-      return { suggestions, usedIndex: i };
+      return { suggestions, usedIndex: i, exhaustedIndices };
     } catch (error: any) {
       lastError = error;
       const msg = error?.message || '';
@@ -26,15 +27,22 @@ export const generateMessageSuggestion = async (
       // If quota exceeded, auth error, or model not found, try the next key
       if (msg === 'GEMINI_QUOTA_EXCEEDED' || msg === 'GEMINI_AUTH_ERROR' || msg === 'GEMINI_MODEL_NOT_FOUND') {
         console.warn(`[Gemini] Key ...${apiKey.slice(-4)} failed (${msg}). Trying next key...`);
+        if (msg === 'GEMINI_QUOTA_EXCEEDED') {
+          exhaustedIndices.push(i);
+        }
         continue;
       }
       
       // For other generic errors, stop and throw
-      throw error;
+      const err = error;
+      (err as any).exhaustedIndices = exhaustedIndices;
+      throw err;
     }
   }
 
-  throw lastError || new Error('GEMINI_GENERIC_ERROR');
+  const baseErr = lastError || new Error('GEMINI_GENERIC_ERROR');
+  (baseErr as any).exhaustedIndices = exhaustedIndices;
+  throw baseErr;
 };
 
 const _generateWithSingleKey = async (

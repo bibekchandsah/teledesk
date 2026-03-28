@@ -2042,7 +2042,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       setIsGeneratingAiSuggestion(true);
       try {
         const { generateMessageSuggestion } = await import('../services/geminiService');
-        const { suggestions, usedIndex } = await generateMessageSuggestion(
+        const { suggestions, usedIndex, exhaustedIndices } = await generateMessageSuggestion(
           currentUser.geminiApiKeys?.length ? currentUser.geminiApiKeys : [currentUser.geminiApiKey!],
           validMessages, 
           currentUser.uid,
@@ -2071,11 +2071,21 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           newUsageCounts = newUsageCounts.map(() => 0); // Reset all per-key counts
         }
         
+        // Mark exhausted keys if any occurred during failover before success
+        if (exhaustedIndices && exhaustedIndices.length > 0) {
+          exhaustedIndices.forEach(idx => {
+            if (idx >= 0 && idx < newUsageCounts.length) {
+              newUsageCounts[idx] = currentUser.aiUsageLimit || 1500;
+            }
+          });
+        }
+
         // Increment the specific key used
         if (usedIndex >= 0 && usedIndex < newUsageCounts.length) {
-          newUsageCounts[usedIndex]++;
+          if (newUsageCounts[usedIndex] < (currentUser.aiUsageLimit || 1500)) {
+             newUsageCounts[usedIndex]++;
+          }
         } else if (usedIndex >= 0) {
-          // This handles cases where array was shorter than usedIndex
           newUsageCounts[usedIndex] = 1;
         }
 
@@ -2093,11 +2103,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       } catch (err: any) {
         console.error('Failed to generate AI suggestion:', err);
         const errorMsg = err?.message || '';
+        const exhaustedIndices: number[] = err?.exhaustedIndices || [];
         
         if (errorMsg === 'GEMINI_QUOTA_EXCEEDED') {
           setAiStatus('error_quota');
+          
+          let newUsageCounts = [...(currentUser?.aiUsageCounts || [])];
+          const totalKeys = currentUser?.geminiApiKeys?.length || 1;
+          while (newUsageCounts.length < totalKeys) newUsageCounts.push(0);
+          
+          if (exhaustedIndices.length > 0) {
+            exhaustedIndices.forEach(idx => {
+              if (idx >= 0 && idx < newUsageCounts.length) {
+                newUsageCounts[idx] = currentUser?.aiUsageLimit || 1500;
+              }
+            });
+          } else {
+             // If all failed and no specific indices returned (fallback)
+             newUsageCounts = newUsageCounts.map(() => currentUser?.aiUsageLimit || 1500);
+          }
+
           // Sync quota exhausted status immediately
-          updateMyProfile({ aiUsageCount: currentUser?.aiUsageLimit || 1500 }).then(res => {
+          updateMyProfile({ 
+            aiUsageCount: currentUser?.aiUsageLimit || 1500,
+            aiUsageCounts: newUsageCounts
+          }).then(res => {
             if (res.success && res.data) setCurrentUser(res.data);
           });
         } else if (errorMsg === 'GEMINI_AUTH_ERROR') {
