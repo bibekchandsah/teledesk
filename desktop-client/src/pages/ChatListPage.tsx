@@ -9,6 +9,7 @@ import { getUserById, searchUsers, createPrivateChat, getChats } from '../servic
 import { useUIStore } from '../store/uiStore';
 import UserAvatar from '../components/UserAvatar';
 import { User } from '@shared/types';
+import { LUMINA_AI_UID, LUMINA_PROFILE } from '../services/luminaService';
 
 const ChatListPage: React.FC = () => {
   const { setChats, setUserProfile, userProfiles } = useChatStore();
@@ -92,6 +93,10 @@ const ChatListPage: React.FC = () => {
         const cached = userProfilesRef.current[uid];
         // Skip only if cached AND not marked deleted (deleted profiles must be re-fetched
         // in case the user deleted their account since we last loaded their profile)
+        if (uid === LUMINA_AI_UID) {
+          setUserProfile(LUMINA_PROFILE);
+          continue;
+        }
         if (cached && !cached.isDeleted) continue;
         const res = await getUserById(uid);
         if (res.success && res.data) setUserProfile(res.data);

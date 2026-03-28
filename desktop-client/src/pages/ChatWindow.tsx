@@ -14,7 +14,7 @@ import UserAvatar from '../components/UserAvatar';
 import { listenToMessages } from '../services/firebaseService';
 import { sendMessage, sendTyping, sendLiveTyping, sendReadReceipt, joinChatRoom, leaveChatRoom, sendReaction, removeReaction, getSocket } from '../services/socketService';
 import { uploadChatFile, getMessageTypeFromMime, validateFile } from '../services/fileService';
-import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi, updateMyProfile } from '../services/apiService';
+import { markChatRead, getChatMessages, deleteMessage as deleteMessageApi, editMessage as editMessageApi, pinMessage as pinMessageApi, unpinMessage as unpinMessageApi, deleteChat as deleteChatApi, updateMyProfile, createPrivateChat } from '../services/apiService';
 import { Message } from '@shared/types';
 import { useCallContext } from '../context/CallContext';
 import { APP_CONFIG } from '@shared/constants/config';
@@ -25,6 +25,8 @@ import { useBookmarkStore } from '../store/bookmarkStore';
 import { useDraftStore } from '../store/draftStore';
 import { MessageCircle, Phone, Video, Paperclip, Download, Send, ChevronLeft, Search, X, ChevronUp, ChevronDown, CornerUpLeft, Pin, PinOff, Archive, ArchiveRestore, CheckSquare, Trash2, Forward, Copy, MoreVertical, ExternalLink, Pencil, Bookmark, BookmarkCheck, UserRound, Smile, SmilePlus, Image as ImageIcon, Sticker, Mic, MicOff, VideoOff, Play, Pause, Circle, StopCircle, RefreshCw, AlertCircle, Check, CheckCheck, Plus, Lock, Unlock, Palette, Eye, EyeOff, Scissors, Clipboard, ClipboardPaste, Bold, Italic, Underline, Strikethrough, Code, List, ListOrdered, Quote, Link, EyeOff as SpoilerIcon, Sparkles } from 'lucide-react';
 import { getDateKey, formatDateLabel, formatTime, formatLastSeen, formatFileSize, formatDuration } from '../utils/formatters';
+
+import { LUMINA_AI_UID, LUMINA_AI_NAME, LUMINA_AI_AVATAR, generateLuminaResponse } from '../services/luminaService';
 
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
@@ -1745,6 +1747,23 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
     const query = type === 'username' ? text.replace(/^@/, '') : text;
 
+    // Special case for Lumina
+    if (query.toLowerCase() === 'lumina') {
+      const existingLuminaChat = chats.find(c => 
+        c.type === 'private' && c.members.includes(LUMINA_AI_UID)
+      );
+      if (existingLuminaChat) {
+        navigate(`/chats/${existingLuminaChat.chatId}`);
+      } else {
+        // Create it
+        const res = await createPrivateChat(LUMINA_AI_UID);
+        if (res.success && res.data) {
+          navigate(`/chats/${res.data.chatId}`);
+        }
+      }
+      return;
+    }
+
     // Helper: does this user object match the query?
     const matchesQuery = (u: { username?: string; email?: string }) =>
       type === 'username'
@@ -2016,7 +2035,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
   const prevContextKeyRef = useRef('');
 
   useEffect(() => {
-    if (!currentUser?.aiSuggestionsEnabled || !currentUser?.geminiApiKey) {
+    const hasGemini = (currentUser?.geminiApiKeys && currentUser.geminiApiKeys.length > 0) || (currentUser?.geminiApiKey);
+    const hasGroq = (currentUser?.groqApiKeys && currentUser.groqApiKeys.length > 0);
+
+    if (!currentUser?.aiSuggestionsEnabled || (!hasGemini && !hasGroq)) {
       setAiSuggestions([]);
       prevContextKeyRef.current = '';
       return;
@@ -2099,6 +2121,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
 
         setAiSuggestions(suggestions);
         setAiStatus('idle');
+        prevContextKeyRef.current = currentContextKey;
 
         // --- Usage Tracking & Daily Reset ---
         const now = new Date();
@@ -2139,7 +2162,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           groqUsageCounts: newGroqUsageCounts
         }).then(res => {
           if (res.success && res.data) {
-            prevContextKeyRef.current = currentContextKey;
             setCurrentUser(res.data);
           }
         });
@@ -3154,6 +3176,79 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     sendTyping(chatId, false, currentUser.name);
     sendLiveTyping(chatId, '', currentUser.name);
+
+    // ─── Lumina AI Detection ─────────────────────────────────────────────
+    if (textToSend.toLowerCase().includes('@lumina')) {
+      const prompt = textToSend.replace(/@lumina/gi, '').trim();
+      handleLuminaAIResponse(chatId, prompt);
+    } else if (activeChat?.type === 'private' && activeChat.members.includes(LUMINA_AI_UID)) {
+      // 1:1 chat with Lumina
+      handleLuminaAIResponse(chatId, textToSend);
+    }
+  };
+
+  const [isLuminaThinking, setIsLuminaThinking] = useState(false);
+
+  const handleLuminaAIResponse = async (targetChatId: string, promptText: string) => {
+    if (!currentUser) return;
+    
+    // Show typing state
+    setIsLuminaThinking(true);
+    
+    try {
+      const apiKeys = {
+        gemini: currentUser.geminiApiKeys || (currentUser.geminiApiKey ? [currentUser.geminiApiKey] : []),
+        groq: currentUser.groqApiKeys || []
+      };
+
+      const rawResponse = await generateLuminaResponse(
+        promptText,
+        messages[targetChatId] || [],
+        currentUser.uid,
+        apiKeys
+      );
+      const aiResponse = String(rawResponse);
+
+      const isPersonalLuminaChat = activeChat?.type === 'private' && activeChat.members.includes(LUMINA_AI_UID);
+      const effectiveSenderId = isPersonalLuminaChat ? LUMINA_AI_UID : currentUser.uid;
+
+      const luminaMsgId = genId();
+      const luminaMsg: Message = {
+        messageId: luminaMsgId,
+        chatId: targetChatId,
+        senderId: effectiveSenderId,
+        senderName: LUMINA_AI_NAME,
+        senderAvatar: LUMINA_AI_AVATAR,
+        content: aiResponse,
+        type: 'text',
+        timestamp: new Date().toISOString(),
+        readBy: [effectiveSenderId],
+      };
+
+      // In a real app, we'd send this via socket so both sides see it.
+      // Since Lumina is client-side, we "send" it to the server and it broadcasts back.
+      
+      sendMessage({
+        messageId: luminaMsgId,
+        chatId: targetChatId,
+        content: aiResponse,
+        type: 'text',
+        senderName: LUMINA_AI_NAME,
+        senderAvatar: LUMINA_AI_AVATAR,
+        // Only force the system ID in personal chats where it's the "other person"
+        ...(isPersonalLuminaChat && { forceSenderId: LUMINA_AI_UID }), 
+      } as any);
+
+      // Also add optimistically
+      const { addMessage, updateChatLastMessage } = useChatStore.getState();
+      addMessage(luminaMsg);
+      updateChatLastMessage(luminaMsg);
+
+    } catch (err) {
+      console.error('[Lumina] Response failed:', err);
+    } finally {
+      setIsLuminaThinking(false);
+    }
   };
 
   // ─── Reply / Forward handlers ─────────────────────────────────────────────
@@ -5022,6 +5117,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
             );
           });
         })()}
+        {isLuminaThinking && (
+          <div style={{ padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontSize: 13, fontWeight: 500, animation: 'fadeIn 0.3s' }}>
+            <Sparkles size={14} style={{ color: 'var(--accent)', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
+            <span>Lumina is thinking...</span>
+          </div>
+        )}
         <TypingIndicator
           users={typingList.filter((u) => u.userId !== currentUser?.uid)}
           liveTexts={liveTexts}

@@ -224,6 +224,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
         forwarded?: boolean;
         groupId?: string;
         isSpoiler?: boolean;
+        forceSenderId?: string;
       }) => {
         try {
           const chat = await getChatById(payload.chatId, uid);
@@ -232,14 +233,12 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
             return;
           }
 
+          const effectiveSenderId = (payload.forceSenderId === 'system-lumina-ai') ? 'system-lumina-ai' : uid;
+
           // Determine which non-sender members are already online so we can
-          // pre-populate deliveredTo before the DB INSERT.  This eliminates the
-          // race condition where the Supabase realtime INSERT event fires and
-          // fetches the message from the DB before the separate
-          // markMessageDelivered() call has completed, causing the delivered
-          // state to be wiped out by the incoming setMessages() call.
+          // pre-populate deliveredTo before the DB INSERT.
           const onlineRecipients = chat.members.filter(
-            (m) => m !== uid && onlineUsers.has(m),
+            (m) => m !== effectiveSenderId && onlineUsers.has(m),
           );
 
           const message: Message = {
@@ -248,11 +247,11 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
               ? payload.messageId
               : generateId(),
             chatId: payload.chatId,
-            senderId: uid,
+            senderId: effectiveSenderId,
             content: sanitizeString(payload.content || ''),
             type: payload.type || 'text',
             timestamp: now(),
-            readBy: [uid],
+            readBy: [uid], // The user who triggered this has read it
             // Pre-populate so every subsequent DB read (realtime, pagination, reload)
             // already reflects the delivered state without a separate UPDATE.
             deliveredTo: onlineRecipients,

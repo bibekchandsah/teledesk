@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Message } from '@shared/types';
 import { formatTime, formatFileSize } from '../utils/formatters';
 import UserAvatar from './UserAvatar';
-import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, VideoOff, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Ban, Phone, Video, Paperclip, Trash2, Pencil, Copy, X, CornerUpLeft, Forward, Pin, PinOff, CheckSquare, Bookmark, BookmarkCheck, Check, CheckCheck, SmilePlus, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, VideoOff, ArrowDownLeft, ArrowUpRight, Sparkles } from 'lucide-react';
 import { useBookmarkStore } from '../store/bookmarkStore';
 import MessageContextMenu, { PRESET_EMOJIS } from './MessageContextMenu';
 import data from '@emoji-mart/data';
@@ -2138,6 +2138,50 @@ const parseInlineFormatting = (text: string, query?: string, isOwn?: boolean, on
     const mention = mentionMatch[0];
     const username = mentionMatch[1];
     const after = text.substring(mentionMatch.index + mention.length);
+
+    // Special case for Lumina
+    if (username.toLowerCase() === 'lumina') {
+      return (
+        <>
+          {parseInlineFormatting(before, query, isOwn, onMentionClick)}
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onMentionClick) {
+                onMentionClick('lumina', 'username');
+              }
+            }}
+            style={{ 
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              background: 'linear-gradient(45deg, #6366f1, #a855f7, #ec4899)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              textDecoration: 'none', 
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontWeight: 800,
+              filter: 'drop-shadow(0 0 2px rgba(168, 85, 247, 0.4))',
+              position: 'relative'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.filter = 'drop-shadow(0 0 5px rgba(168, 85, 247, 0.8))';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.filter = 'drop-shadow(0 0 2px rgba(168, 85, 247, 0.4))';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <Sparkles size={11} style={{ verticalAlign: 'middle', stroke: '#a855f7', fill: '#a855f7', flexShrink: 0 }} />
+            {highlightText(mention, query)}
+          </span>
+          {parseInlineFormatting(after, query, isOwn, onMentionClick)}
+        </>
+      );
+    }
+
     return (
       <>
         {parseInlineFormatting(before, query, isOwn, onMentionClick)}

@@ -9,6 +9,7 @@ import { Chat } from '@shared/types';
 import { deleteChat as deleteChatApi } from '../services/apiService';
 import { Users, UserPlus, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { LUMINA_AI_UID, LUMINA_AI_NAME, LUMINA_AI_AVATAR, LUMINA_PROFILE } from '../services/luminaService';
 
 const PREVIEW_ICON_MAP = { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff } as const;
 type PreviewIconKey = keyof typeof PREVIEW_ICON_MAP;
@@ -227,7 +228,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         // For other users, use the cached profile
         const profile = otherUid === currentUser?.uid
           ? currentUser
-          : (otherUid ? userProfiles[otherUid] : null);
+          : (otherUid === LUMINA_AI_UID 
+              ? LUMINA_PROFILE
+              : (otherUid ? userProfiles[otherUid] : null));
 
         // A chat that looks like a self-chat but the other member's profile is
         // marked deleted means the peer deleted their account (they were removed

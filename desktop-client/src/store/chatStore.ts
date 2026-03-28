@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Chat, Message, User } from '@shared/types';
 import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi, updateMyNicknames as updateMyNicknamesApi, toggleLockChat as toggleLockChatApi } from '../services/apiService';
+import { LUMINA_AI_UID, LUMINA_PROFILE } from '../services/luminaService';
 
 // ─── localStorage helpers for unread counts ────────────────────────────────
 const UNREAD_KEY = 'teledesk_unread_counts';
@@ -74,7 +75,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingUsers: {},
   liveTypingTexts: {},
   onlineUsers: new Set(),
-  userProfiles: {},
+  userProfiles: {
+    [LUMINA_AI_UID]: LUMINA_PROFILE,
+  },
   unreadCounts: loadUnreadCounts(),
   pinnedChatIds: [],
   archivedChatIds: [],

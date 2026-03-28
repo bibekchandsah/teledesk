@@ -5,7 +5,8 @@ export const generateMessageSuggestion = async (
   apiKeys: string | string[],
   chatMessages: Message[],
   currentUserUid: string,
-  currentInput: string = ''
+  currentInput: string = '',
+  systemContext?: string
 ): Promise<{ suggestions: string[]; usedIndex: number; exhaustedIndices: number[] }> => {
   const keys = Array.isArray(apiKeys) ? apiKeys : [apiKeys];
   const activeKeys = keys.map(k => (k || '').trim()).filter(Boolean);
@@ -18,7 +19,7 @@ export const generateMessageSuggestion = async (
   for (let i = 0; i < activeKeys.length; i++) {
     const apiKey = activeKeys[i];
     try {
-      const suggestions = await _generateWithSingleKey(apiKey, chatMessages, currentUserUid, currentInput);
+      const suggestions = await _generateWithSingleKey(apiKey, chatMessages, currentUserUid, currentInput, systemContext);
       return { suggestions, usedIndex: i, exhaustedIndices };
     } catch (error: any) {
       lastError = error;
@@ -49,7 +50,8 @@ const _generateWithSingleKey = async (
   apiKey: string,
   chatMessages: Message[],
   currentUserUid: string,
-  currentInput: string = ''
+  currentInput: string = '',
+  systemContext?: string
 ): Promise<string[]> => {
   const trimmedKey = apiKey.trim();
   const genAI = new GoogleGenerativeAI(trimmedKey);
@@ -113,7 +115,10 @@ const _generateWithSingleKey = async (
   for (const modelId of uniqueModels) {
     try {
       const model = genAI.getGenerativeModel(
-        { model: modelId },
+        { 
+          model: modelId,
+          systemInstruction: systemContext || undefined 
+        },
         { apiVersion: 'v1beta' }
       );
 
@@ -124,28 +129,54 @@ const _generateWithSingleKey = async (
         return `${role}: ${content}`;
       }).join('\n');
 
-      let prompt = `You are an AI assistant helping a user write a reply.
-Recent conversation:
-${contextText || "No previous messages."}
+      let prompt = "";
+      if (systemContext) {
+        // Chatbot mode (Lumina)
+        prompt = `Conversation history:\n${contextText || "No previous messages."}\n\nUser asked: "${currentInput.trim()}"\nPlease provide a helpful, natural response.`;
+      } else {
+        // Suggestion chips mode
+        let draftInfo = "";
+        if (currentInput.trim()) {
+          draftInfo = `\n\nUSER DRAFT: "${currentInput.trim()}"\nThe suggestions MUST be direct completions or logical extensions of this draft.`;
+        }
 
-Generate exactly 3 diverse response options for "Me". 
-Response MUST be a valid JSON array of strings: ["s1", "s2", "s3"].`;
+        prompt = `Recent conversation:\n${contextText || "No previous messages."}${draftInfo}
 
-      if (currentInput.trim()) {
-        prompt += `\n\nUSER DRAFT: "${currentInput.trim()}"
-Suggestions MUST be direct completions or logical extensions.`;
+Generate exactly 3 diverse response options for "Me".
+Response MUST be a valid JSON array of strings: ["suggestion1", "suggestion2", "suggestion3"]. Return ONLY JSON.`;
       }
-
-      prompt += `\n\nReturn ONLY the JSON array.`;
 
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      const jsonMatch = text.match(/\[.*\]/s);
-      if (jsonMatch) {
+      // Find the first [ or { and the last ] or } to extract the most likely JSON block
+      const startIdx = Math.min(
+        text.indexOf('[') === -1 ? Infinity : text.indexOf('['),
+        text.indexOf('{') === -1 ? Infinity : text.indexOf('{')
+      );
+      const endIdx = Math.max(text.lastIndexOf(']'), text.lastIndexOf('}'));
+
+      if (startIdx !== Infinity && endIdx > startIdx) {
+        const jsonCandidate = text.substring(startIdx, endIdx + 1);
         try {
-          const suggestions = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(suggestions)) return suggestions.slice(0, 3).map(s => String(s).trim());
-        } catch (e) {}
+          const parsed = JSON.parse(jsonCandidate);
+          if (Array.isArray(parsed)) {
+            return parsed.slice(0, 3).map(s => {
+              if (typeof s === 'string') return s.trim();
+              if (s && typeof s === 'object') return (s.text || s.content || JSON.stringify(s)).trim();
+              return String(s).trim();
+            });
+          } else if (parsed && typeof parsed === 'object') {
+            const suggestion = parsed.text || parsed.message || parsed.content || parsed.response || parsed.reply || 
+                             (Array.isArray(parsed.suggestions) ? parsed.suggestions[0] : null);
+            if (suggestion) return [String(suggestion).trim()];
+          }
+        } catch (e) {
+          // If JSON.parse fails, try a desperation regex for several common keys
+          const propertyMatch = jsonCandidate.match(/"(?:text|message|content|response|reply)"\s*:\s*"((?:\\.|[^"\\])*)"/i);
+          if (propertyMatch && propertyMatch[1]) {
+            return [propertyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim()];
+          }
+        }
       }
       const lines = text.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('[')).slice(0, 3);
       return lines.length > 0 ? lines : [text.trim()];
