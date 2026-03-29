@@ -913,7 +913,16 @@ implemented the Dual-Threshold Pull Gesture in the sidebar, providing you with t
     Aesthetic Cues: Crossing the 110px threshold triggers a Backdrop Blur and a Subtle Scaling effect to signal that a full reload is ready.
     Spin Animation: The .animate-spin CSS class ensures a smooth, high-fidelity loading spinner during data syncs.
 
+ implemented/enhanced the Pull-to-Refresh & Reload feature for all devices, including full support for desktop mouse users.
 
+🌟 Desktop Mouse Support
+You no longer need a touch screen to use this!
+    How it works: Simply scroll up with your mouse wheel while at the top of the chat list.
+    Interaction: The sidebar will "pull down" as you scroll. Once you stop scrolling, the app debounces the gesture and triggers the sync or reload based on how far you pulled.
+✨ Dual-Threshold Tiers
+Whether using touch or a wheel, the logic remains consistent:
+    Sync Chats (65px - 110px): A fast, data-only refresh that syncs your chats without reloading the page.
+    Full App Reload (> 110px): A "Super Pull" that triggers a hard reset (window.location.reload()). This is indicated by a background blur and scaling effect.
 
 
 <---------------- idea -------------------------->

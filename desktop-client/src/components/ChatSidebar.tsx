@@ -50,6 +50,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const cooldownRef = useRef(false);       // prevents flicker on layout reflow
   const touchStartYRef = useRef<number | null>(null);
   const isPullingRef = useRef(false);
+  const wheelTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Re-show top-bar when user types a search query
   useEffect(() => { if (searchQuery) setShowTopBar(true); }, [searchQuery]);
@@ -65,53 +66,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     });
   }, []);
 
-  // Scroll handler — shows topbar only when at the top, hides when scrolling down
-  const handleListScroll = useCallback(() => {
-    const el = chatListRef.current;
-    if (!el) return;
-    const current = el.scrollTop;
-    const diff = current - lastScrollTopRef.current;
-    lastScrollTopRef.current = current;
-    
-    // Show topbar only when at the top (within 5px)
-    if (current < 5) {
-      setTopBarSafe(true);
-    } 
-    // Hide topbar when scrolling down
-    else if (diff > 10) {
-      setTopBarSafe(false);
-    }
-  }, [setTopBarSafe]);
 
   // Wheel handler — for desktop users, allow pull-down effect with mouse wheel
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    const el = chatListRef.current;
-    if (!el) return;
-    
-    const atTop = el.scrollTop < 5;
-    const isScrollable = el.scrollHeight > el.clientHeight;
-    
-    // If at top or not scrollable, and scrolling up (negative deltaY), show topbar
-    if ((atTop || !isScrollable) && e.deltaY < 0) {
-      setTopBarSafe(true);
-    }
-    // Scrolling down hides the topbar
-    else if (e.deltaY > 0) {
-      setTopBarSafe(false);
-    }
-  }, [setTopBarSafe]);
-
-  // Touch handlers — pull-down reveals only when at top, swipe-up hides anywhere
-  // Works even when there's no scrollable area
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const el = chatListRef.current;
-    if (!el) return;
-    
-    // Always capture touch start for swipe detection
-    touchStartYRef.current = e.touches[0].clientY;
-    isPullingRef.current = false;
-  }, []);
-
   const handleRefresh = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
@@ -128,6 +84,99 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       setPullDistance(0);
     }
   }, [isRefreshing]);
+
+  const handlePullEnd = useCallback(() => {
+    const refreshThreshold = 65;
+    const reloadThreshold = 110;
+
+    if (pullDistance >= reloadThreshold && !isRefreshing) {
+      window.location.reload();
+    } else if (pullDistance >= refreshThreshold && !isRefreshing) {
+      handleRefresh();
+    } else if (!isRefreshing) {
+      setPullDistance(0);
+    }
+    
+    touchStartYRef.current = null;
+    isPullingRef.current = false;
+  }, [pullDistance, isRefreshing, handleRefresh]);
+
+  // Wheel handler — for desktop users, allow pull-down effect with mouse wheel
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    const el = chatListRef.current;
+    if (!el || isRefreshing) return;
+    
+    const atTop = el.scrollTop < 5;
+    const isScrollable = el.scrollHeight > el.clientHeight;
+    
+    // 1. Handle "Pull-to-Refresh" with mouse wheel
+    if ((atTop || !isScrollable) && e.deltaY < 0) {
+      // Clear previous timer
+      if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+      
+      const resistance = 0.5;
+      const newDistance = Math.min(pullDistance - e.deltaY * resistance, 140);
+      setPullDistance(newDistance);
+      
+      // Debounce the "release" action after scrolling stops
+      wheelTimerRef.current = setTimeout(() => {
+        handlePullEnd();
+      }, 150);
+    }
+    // 2. Reduce pull distance if scrolling down while pulled
+    else if (pullDistance > 0 && e.deltaY > 0) {
+      if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+      const newDistance = Math.max(pullDistance - e.deltaY * 0.8, 0);
+      setPullDistance(newDistance);
+      
+      if (newDistance === 0) {
+         setTopBarSafe(false);
+      }
+      
+      wheelTimerRef.current = setTimeout(() => {
+        handlePullEnd();
+      }, 150);
+    }
+    // 3. Normal scroll-up to reveal topbar
+    else if ((atTop || !isScrollable) && e.deltaY < 0) {
+      setTopBarSafe(true);
+    }
+    // 4. Normal scroll-down hides the topbar
+    else if (e.deltaY > 0) {
+      setTopBarSafe(false);
+    }
+  }, [pullDistance, isRefreshing, handlePullEnd, setTopBarSafe]);
+
+  // Normal list scroll to reveal topbar on swipe-up
+  const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (isPullingRef.current || pullDistance > 0) return;
+    
+    const st = el.scrollTop;
+    const diff = st - lastScrollTopRef.current;
+    lastScrollTopRef.current = st;
+    
+    // Show topbar when scrolling up near top
+    if (st < 10 && diff < 0) {
+      setTopBarSafe(true);
+    }
+    // Hide topbar when scrolling down
+    else if (diff > 10) {
+      setTopBarSafe(false);
+    }
+  }, [pullDistance, setTopBarSafe]);
+
+  // Touch handlers — pull-down reveals only when at top, swipe-up hides anywhere
+  // Works even when there's no scrollable area
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const el = chatListRef.current;
+    if (!el) return;
+    
+    // Always capture touch start for swipe detection
+    touchStartYRef.current = e.touches[0].clientY;
+    isPullingRef.current = false;
+  }, []);
+
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (touchStartYRef.current === null || isRefreshing) return;
@@ -164,20 +213,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   }, [setTopBarSafe]);
 
   const handleTouchEnd = useCallback(() => {
-    const refreshThreshold = 65;
-    const reloadThreshold = 110;
-
-    if (pullDistance >= reloadThreshold && !isRefreshing) {
-      window.location.reload();
-    } else if (pullDistance >= refreshThreshold && !isRefreshing) {
-      handleRefresh();
-    } else if (!isRefreshing) {
-      setPullDistance(0);
-    }
-    
-    touchStartYRef.current = null;
-    isPullingRef.current = false;
-  }, [pullDistance, isRefreshing, handleRefresh]);
+    handlePullEnd();
+  }, [handlePullEnd]);
 
   // Close context menu on outside click
   useEffect(() => {
