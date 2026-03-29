@@ -115,6 +115,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('call:window-unmaximized', handler);
     return () => ipcRenderer.off('call:window-unmaximized', handler);
   },
+  onCallRequestCloseConfirmation: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on('call:request-close-confirmation', handler);
+    return () => ipcRenderer.off('call:request-close-confirmation', handler);
+  },
 
   // ─── Incoming call window renderer APIs ───────────────────────────────
   /** Signal main process that the incoming call window renderer is ready */
@@ -273,6 +278,7 @@ export interface ElectronAPI {
   hangupCallWindow: () => void;
   sendWindowEvent: (event: string) => void;
   setCallMiniMode: (enabled: boolean) => void;
+  onCallRequestCloseConfirmation: (cb: () => void) => () => void;
 
   // Incoming call (kept for backwards compat, no separate window)
   requestIncomingCallWindowReady?: () => void;

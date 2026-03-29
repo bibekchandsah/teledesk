@@ -18,6 +18,8 @@ import { listenToUserChats } from '../services/firebaseService';
 import { getChats, getUserById } from '../services/apiService';
 import callAudioService from '../services/callAudioService';
 import InCallChatList from '../components/InCallChatList';
+import ConfirmationModal from '../components/modals/ConfirmationModal';
+import { AlertTriangle } from 'lucide-react';
 
 interface CallWindowInitData {
   callId: string;
@@ -134,6 +136,7 @@ const CallWindowPage: React.FC = () => {
   const [activeMicId, setActiveMicId] = useState(localStorage.getItem('selectedMicId') ?? '');
   const [activeCamId, setActiveCamId] = useState(localStorage.getItem('selectedCameraId') ?? '');
   const [activeSpeakerId, setActiveSpeakerId] = useState(localStorage.getItem('selectedSpeakerId') ?? 'default');
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const { currentUser } = useAuthStore();
   const { chats, setChats, setUserProfile, nicknames } = useChatStore();
@@ -782,6 +785,8 @@ const CallWindowPage: React.FC = () => {
     };
   }, []);
 
+
+
   // ─── Auto-hide controls after 5s of mouse idle ───────────────────────────
   useEffect(() => {
     const showAndReset = () => {
@@ -963,7 +968,7 @@ const CallWindowPage: React.FC = () => {
     }
   };
 
-  const handleHangup = () => {
+  const handleHangup = useCallback(() => {
     const cd = callDataRef.current;
     if (cd) {
       sendSocketEvent(SOCKET_EVENTS.END_CALL, {
@@ -973,7 +978,20 @@ const CallWindowPage: React.FC = () => {
     }
     cleanup();
     window.electronAPI?.hangupCallWindow?.();
-  };
+  }, [sendSocketEvent, cleanup]);
+
+  // ─── Listen for Electron close request (X button) ────────────────────────
+  // Must be placed AFTER handleHangup is declared
+  useEffect(() => {
+    const unsub = window.electronAPI?.onCallRequestCloseConfirmation?.(() => {
+      if (callStatus === 'ringing' || (callData && callData.isContinuing === false && !isAccepted)) {
+        handleHangup();
+      } else {
+        setShowExitConfirm(true);
+      }
+    });
+    return () => unsub?.();
+  }, [callStatus, isAccepted, callData, handleHangup]);
 
   // ─── Incoming call: user taps Accept ──────────────────────────────────────
   const handleAcceptCall = () => {
@@ -1781,7 +1799,9 @@ const CallWindowPage: React.FC = () => {
           <div style={{
             position: 'absolute', top: 16, left: 16,
             display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(15, 23, 42, 0.4)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: 30,
             padding: '4px 12px 4px 4px',
             opacity: controlsVisible ? 1 : 0,
@@ -1799,7 +1819,10 @@ const CallWindowPage: React.FC = () => {
           <div style={{
             position: 'absolute', top: 16, left: '50%',
             transform: controlsVisible ? 'translateX(-50%)' : 'translateX(-50%) translateY(-12px)',
-            backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff', padding: '4px 14px', borderRadius: 20,
+            backgroundColor: 'rgba(15, 23, 42, 0.4)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: '#fff', padding: '4px 14px', borderRadius: 20,
             fontSize: 14, fontWeight: 600, opacity: controlsVisible ? 1 : 0,
             transition: 'opacity 0.4s ease, transform 0.4s ease',
             pointerEvents: controlsVisible ? 'auto' : 'none', zIndex: 10,
@@ -1825,9 +1848,9 @@ const CallWindowPage: React.FC = () => {
               title={isMiniMode ? "Restore Window" : "Pin to Mini Mode"}
               style={{
                 width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
-                backgroundColor: isMiniMode ? '#6366f1' : 'rgba(0,0,0,0.4)', color: '#fff',
+                backgroundColor: isMiniMode ? '#6366f1' : 'rgba(15, 23, 42, 0.4)', color: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                backdropFilter: 'blur(8px)', transition: 'all 0.2s'
+                backdropFilter: 'blur(12px)', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
               }}
             >
               {isMiniMode ? <PinOff size={16} /> : <Pin size={16} />}
@@ -1982,6 +2005,23 @@ const CallWindowPage: React.FC = () => {
         <ScreenPickerModal
           onSelect={handleScreenPickerSelect}
           onCancel={() => setShowScreenPicker(false)}
+        />
+      )}
+
+      {showExitConfirm && (
+        <ConfirmationModal
+          isOpen={showExitConfirm}
+          title="End Call?"
+          message={`Are you sure you want to hang up and leave the call with ${displayName}?`}
+          confirmText="End Call"
+          cancelText="Stay"
+          isDestructive
+          onConfirm={() => {
+            setShowExitConfirm(false);
+            handleHangup();
+          }}
+          onCancel={() => setShowExitConfirm(false)}
+          icon={<AlertTriangle size={20} color="#fff" />}
         />
       )}
     </div>

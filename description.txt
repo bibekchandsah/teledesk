@@ -874,11 +874,11 @@ Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron
 (fixed) restart in deploy isn't working, it's not restarting when clicked restart
 (fixed) account selection delete icon not trigger
 (fixed) pofile edit in profile 
+(fixed)ask before closing the audio/video call
+(fixed) in mobile device show the actual resolution of the video not 16:9 (web & desktop)
+(not useful) add camera selection and preview in setting page
 use own r2 bucket 10GB for more secure data
-in mobile device show the actual resolution of the video not 16:9 (web & desktop)
-add camera selection and preview in setting page
 encrypt audio and video 
-ask before closing the audio/video call
 
 
 

@@ -51,7 +51,7 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {accounts.map((account) => (
           <div 
             key={account.uid} 
@@ -66,13 +66,16 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: isTouchDevice ? '12px 52px 12px 12px' : '12px',
-                borderRadius: 10,
-                border: '1px solid var(--border)',
+                padding: isTouchDevice ? '12px 52px 12px 14px' : '12px 14px',
+                borderRadius: 12,
+                border: `1px solid ${hoveredAccount === account.uid ? 'var(--accent)' : 'var(--border)'}`,
                 backgroundColor: hoveredAccount === account.uid ? 'var(--bg-hover)' : 'transparent',
-                borderColor: hoveredAccount === account.uid ? 'var(--accent)' : 'var(--border)',
                 cursor: 'pointer',
-                transition: 'all 0.2s',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: hoveredAccount === account.uid ? 'scale(1.015)' : 'scale(1)',
+                boxShadow: hoveredAccount === account.uid
+                  ? '0 2px 16px rgba(99, 102, 241, 0.15)'
+                  : '0 0 0 rgba(0,0,0,0)',
               }}
             >
               {/* Avatar */}
@@ -98,6 +101,7 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
                   backgroundColor: getColorFromString(account.email),
                   color: '#fff', alignItems: 'center', justifyContent: 'center',
                   fontSize: 16, fontWeight: 600, flexShrink: 0,
+                  boxShadow: `0 0 0 2px ${getColorFromString(account.email)}40`,
                 }}
               >
                 {getInitials(account.name)}
@@ -113,26 +117,30 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
                 </div>
               </div>
 
-              {/* Arrow — desktop only, hidden on hover when trash takes over */}
+              {/* Arrow — desktop only, fades out on hover */}
               {!isTouchDevice && (
                 <svg
-                  width="20" height="20" viewBox="0 0 20 20"
+                  width="18" height="18" viewBox="0 0 20 20"
                   fill="none" stroke="var(--text-secondary)" strokeWidth="2"
-                  style={{ flexShrink: 0, opacity: hoveredAccount === account.uid ? 0 : 1, transition: 'opacity 0.2s' }}
+                  style={{
+                    flexShrink: 0,
+                    opacity: hoveredAccount === account.uid ? 0 : 0.6,
+                    transition: 'opacity 0.2s ease',
+                  }}
                 >
                   <path d="M7 4l6 6-6 6" />
                 </svg>
               )}
             </button>
 
-            {/* Trash icon — always visible on touch, hover-only on desktop */}
+            {/* Trash icon — premium fade+slide entrance */}
             <button
               onClick={(e) => handleRemoveAccount(account.uid, e)}
               style={{
                 position: 'absolute',
                 right: 12,
                 top: '50%',
-                transform: `translateY(-50%) scale(${isTouchDevice || hoveredAccount === account.uid ? 1 : 0.8})`,
+                transform: `translateY(-50%) scale(${isTouchDevice || hoveredAccount === account.uid ? 1 : 0.7})`,
                 width: 32, height: 32,
                 borderRadius: '50%',
                 backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -140,7 +148,7 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
                 border: 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer',
-                transition: 'opacity 0.2s, transform 0.2s, background-color 0.15s',
+                transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease',
                 opacity: isTouchDevice || hoveredAccount === account.uid ? 1 : 0,
                 pointerEvents: isTouchDevice || hoveredAccount === account.uid ? 'auto' : 'none',
                 zIndex: 10,
@@ -149,7 +157,7 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
               title="Remove account"
             >
-              <Trash2 size={16} />
+              <Trash2 size={15} />
             </button>
           </div>
         ))}
@@ -159,20 +167,22 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
           onClick={onAddNewAccount}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            gap: 8, padding: 12, borderRadius: 10,
-            border: '2px dashed var(--border)', backgroundColor: 'transparent',
-            cursor: 'pointer', transition: 'all 0.2s',
+            gap: 8, padding: '12px 14px', borderRadius: 12, marginTop: 2,
+            border: '1.5px dashed var(--border)', backgroundColor: 'transparent',
+            cursor: 'pointer', transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+            e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.06)';
             e.currentTarget.style.borderColor = 'var(--accent)';
+            e.currentTarget.style.boxShadow = '0 2px 12px rgba(99, 102, 241, 0.12)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = 'transparent';
             e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.boxShadow = 'none';
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" strokeWidth="2">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--accent)" strokeWidth="2">
             <path d="M10 4v12M4 10h12" />
           </svg>
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)' }}>

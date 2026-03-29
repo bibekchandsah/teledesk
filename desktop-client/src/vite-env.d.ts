@@ -60,6 +60,7 @@ interface ElectronAPI {
   maximizeCallWindow: () => void;
   onCallWindowMaximized: (cb: () => void) => () => void;
   onCallWindowUnmaximized: (cb: () => void) => () => void;
+  onCallRequestCloseConfirmation: (cb: () => void) => () => void;
   requestIncomingCallWindowReady?: () => void;
   onIncomingCallWindowInit?: (cb: (data: IncomingCallData) => void) => () => void;
   acceptIncomingCallFromWindow?: () => void;

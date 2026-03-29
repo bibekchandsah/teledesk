@@ -13,6 +13,7 @@ import {
   clipboard,
   screen,
   protocol,
+  dialog,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -1598,6 +1599,14 @@ const createCallWindow = (initData: CallInitData) => {
     }
   });
 
+  callWindow.on('close', (event) => {
+    if (isQuitting || isCallEndingExplicitly) return;
+    
+    // Prevent immediate close and ask the renderer to show a premium confirmation modal
+    event.preventDefault();
+    callWindow?.webContents.send('call:request-close-confirmation');
+  });
+
   callWindow.on('closed', () => {
     mainWindow?.webContents.send('call:window-event', 'closed', {});
     callWindow = null;
@@ -1605,6 +1614,9 @@ const createCallWindow = (initData: CallInitData) => {
     pendingRelayEvents = [];
   });
 };
+
+// Toggle for intentional call window closure (bypasses dialog)
+let isCallEndingExplicitly = false;
 
 // --------- Call IPC Handlers ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1652,7 +1664,9 @@ ipcMain.on('call:socket-emit', (_e, event: string, data: unknown) => {
 // Call window signals hangup (user clicked end call or remote ended)
 ipcMain.on('call:hangup-from-window', () => {
   if (callWindow && !callWindow.isDestroyed()) {
+    isCallEndingExplicitly = true;
     callWindow.close();
+    isCallEndingExplicitly = false;
   }
   callWindow = null;
   callWindowReady = false;
@@ -1663,7 +1677,9 @@ ipcMain.on('call:hangup-from-window', () => {
 // Main window forces call window closed silently (no hangup notification back)
 ipcMain.on('call:force-close', () => {
   if (callWindow && !callWindow.isDestroyed()) {
+    isCallEndingExplicitly = true;
     callWindow.close();
+    isCallEndingExplicitly = false;
   }
   callWindow = null;
   callWindowReady = false;
