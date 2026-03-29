@@ -861,7 +861,18 @@ Hangup on Close: The close button (and media error close button) now correctly t
 Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron's titleBarOverlay. The custom React buttons are now hidden on Windows to avoid duplication, and the title bar layout has been adjusted to accommodate the native controls.
 
 <------------------------------------ AI suggestion --------------------------------->
-
+Lumina Always Online + Featured in New Chat
+1. Always Online (Green dot)
+    ChatSidebar.tsx — In getChatDisplayInfo, when the peer is Lumina, online is forced to true — bypassing the real-time onlineUsers set.
+    InCallChatList.tsx — Same logic applied consistently for the in-call chat sidebar.
+2. Featured in "New Chat" Modal
+    ChatListPage.tsx — Lumina is now always pinned at the top of the New Chat modal with a beautiful gradient card:
+    Her avatar with the green online dot
+    Her name with a purple gradient AI badge
+    "Your personal AI companion · Always online" subtitle
+    An accent-colored arrow chevron
+    On hover, the card glows with deeper purple tones
+Clicking the Lumina card immediately opens her chat (or creates one if it doesn't exist yet).
 
 
 <---------------- idea -------------------------->

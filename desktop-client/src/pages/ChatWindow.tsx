@@ -1379,7 +1379,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       ? false
       : isSelfChat
         ? currentUser?.showActiveStatus !== false
-        : onlineUsers.has(peerId) && isPeerVisible;
+        : peerId === LUMINA_AI_UID
+          ? true  // Lumina is always online
+          : onlineUsers.has(peerId) && isPeerVisible;
 
     return {
       uid: peerId,

@@ -186,6 +186,37 @@ const ChatListPage: React.FC = () => {
     });
   };
 
+  const handleStartLuminaChat = async () => {
+    if (!currentUser) return;
+    setShowNewChat(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setUserProfile(LUMINA_PROFILE);
+    const { chats } = useChatStore.getState();
+    const existingLumina = chats.find(c =>
+      c.type === 'private' && c.members.includes(LUMINA_AI_UID)
+    );
+    if (existingLumina) {
+      navigate(`/chats/${existingLumina.chatId}`);
+      return;
+    }
+    try {
+      const res = await createPrivateChat(LUMINA_AI_UID);
+      if (res.success && res.data) {
+        navigate(`/chats/${res.data.chatId}`);
+        getChats().then(refreshed => {
+          if (refreshed.success && refreshed.data) setChats(refreshed.data);
+        });
+        return;
+      }
+    } catch {}
+    const chat = await getOrCreatePrivateChatDirect(currentUser.uid, LUMINA_AI_UID);
+    navigate(`/chats/${chat.chatId}`);
+    getChats().then(refreshed => {
+      if (refreshed.success && refreshed.data) setChats(refreshed.data);
+    });
+  };
+
   return (
     <div
       className={`chat-list-layout${chatId ? ' has-chat' : ''}${!sidebarOpen ? ' sidebar-hidden' : ''}`}
@@ -240,6 +271,46 @@ const ChatListPage: React.FC = () => {
               <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>New Chat</h3>
               <button onClick={() => setShowNewChat(false)} style={closeBtnStyle}>✕</button>
             </div>
+
+            {/* ── Lumina AI — always pinned at top ── */}
+            <div
+              onClick={handleStartLuminaChat}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(168,85,247,0.10) 100%)',
+                border: '1px solid rgba(99,102,241,0.3)',
+                marginBottom: 16, transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(99,102,241,0.22) 0%, rgba(168,85,247,0.18) 100%)';
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.6)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.background = 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(168,85,247,0.10) 100%)';
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.3)';
+              }}
+            >
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <UserAvatar name="Lumina" avatar={LUMINA_PROFILE.avatar} size={42} online />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>Lumina</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                    background: 'linear-gradient(90deg, #6366f1, #a855f7)',
+                    color: '#fff', letterSpacing: 0.5, textTransform: 'uppercase',
+                  }}>AI</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Your personal AI companion · Always online</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="#6366f1" strokeWidth="2" style={{ flexShrink: 0, opacity: 0.7 }}>
+                <path d="M7 4l6 6-6 6" />
+              </svg>
+            </div>
+
+            <div style={{ height: 1, backgroundColor: 'var(--border)', marginBottom: 14 }} />
             <input
               type="text"
               placeholder="Search by @username or email..."

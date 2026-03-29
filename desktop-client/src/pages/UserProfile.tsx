@@ -8,6 +8,7 @@ import UserAvatar from '../components/UserAvatar';
 import { formatLastSeen } from '../utils/formatters';
 import { User } from '@shared/types';
 import { Pencil, Check, X, Camera, Trash2 } from 'lucide-react';
+import { LUMINA_AI_UID } from '../services/luminaService';
 
 const UserProfile: React.FC = () => {
   const { uid } = useParams<{ uid?: string }>();
@@ -193,7 +194,9 @@ const UserProfile: React.FC = () => {
   const storeProfile = profile.uid === currentUser?.uid ? currentUser : (userProfiles[profile.uid] ?? profile);
   const isOnline = isOwnProfile
     ? storeProfile?.showActiveStatus !== false
-    : onlineUsers.has(profile.uid) && storeProfile?.showActiveStatus !== false;
+    : profile.uid === LUMINA_AI_UID
+      ? true  // Lumina is always online
+      : onlineUsers.has(profile.uid) && storeProfile?.showActiveStatus !== false;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', backgroundColor: 'var(--bg-primary)', overflowY: 'auto' }}>

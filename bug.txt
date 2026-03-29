@@ -8,12 +8,12 @@
 19. (fixed) add swapping effect for touch devices for reply (right to left) and forward (left to right)
 17. (fixed) for spoiler image/video show full screen icon in center instead of right top
 21. (fixed) for touch devices shows context menu on file click too
+(partially) add flip camera in pip camera and hide icon after 3 second of mouse inactive
+(fixed) redesign calling functions and sound for calling 
 
 to be implemented:
 
 (partially) while voice/video incoming or outgoing calling open in popup window for web version
-add flip camera in pip camera and hide icon after 3 second of mouse inactive
-redesign calling functions and sound for calling 
 
 allow user to import and export chat History
 store chats in device and update accordingly when new events occurs and while user is offline load it from device and when connection restored then update the chats and device storage as like telegram and whatsapp logic is implemented

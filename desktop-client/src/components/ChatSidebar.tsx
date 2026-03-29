@@ -253,7 +253,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
         const online = isSelfChat
           ? currentUser?.showActiveStatus !== false
-          : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
+          : otherUid === LUMINA_AI_UID
+            ? true  // Lumina is always online
+            : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
 
         return {
           name: displayName,

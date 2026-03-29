@@ -5,6 +5,7 @@ import UserAvatar from './UserAvatar';
 import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon, getMessagePreviewColor } from '../utils/formatters';
 import { Chat } from '@shared/types';
 import { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff, Search, ChevronLeft } from 'lucide-react';
+import { LUMINA_AI_UID } from '../services/luminaService';
 
 const PREVIEW_ICON_MAP = { Phone, Video, Image, Film, Mic, Paperclip, PhoneMissed, PhoneOff } as const;
 type PreviewIconKey = keyof typeof PREVIEW_ICON_MAP;
@@ -56,7 +57,9 @@ const InCallChatList: React.FC<InCallChatListProps> = ({ onChatSelect, activeCha
 
       const online = isSelfChat
         ? currentUser?.showActiveStatus !== false
-        : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
+        : otherUid === LUMINA_AI_UID
+          ? true  // Lumina is always online
+          : !!(otherUid && onlineUsers.has(otherUid) && isPeerVisible);
 
       return {
         name: displayName,
