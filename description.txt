@@ -879,6 +879,29 @@ Lumina AI Key Banner: A prominent, premium-styled banner now appears at the top 
 Smooth Settings Navigation: Clicking the "Set Up Key" button now redirects the user directly to the AI Assistant section in the Settings page. I've implemented a hash-based scrolling mechanism (#ai-assistant-section) that smoothly brings the relevant configuration block into view upon arrival.
 
 
+<------------------------------------ pull to refresh --------------------------------->
+implemented the Pull-to-Refresh feature in the sidebar. You can now manually update your chat list by pulling down at the top of the chat list on touch-enabled devices.
+What's New
+Functional Refresh: Pulling down past 65px and releasing triggers a real-time re-fetch of your chat list from the server.
+Dynamic Visuals: The indicator now smoothly transitions between three states:
+    Pulling: Shows a chevron pointing down with "Pull to refresh".
+    Ready: Transforms into a refresh icon with "Release to refresh".
+    Refreshing: Pins the header at a fixed height with a spinning icon and "Refreshing..." text.
+Smooth Animations: Added a global .animate-spin CSS class for 60fps rotation effects.
+
+🔄 What it DOES (Data Refresh)
+Just like a browser refresh, the Pull-to-Refresh triggers a network request to the server to fetch the most up-to-date list of your chats. If a new message arrived or a chat was deleted while you were looking at the sidebar, pulling down will sync that data immediately.
+
+⚡ Why it's BETTER than a Browser Refresh
+A full browser refresh (F5) is a "hard reset"—it reloads the entire website, clears your React state, and restarts the whole application. This is slow and resets your view.
+
+In contrast, the Pull-to-Refresh I implemented:
+    Stays within the app: It only re-fetches the specific data (the chat list) without reloading the whole page.
+    Preserves Context: If you have a chat open on the right side, it stays open. You don't lose your place.
+    Faster: It only transfers a small piece of JSON data rather than the entire 5MB+ JavaScript bundle.
+    Smooth: It uses the .animate-spin and translateY logic to provide a native mobile-app feel.
+Summary: It gives you the "fresh data" benefits of a page refresh without the "slow reload" drawbacks!
+
 <---------------- idea -------------------------->
 (fixed) login with google
 (fixed) chat during call 

@@ -1523,7 +1523,7 @@ const SettingsPage: React.FC = () => {
       {/* About */}
       <Section title="About">
         <SettingRow label="App Version" description="TeleDesk Desktop">
-          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>1.0.04</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>1.0.05</span>
         </SettingRow>
       </Section>
 

@@ -6,8 +6,8 @@ import { useUIStore } from '../store/uiStore';
 import UserAvatar from './UserAvatar';
 import { formatTime, truncate, getMessagePreview, getMessagePreviewIcon, getMessagePreviewColor } from '../utils/formatters';
 import { Chat } from '@shared/types';
-import { deleteChat as deleteChatApi } from '../services/apiService';
-import { Users, UserPlus, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock } from 'lucide-react';
+import { deleteChat as deleteChatApi, getChats } from '../services/apiService';
+import { Users, UserPlus, Trash2, Paperclip, MoreVertical, Pin, PinOff, Archive, ArchiveRestore, X, ChevronLeft, ExternalLink, Phone, Video, Image, Film, Mic, PhoneMissed, PhoneOff, Lock, Unlock, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { LUMINA_AI_UID, LUMINA_AI_NAME, LUMINA_AI_AVATAR, LUMINA_PROFILE } from '../services/luminaService';
 
@@ -43,6 +43,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const [deleting, setDeleting] = useState(false);
   const [showTopBar, setShowTopBar] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const ctxRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const lastScrollTopRef = useRef(0);
@@ -111,8 +112,25 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
     isPullingRef.current = false;
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setPullDistance(60); // Keep it pinned while refreshing
+    try {
+      const res = await getChats();
+      if (res.success && res.data) {
+        useChatStore.getState().setChats(res.data);
+      }
+    } catch (err) {
+      console.error('[Refresh] Failed to fetch chats:', err);
+    } finally {
+      setIsRefreshing(false);
+      setPullDistance(0);
+    }
+  }, [isRefreshing]);
+
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (touchStartYRef.current === null) return;
+    if (touchStartYRef.current === null || isRefreshing) return;
     const el = chatListRef.current;
     if (!el) return;
     
@@ -146,12 +164,16 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   }, [setTopBarSafe]);
 
   const handleTouchEnd = useCallback(() => {
+    const threshold = 65;
+    if (pullDistance >= threshold && !isRefreshing) {
+      handleRefresh();
+    } else if (!isRefreshing) {
+      setPullDistance(0);
+    }
+    
     touchStartYRef.current = null;
     isPullingRef.current = false;
-    
-    // Animate back to original position
-    setPullDistance(0);
-  }, []);
+  }, [pullDistance, isRefreshing, handleRefresh]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -393,32 +415,59 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         )}
       </div>
 
-      {/* Pull-to-reveal indicator */}
-      {pullDistance > 0 && (
+      {/* Pull-to-Refresh indicator */}
+      {(pullDistance > 0 || isRefreshing) && (
         <div
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            height: pullDistance,
+            height: isRefreshing ? 60 : pullDistance,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'var(--text-secondary)',
             fontSize: 12,
-            opacity: Math.min(pullDistance / 60, 1),
+            opacity: isRefreshing ? 1 : Math.min(pullDistance / 60, 1),
             pointerEvents: 'none',
-            zIndex: 1,
+            zIndex: 10, // Higher than topbar
+            backgroundColor: isRefreshing ? 'rgba(var(--bg-secondary-rgb), 0.8)' : 'transparent',
+            backdropFilter: isRefreshing ? 'blur(8px)' : 'none',
+            flexDirection: 'column',
+            gap: 4,
+            transition: pullDistance === 0 && !isRefreshing ? 'height 0.3s ease-out, opacity 0.3s' : 'none',
           }}
         >
-          <ChevronLeft 
-            size={16} 
-            style={{ 
-              transform: 'rotate(90deg)',
-              transition: 'transform 0.2s ease',
-            }} 
-          />
+          {isRefreshing ? (
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <RefreshCw size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Refreshing...</span>
+             </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {pullDistance >= 65 ? (
+                <RefreshCw 
+                  size={16} 
+                  style={{ 
+                    color: 'var(--accent)',
+                    transform: `rotate(${Math.min(pullDistance * 4, 360)}deg)`,
+                  }} 
+                />
+              ) : (
+                <ChevronLeft 
+                  size={16} 
+                  style={{ 
+                    transform: 'rotate(90deg)',
+                    transition: 'transform 0.2s ease',
+                  }} 
+                />
+              )}
+              <span style={{ fontWeight: 500 }}>
+                {pullDistance >= 65 ? 'Release to refresh' : 'Pull to refresh'}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -516,8 +565,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         style={{ 
           flex: 1, 
           overflowY: 'auto',
-          transform: `translateY(${pullDistance}px)`,
-          transition: pullDistance === 0 ? 'transform 0.3s ease-out' : 'none',
+          transform: `translateY(${isRefreshing ? 60 : pullDistance}px)`,
+          transition: (pullDistance === 0 && !isRefreshing) ? 'transform 0.3s ease-out' : 'none',
         }}
       >
         {/* ─── Filtered Chats View ──────────────────────────────────────── */}
