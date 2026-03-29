@@ -393,7 +393,7 @@ const BookmarksPage: React.FC = () => {
   return (
     <div
       style={{
-        display: 'flex', flexDirection: 'column', height: '100vh',
+        display: 'flex', flexDirection: 'column', height: '100dvh',
         width: '100%', position: 'relative', overflow: 'hidden',
         backgroundColor: 'var(--bg-primary)',
       }}
@@ -401,7 +401,7 @@ const BookmarksPage: React.FC = () => {
       {/* ─── Header ──────────────────────────────────────────────────────── */}
       <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
+          display: 'flex', alignItems: 'center', gap: 12, padding: 'calc(env(safe-area-inset-top) + 12px) 20px 12px',
           borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)',
           flexShrink: 0,
         }}

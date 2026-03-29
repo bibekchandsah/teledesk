@@ -1192,7 +1192,7 @@ const CallWindowPage: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           backgroundColor: '#0f172a',
           position: 'relative',
           display: 'flex',
@@ -1246,7 +1246,7 @@ const CallWindowPage: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           backgroundColor: '#0f172a',
           position: 'relative',
           display: 'flex',
@@ -1287,7 +1287,7 @@ const CallWindowPage: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           backgroundColor: '#0f172a',
           position: 'relative',
           display: 'flex',

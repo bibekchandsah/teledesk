@@ -146,7 +146,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
         boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
         overflow: 'hidden',
         minWidth: 170,
-        maxHeight: 'calc(100vh - 16px)',
+        maxHeight: 'calc(100dvh - 16px)',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -182,7 +182,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
             </button>
           </div>
           {showExtended && (
-            <div ref={pickerRef} style={{ padding: '0 8px 8px', maxHeight: 'calc(100vh - 200px)', overflow: 'auto' }}>
+            <div ref={pickerRef} style={{ padding: '0 8px 8px', maxHeight: 'calc(100dvh - 200px)', overflow: 'auto' }}>
               <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
                 <Picker data={data} onEmojiSelect={handleEmojiMartSelect} theme="auto" previewPosition="none" skinTonePosition="none" navPosition="bottom" width={350} />
               </div>

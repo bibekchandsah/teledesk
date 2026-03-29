@@ -314,7 +314,7 @@ const CallHistoryPage: React.FC = () => {
       style={{
         width: 340,
         minWidth: 280,
-        height: '100vh',
+        height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: 'var(--bg-primary)',
@@ -325,7 +325,7 @@ const CallHistoryPage: React.FC = () => {
       {/* Header */}
       <div
         style={{
-          padding: '20px 20px 12px',
+          padding: 'calc(env(safe-area-inset-top) + 20px) 20px 12px',
           borderBottom: '1px solid var(--border)',
           flexShrink: 0,
           display: 'flex',

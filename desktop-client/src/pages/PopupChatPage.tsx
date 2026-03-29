@@ -83,7 +83,7 @@ const PopupChatPage: React.FC = () => {
 
   if (isLoading || (!isAuthenticated && !currentUser)) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-primary)' }}>
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-primary)' }}>
         <Loader2 className="animate-spin" size={48} style={{ opacity: 0.5, color: 'var(--text-secondary)' }} />
       </div>
     );
@@ -95,7 +95,7 @@ const PopupChatPage: React.FC = () => {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <ChatWindow onBack={() => navigate('/chats')} />
     </div>
   );

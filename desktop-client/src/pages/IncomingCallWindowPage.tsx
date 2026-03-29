@@ -53,7 +53,7 @@ const IncomingCallWindowPage: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -70,7 +70,7 @@ const IncomingCallWindowPage: React.FC = () => {
   return (
     <div
       style={{
-        height: '100vh',
+        height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

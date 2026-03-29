@@ -132,7 +132,7 @@ const LoginPage: React.FC = () => {
     <div
       className="login-page"
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch' as any,
         display: 'flex',
@@ -141,7 +141,7 @@ const LoginPage: React.FC = () => {
         justifyContent: 'center',
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.15) 0%, transparent 60%)',
-        padding: '24px 16px',
+        padding: 'calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 24px)',
         boxSizing: 'border-box',
       }}
     >

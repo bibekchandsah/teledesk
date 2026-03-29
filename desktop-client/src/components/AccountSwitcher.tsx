@@ -53,7 +53,7 @@ export const AccountSwitcher: React.FC = () => {
       overlay.id = 'account-switching-overlay';
       overlay.style.cssText = `
         position: fixed;
-        inset: 0;
+        height: 100dvh;
         background: var(--bg-primary);
         display: flex;
         flex-direction: column;
@@ -290,7 +290,7 @@ export const AccountSwitcher: React.FC = () => {
                 left: 70,
                 width: 280,
               }),
-              maxHeight: isMobile ? 'calc(100vh - 80px)' : 'calc(100vh - 100px)',
+              maxHeight: isMobile ? 'calc(100dvh - 80px)' : 'calc(100dvh - 100px)',
               backgroundColor: 'var(--bg-secondary)',
               borderRadius: 12,
               boxShadow: '0 10px 40px rgba(0,0,0,0.3)',

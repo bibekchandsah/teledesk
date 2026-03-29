@@ -186,7 +186,7 @@ const AppInner: React.FC = () => {
   if (isCallWindow) {
     return (
       <SocketProvider>
-        <div style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+        <div style={{ height: '100dvh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
           <Routes>
             <Route path="/call-window" element={<CallWindowPage />} />
             <Route path="*" element={<CallWindowPage />} />
@@ -199,7 +199,7 @@ const AppInner: React.FC = () => {
   // ─── Incoming call notification window (bypass auth entirely) ────────────
   if (isIncomingCallWindow) {
     return (
-      <div style={{ height: '100vh', overflow: 'hidden' }}>
+      <div style={{ height: '100dvh', overflow: 'hidden' }}>
         <Routes>
           <Route path="/incoming-call" element={<IncomingCallWindowPage />} />
           <Route path="*" element={<IncomingCallWindowPage />} />
@@ -278,7 +278,7 @@ const AppInner: React.FC = () => {
     return (
       <SocketProvider>
         <CallProvider>
-          <div style={{ height: '100vh', overflow: 'hidden' }}>
+          <div style={{ height: '100dvh', overflow: 'hidden' }}>
             <Routes>
               <Route path="/popup/:chatId" element={<PopupChatPage />} />
               <Route path="*" element={<Navigate to="/popup" replace />} />
@@ -293,7 +293,7 @@ const AppInner: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -329,7 +329,7 @@ const AppInner: React.FC = () => {
     return (
       <div
         style={{
-          height: '100vh',
+          height: '100dvh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -360,7 +360,7 @@ const AppInner: React.FC = () => {
   // ─── Standalone call window ──────────────────────────────────────────────
   if (isCallWindow) {
     return (
-      <div style={{ height: '100vh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
+      <div style={{ height: '100dvh', overflow: 'hidden', backgroundColor: '#0f172a' }}>
         <Routes>
           <Route path="/call-window" element={<CallWindowPage />} />
           <Route path="*" element={<CallWindowPage />} />
@@ -372,7 +372,7 @@ const AppInner: React.FC = () => {
   // ─── Incoming call notification window ───────────────────────────────────
   if (isIncomingCallWindow) {
     return (
-      <div style={{ height: '100vh', overflow: 'hidden' }}>
+      <div style={{ height: '100dvh', overflow: 'hidden' }}>
         <Routes>
           <Route path="/incoming-call" element={<IncomingCallWindowPage />} />
           <Route path="*" element={<IncomingCallWindowPage />} />
