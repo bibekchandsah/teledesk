@@ -53,7 +53,12 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {accounts.map((account) => (
-          <div key={account.uid} style={{ position: 'relative' }}>
+          <div 
+            key={account.uid} 
+            style={{ position: 'relative' }}
+            onMouseEnter={() => setHoveredAccount(account.uid)}
+            onMouseLeave={() => setHoveredAccount(null)}
+          >
             <button
               onClick={() => onSelectAccount(account.email)}
               style={{
@@ -64,19 +69,10 @@ export const QuickAccountPicker: React.FC<QuickAccountPickerProps> = ({
                 padding: isTouchDevice ? '12px 52px 12px 12px' : '12px',
                 borderRadius: 10,
                 border: '1px solid var(--border)',
-                backgroundColor: 'transparent',
+                backgroundColor: hoveredAccount === account.uid ? 'var(--bg-hover)' : 'transparent',
+                borderColor: hoveredAccount === account.uid ? 'var(--accent)' : 'var(--border)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-              }}
-              onMouseEnter={(e) => {
-                setHoveredAccount(account.uid);
-                e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                e.currentTarget.style.borderColor = 'var(--accent)';
-              }}
-              onMouseLeave={(e) => {
-                setHoveredAccount(null);
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.borderColor = 'var(--border)';
               }}
             >
               {/* Avatar */}
