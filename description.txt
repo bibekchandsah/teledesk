@@ -860,6 +860,9 @@ This mirrors how Google/Gmail handles it — the session stays alive indefinitel
 Hangup on Close: The close button (and media error close button) now correctly triggers a full hangup, notifying the other participant and cleaning up resources.
 Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron's titleBarOverlay. The custom React buttons are now hidden on Windows to avoid duplication, and the title bar layout has been adjusted to accommodate the native controls.
 
+<------------------------------------ AI suggestion --------------------------------->
+
+
 
 <---------------- idea -------------------------->
 (fixed) login with google
@@ -867,12 +870,11 @@ Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron
 (fixed) show using microhoone and camera and output (web & desktop)
 (fixed) PiP is correctly positioned in the bottom-right corner of the mini-window.
 (fixed) PiP preview now defaults to a 16:9 aspect ratio instead of a square (web & desktop)
-(fixed) 
+(fixed) text suggestion using gemini api
 use own r2 bucket 10GB for more secure data
 restart in deploy isn't working, it's not restarting when clicked restart
 account selection delete icon not trigger
 in mobile device show the actual resolution of the video not 16:9 (web & desktop)
-text suggestion using gemini api
 pofile edit in profile 
 add camera selection and preview in setting page
 encrypt audio and video 

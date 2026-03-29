@@ -831,8 +831,14 @@ const createTray = () => {
             tray.destroy();
             tray = null;
           }
-          app.relaunch();
-          app.quit();
+          // For portable apps, relaunching from process.execPath (temp folder) fails.
+          // We must use the original portable launcher path.
+          const execPath = getInstalledExecutablePath();
+          app.relaunch({ 
+            execPath,
+            args: process.argv.slice(1) 
+          });
+          app.exit(0);
         },
       },
       {
