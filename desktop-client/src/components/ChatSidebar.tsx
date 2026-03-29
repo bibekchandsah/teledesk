@@ -153,7 +153,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       
       // Apply resistance effect (diminishing returns as you pull further)
       const resistance = 0.4;
-      const adjustedDistance = Math.min(deltaY * resistance, 80);
+      const adjustedDistance = Math.min(deltaY * resistance, 140);
       setPullDistance(adjustedDistance);
       
       // Reveal topbar when pulled enough
@@ -164,8 +164,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   }, [setTopBarSafe]);
 
   const handleTouchEnd = useCallback(() => {
-    const threshold = 65;
-    if (pullDistance >= threshold && !isRefreshing) {
+    const refreshThreshold = 65;
+    const reloadThreshold = 110;
+
+    if (pullDistance >= reloadThreshold && !isRefreshing) {
+      window.location.reload();
+    } else if (pullDistance >= refreshThreshold && !isRefreshing) {
       handleRefresh();
     } else if (!isRefreshing) {
       setPullDistance(0);
@@ -432,40 +436,62 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
             opacity: isRefreshing ? 1 : Math.min(pullDistance / 60, 1),
             pointerEvents: 'none',
             zIndex: 10, // Higher than topbar
-            backgroundColor: isRefreshing ? 'rgba(var(--bg-secondary-rgb), 0.8)' : 'transparent',
-            backdropFilter: isRefreshing ? 'blur(8px)' : 'none',
+            backgroundColor: isRefreshing ? 'rgba(var(--bg-secondary-rgb), 0.8)' : (pullDistance > 110 ? 'rgba(var(--accent-rgb, 99, 102, 241), 0.1)' : 'transparent'),
+            backdropFilter: (isRefreshing || pullDistance > 110) ? 'blur(8px)' : 'none',
             flexDirection: 'column',
             gap: 4,
-            transition: pullDistance === 0 && !isRefreshing ? 'height 0.3s ease-out, opacity 0.3s' : 'none',
+            transition: pullDistance === 0 && !isRefreshing ? 'height 0.3s ease-out, opacity 0.3s, background-color 0.3s' : 'none',
+            borderBottom: pullDistance > 110 ? '1px solid rgba(var(--accent-rgb, 99, 102, 241), 0.2)' : 'none',
           }}
         >
           {isRefreshing ? (
              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <RefreshCw size={16} className="animate-spin" style={{ color: 'var(--accent)' }} />
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Refreshing...</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Syncing chats...</span>
              </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {pullDistance >= 65 ? (
-                <RefreshCw 
-                  size={16} 
-                  style={{ 
-                    color: 'var(--accent)',
-                    transform: `rotate(${Math.min(pullDistance * 4, 360)}deg)`,
-                  }} 
-                />
-              ) : (
-                <ChevronLeft 
-                  size={16} 
-                  style={{ 
-                    transform: 'rotate(90deg)',
-                    transition: 'transform 0.2s ease',
-                  }} 
-                />
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              gap: 2,
+              transform: pullDistance > 110 ? 'scale(1.05)' : 'scale(1)',
+              transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {pullDistance >= 65 ? (
+                  <RefreshCw 
+                    size={16} 
+                    style={{ 
+                      color: pullDistance > 110 ? 'var(--accent)' : 'var(--text-secondary)',
+                      transform: `rotate(${Math.min(pullDistance * 4, 360)}deg)`,
+                      transition: 'color 0.2s'
+                    }} 
+                  />
+                ) : (
+                  <ChevronLeft 
+                    size={16} 
+                    style={{ 
+                      transform: 'rotate(90deg)',
+                      transition: 'transform 0.2s ease',
+                    }} 
+                  />
+                )}
+                <span style={{ 
+                  fontWeight: pullDistance >= 65 ? 600 : 500,
+                  color: pullDistance > 110 ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  transition: 'color 0.2s'
+                }}>
+                  {pullDistance > 110 
+                    ? 'Release for full reload' 
+                    : (pullDistance >= 65 ? 'Release to sync chats' : 'Pull to refresh')}
+                </span>
+              </div>
+              {pullDistance > 90 && pullDistance <= 110 && (
+                <div style={{ fontSize: 10, opacity: 0.6, animation: 'fadeIn 0.2s' }}>
+                  Pull further for hard reset
+                </div>
               )}
-              <span style={{ fontWeight: 500 }}>
-                {pullDistance >= 65 ? 'Release to refresh' : 'Pull to refresh'}
-              </span>
             </div>
           )}
         </div>
