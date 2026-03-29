@@ -123,6 +123,12 @@ const SettingsPage: React.FC = () => {
 
   const [activeTrackerTab, setActiveTrackerTab] = useState<'gemini' | 'groq'>('gemini');
 
+  const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarProgress, setAvatarProgress] = useState(0);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
   // Sync toggle states with currentUser when it changes (e.g., after login or profile update)
   useEffect(() => {
     setShowActiveStatus(currentUser?.showActiveStatus !== false);
@@ -140,11 +146,20 @@ const SettingsPage: React.FC = () => {
       setSelectedGroqKeyIndex(0);
     }
   }, [currentUser?.showActiveStatus, currentUser?.showMessageStatus, currentUser?.showLiveTyping, currentUser?.username, currentUser?.name, currentUser?.aiSuggestionsEnabled, currentUser?.geminiApiKey, currentUser?.geminiApiKeys, currentUser?.groqApiKeys]);
-  const [nameInput, setNameInput] = useState(currentUser?.name ?? '');
-  const [isSavingName, setIsSavingName] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [avatarProgress, setAvatarProgress] = useState(0);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Handle URL hash for scrolling to specific sections
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      const id = hash.replace('#', '');
+      const element = document.getElementById(id);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    }
+  }, []);
+
 
   const handleSaveName = async () => {
     const trimmed = nameInput.trim();
@@ -696,7 +711,7 @@ const SettingsPage: React.FC = () => {
       </Section>
 
       {/* AI Assistant */}
-      <Section title="AI Assistant">
+      <Section title="AI Assistant" id="ai-assistant-section">
         <SettingRow
           label="Enable AI Suggestions"
           description="Get smart message suggestions using Google's Gemini AI"
@@ -2196,8 +2211,8 @@ const SettingsPage: React.FC = () => {
   );
 };
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div style={{ marginBottom: 32 }}>
+const Section: React.FC<{ title: string; children: React.ReactNode; id?: string }> = ({ title, children, id }) => (
+  <div id={id} style={{ marginBottom: 32 }}>
     <h3
       style={{
         color: 'var(--accent)',

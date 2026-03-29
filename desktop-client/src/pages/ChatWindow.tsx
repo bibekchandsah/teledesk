@@ -1338,6 +1338,63 @@ const FileErrorModal: React.FC<{ error: string; onClose: () => void }> = ({ erro
   );
 };
 
+const LuminaKeyBanner: React.FC<{ onSettings: () => void }> = ({ onSettings }) => (
+  <div style={{
+    margin: '12px 16px',
+    padding: '12px 16px',
+    borderRadius: 12,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    border: '1px solid rgba(99, 102, 241, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    animation: 'fadeInDown 0.4s ease-out',
+    zIndex: 10
+  }}>
+    <div style={{
+      width: 40,
+      height: 40,
+      borderRadius: '50%',
+      backgroundColor: 'rgba(99, 102, 241, 0.15)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'var(--accent)',
+      flexShrink: 0
+    }}>
+      <Sparkles size={20} />
+    </div>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+        AI API Key Missing
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+        Configure a Gemini or Groq key to enable AI features in this chat.
+      </div>
+    </div>
+    <button
+      onClick={onSettings}
+      style={{
+        padding: '8px 16px',
+        borderRadius: 10,
+        backgroundColor: 'var(--accent)',
+        color: '#fff',
+        border: 'none',
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+        transition: 'transform 0.2s'
+      }}
+      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+    >
+      Set Up Key
+    </button>
+  </div>
+);
+
 // ------------------------------------
 
 interface ChatWindowProps {
@@ -4862,6 +4919,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
           </button>
         </div>
       )}
+      {/* Lumina AI Key Banner */}
+      {(() => {
+        const isLuminaChat = peer?.uid === LUMINA_AI_UID;
+        const hasKeys = (currentUser?.geminiApiKeys?.length ?? 0) > 0 || !!currentUser?.geminiApiKey || (currentUser?.groqApiKeys?.length ?? 0) > 0;
+        if (isLuminaChat && !hasKeys) {
+          return <LuminaKeyBanner onSettings={() => navigate('/settings#ai-assistant-section')} />;
+        }
+        return null;
+      })()}
+
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}

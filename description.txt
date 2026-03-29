@@ -874,6 +874,10 @@ Lumina Always Online + Featured in New Chat
     On hover, the card glows with deeper purple tones
 Clicking the Lumina card immediately opens her chat (or creates one if it doesn't exist yet).
 
+Lumina AI Key Banner: A prominent, premium-styled banner now appears at the top of 1:1 chats with Lumina AI when no Gemini or Groq API keys are configured. This provides a clear call-to-action for users to enable AI features.
+
+Smooth Settings Navigation: Clicking the "Set Up Key" button now redirects the user directly to the AI Assistant section in the Settings page. I've implemented a hash-based scrolling mechanism (#ai-assistant-section) that smoothly brings the relevant configuration block into view upon arrival.
+
 
 <---------------- idea -------------------------->
 (fixed) login with google
