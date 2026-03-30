@@ -933,6 +933,13 @@ Safe Area Handling: I integrated CSS env(safe-area-inset-top) and env(safe-area-
 Full-Screen Viewport Fit: Updated the viewport meta tag in index.html to viewport-fit=cover, allowing the application to utilize the full display area of modern devices.
 Overlay Optimization: Updated AccountSwitcher and MessageContextMenu to use dynamic height calculations, ensuring they remain fully interactive even when browser UI elements shift.
 
+
+<------------------------------- context menu ----------------------------------->
+Normal items → accent highlight + background tint on hover
+Destructive items (Delete for everyone) → red background tint + brighter red on hover
+Disabled items → 35% opacity, no hover, no pointer events
+Active press → slightly deeper accent background
+
 <---------------- idea -------------------------->
 (fixed) login with google
 (fixed) chat during call 

@@ -852,14 +852,14 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               }
               setCtxMenu(null);
             }}
-            style={ctxMenuItemStyle}
+            className="ctx-menu-btn"
           >
             <ExternalLink size={14} style={{ marginRight: 6 }} />Open in new window
           </button>
           <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
           <button
             onClick={() => { togglePinChat(ctxMenu.chatId); setCtxMenu(null); }}
-            style={ctxMenuItemStyle}
+            className="ctx-menu-btn"
           >
             {pinnedChatIds.includes(ctxMenu.chatId)
               ? <><PinOff size={14} style={{ marginRight: 6 }} />Unpin chat</>
@@ -867,7 +867,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           </button>
           <button
             onClick={() => { toggleArchiveChat(ctxMenu.chatId); setCtxMenu(null); }}
-            style={ctxMenuItemStyle}
+            className="ctx-menu-btn"
           >
             {archivedChatIds.includes(ctxMenu.chatId)
               ? <><ArchiveRestore size={14} style={{ marginRight: 6 }} />Unarchive chat</>
@@ -885,7 +885,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
               }
               setCtxMenu(null);
             }}
-            style={ctxMenuItemStyle}
+            className="ctx-menu-btn"
           >
             {lockedChatIds.includes(ctxMenu.chatId)
               ? <><Unlock size={14} style={{ marginRight: 6 }} />Unlock chat</>
@@ -894,7 +894,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           {activeChat?.chatId === ctxMenu.chatId && (
             <button
               onClick={() => { setActiveChat(null); navigate('/chats'); setCtxMenu(null); }}
-              style={ctxMenuItemStyle}
+              className="ctx-menu-btn"
             >
               <X size={14} style={{ marginRight: 6 }} />Close chat
             </button>
@@ -902,13 +902,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
           <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
           <button
             onClick={() => requestDelete(ctxMenu.chatId, 'me')}
-            style={ctxMenuItemStyle}
+            className="ctx-menu-btn"
           >
             <Trash2 size={14} style={{ marginRight: 6 }} />Delete for me
           </button>
           <button
             onClick={() => requestDelete(ctxMenu.chatId, 'both')}
-            style={{ ...ctxMenuItemStyle, color: 'var(--error, #e74c3c)' }}
+            className="ctx-menu-btn ctx-menu-btn--danger"
           >
             <Trash2 size={14} style={{ marginRight: 6 }} />Delete for everyone
           </button>
@@ -993,18 +993,6 @@ const iconBtnStyle: React.CSSProperties = {
   color: 'var(--text-secondary)',
 };
 
-const ctxMenuItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  width: '100%',
-  padding: '10px 16px',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  cursor: 'pointer',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-};
 
 const btnStyle: React.CSSProperties = {
   padding: '8px 16px',

@@ -6,17 +6,6 @@ import Picker from '@emoji-mart/react';
 
 export const PRESET_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '👎'];
 
-const menuItemStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '10px 16px',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  cursor: 'pointer',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-};
 
 interface MessageContextMenuProps {
   message: Message;
@@ -194,7 +183,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
 
       {onCloseChat && (
         <>
-          <button onClick={() => { onClose(); onCloseChat(); }} style={menuItemStyle}>
+          <button onClick={() => { onClose(); onCloseChat(); }} className="ctx-menu-btn">
             <X size={14} style={{ marginRight: 6 }} />Close chat
           </button>
           <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
@@ -202,7 +191,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       )}
       {onEnterSelect && (
         <>
-          <button onClick={() => { onClose(); onEnterSelect(message.messageId); }} style={menuItemStyle}>
+          <button onClick={() => { onClose(); onEnterSelect(message.messageId); }} className="ctx-menu-btn">
             <CheckSquare size={14} style={{ marginRight: 6 }} />Select
           </button>
           <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
@@ -210,12 +199,12 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       )}
 
       {isOwn && !message.deleted && message.type === 'text' && onStartEdit && (
-        <button onClick={() => { onClose(); onStartEdit(message); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onStartEdit(message); }} className="ctx-menu-btn">
           <Pencil size={14} style={{ marginRight: 6 }} />Edit message
         </button>
       )}
       {!message.deleted && onReply && (
-        <button onClick={() => { onClose(); onReply(message); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onReply(message); }} className="ctx-menu-btn">
           <CornerUpLeft size={14} style={{ marginRight: 6 }} />Reply message
         </button>
       )}
@@ -231,41 +220,41 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
         else if (type === 'sticker') label = 'Copy sticker';
         
         return (
-          <button onClick={() => { onClose(); onCopy(message); }} style={menuItemStyle}>
+          <button onClick={() => { onClose(); onCopy(message); }} className="ctx-menu-btn">
             <Copy size={14} style={{ marginRight: 6 }} />
             {label}
           </button>
         );
       })()}
       {!message.deleted && message.fileUrl && onDownload && (
-        <button onClick={() => { onClose(); onDownload(message); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onDownload(message); }} className="ctx-menu-btn">
           <Download size={14} style={{ marginRight: 6 }} />Download
         </button>
       )}
       {!message.deleted && onForward && (
-        <button onClick={() => { onClose(); onForward(message); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onForward(message); }} className="ctx-menu-btn">
           <Forward size={14} style={{ marginRight: 6 }} />Forward message
         </button>
       )}
       {!message.deleted && onBookmark && (
-        <button onClick={() => { onClose(); onBookmark(message); }} style={bookmarked ? { ...menuItemStyle, color: 'var(--accent)' } : menuItemStyle}>
+        <button onClick={() => { onClose(); onBookmark(message); }} className={`ctx-menu-btn${bookmarked ? ' ctx-menu-btn--active' : ''}`} style={bookmarked ? { color: 'var(--accent)' } : undefined}>
           {bookmarked ? <BookmarkCheck size={14} style={{ marginRight: 6 }} /> : <Bookmark size={14} style={{ marginRight: 6 }} />}
           {bookmarked ? 'Remove bookmark' : 'Save to bookmarks'}
         </button>
       )}
       {!message.deleted && onPin && (
-        <button onClick={() => { onClose(); onPin(message, isPinned ? 'unpin' : 'pin'); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onPin(message, isPinned ? 'unpin' : 'pin'); }} className="ctx-menu-btn">
           {isPinned ? <PinOff size={14} style={{ marginRight: 6 }} /> : <Pin size={14} style={{ marginRight: 6 }} />}
           {isPinned ? 'Unpin message' : 'Pin message'}
         </button>
       )}
       {onDelete && (
-        <button onClick={() => { onClose(); onDelete(message.messageId, 'me'); }} style={menuItemStyle}>
+        <button onClick={() => { onClose(); onDelete(message.messageId, 'me'); }} className="ctx-menu-btn">
           <Trash2 size={14} style={{ marginRight: 6 }} />Delete for me
         </button>
       )}
       {onDelete && isOwn && !message.deleted && (
-        <button onClick={() => { onClose(); onDelete(message.messageId, 'both'); }} style={{ ...menuItemStyle, color: 'var(--error, #e74c3c)' }}>
+        <button onClick={() => { onClose(); onDelete(message.messageId, 'both'); }} className="ctx-menu-btn ctx-menu-btn--danger">
           <Trash2 size={14} style={{ marginRight: 6 }} />Delete for everyone
         </button>
       )}

@@ -657,18 +657,6 @@ const headerBtnStyle: React.CSSProperties = {
   justifyContent: 'center',
 };
 
-const headerCtxItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  width: '100%',
-  padding: '10px 16px',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  cursor: 'pointer',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-};
 
 const iconBtnStyle: React.CSSProperties = {
   background: 'none',
@@ -4631,6 +4619,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
       {headerMenu && (
         <div
           ref={headerMenuRef}
+          className="header-ctx-menu"
           style={{
             position: 'fixed',
             top: headerMenu.y,
@@ -4659,35 +4648,40 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 <button
                   onClick={() => { setHeaderMenu(null); handleSelectionEdit(); }}
                   disabled={!canEdit}
-                  style={{ ...headerCtxItemStyle, opacity: canEdit ? 1 : 0.35, cursor: canEdit ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: canEdit ? 1 : 0.35, cursor: canEdit ? 'pointer' : 'default' }}
                 >
                   <Pencil size={14} style={{ marginRight: 8 }} />Edit message
                 </button>
                 <button
                   onClick={() => { setHeaderMenu(null); handleSelectionReply(); }}
                   disabled={!canReply}
-                  style={{ ...headerCtxItemStyle, opacity: canReply ? 1 : 0.35, cursor: canReply ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: canReply ? 1 : 0.35, cursor: canReply ? 'pointer' : 'default' }}
                 >
                   <CornerUpLeft size={14} style={{ marginRight: 8 }} />Reply message
                 </button>
                 <button
                   onClick={() => { setHeaderMenu(null); handleBulkForward(); }}
                   disabled={count === 0}
-                  style={{ ...headerCtxItemStyle, opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
                 >
                   <Forward size={14} style={{ marginRight: 8 }} />Forward message
                 </button>
                 <button
                   onClick={() => { setHeaderMenu(null); handleBulkCopy(); }}
                   disabled={count === 0}
-                  style={{ ...headerCtxItemStyle, opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
                 >
                   <Copy size={14} style={{ marginRight: 8 }} />Copy message
                 </button>
                 <button
                   onClick={() => { setHeaderMenu(null); handleBulkPin(); }}
                   disabled={count === 0}
-                  style={{ ...headerCtxItemStyle, opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
                 >
                   <Pin size={14} style={{ marginRight: 8 }} />Pin messages
                 </button>
@@ -4695,14 +4689,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                 <button
                   onClick={() => { setHeaderMenu(null); handleBulkDelete('me'); }}
                   disabled={count === 0}
-                  style={{ ...headerCtxItemStyle, opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn"
+                  style={{ opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
                 >
                   <Trash2 size={14} style={{ marginRight: 8 }} />Delete selected for me
                 </button>
                 <button
                   onClick={() => { setHeaderMenu(null); handleBulkDelete('both'); }}
                   disabled={count === 0}
-                  style={{ ...headerCtxItemStyle, color: 'var(--error, #e74c3c)', opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
+                  className="ctx-menu-btn ctx-menu-btn--danger"
+                  style={{ opacity: count > 0 ? 1 : 0.35, cursor: count > 0 ? 'pointer' : 'default' }}
                 >
                   <Trash2 size={14} style={{ marginRight: 8 }} />Delete selected for everyone
                 </button>
@@ -4713,20 +4709,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               {peer && (
                 <button
                   onClick={() => { setHeaderMenu(null); openProfile(); }}
-                  style={headerCtxItemStyle}
+                  className="ctx-menu-btn"
                 >
                   <UserRound size={14} style={{ marginRight: 8 }} />View profile
                 </button>
               )}
               <button
                 onClick={() => { setHeaderMenu(null); enterSelectionModeEmpty(); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
                 >
                 <CheckSquare size={14} style={{ marginRight: 8 }} />Select messages
               </button>
               <button
                 onClick={() => { setHeaderMenu(null); setShowThemeModal(true); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 <Palette size={14} style={{ marginRight: 8 }} />Customize Theme
               </button>
@@ -4740,14 +4736,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                   }
                   setHeaderMenu(null);
                 }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 <ExternalLink size={14} style={{ marginRight: 8 }} />Open in new window
               </button>
               <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
               <button
                 onClick={() => { togglePinChat(activeChat.chatId); setHeaderMenu(null); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 {pinnedChatIds.includes(activeChat.chatId)
                   ? <><PinOff size={14} style={{ marginRight: 8 }} />Unpin chat</>
@@ -4772,7 +4768,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     setHeaderMenu(null);
                   }
                 }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 {lockedChatIds.includes(activeChat.chatId)
                   ? <><Unlock size={14} style={{ marginRight: 8 }} />Unlock chat</>
@@ -4780,7 +4776,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </button>
               <button
                 onClick={() => { toggleArchiveChat(activeChat.chatId); setHeaderMenu(null); navigate('/chats'); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 {archivedChatIds.includes(activeChat.chatId)
                   ? <><ArchiveRestore size={14} style={{ marginRight: 8 }} />Unarchive chat</>
@@ -4788,20 +4784,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
               </button>
               <button
                 onClick={() => { setActiveChat(null); setHeaderMenu(null); navigate('/chats'); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 <X size={14} style={{ marginRight: 8 }} />Close chat
               </button>
               <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
               <button
                 onClick={() => { setChatConfirmDelete('me'); setHeaderMenu(null); }}
-                style={headerCtxItemStyle}
+                className="ctx-menu-btn"
               >
                 <Trash2 size={14} style={{ marginRight: 8 }} />Delete for me
               </button>
               <button
                 onClick={() => { setChatConfirmDelete('both'); setHeaderMenu(null); }}
-                style={{ ...headerCtxItemStyle, color: 'var(--error, #e74c3c)' }}
+                className="ctx-menu-btn ctx-menu-btn--danger"
               >
                 <Trash2 size={14} style={{ marginRight: 8 }} />Delete for everyone
               </button>
@@ -6363,9 +6359,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       >
                         {clipboardItems.map(({ label, icon, action, shortcut }, i) => (
                           <button key={label} onPointerDown={(e) => { e.preventDefault(); action(); }}
-                            style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '9px 14px', background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: 13, cursor: 'pointer', gap: 10, textAlign: 'left', borderBottom: i < clipboardItems.length - 1 ? '1px solid var(--border)' : 'none' }}
+                            className="ctx-menu-btn"
+                            style={{ gap: 10, borderBottom: i < clipboardItems.length - 1 ? '1px solid var(--border)' : 'none' }}
                           >
-                            <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0 }}>{icon}</span>
+                            <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0 }} className="icon-wrapper">{icon}</span>
                             <span style={{ flex: 1 }}>{label}</span>
                             <span style={{ color: 'var(--text-secondary)', fontSize: 11, flexShrink: 0 }}>{shortcut}</span>
                           </button>
@@ -6394,15 +6391,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                                   applyFormatting(type);
                                   closeMobileCtxMenu();
                                 }}
+                                className="ctx-menu-btn"
+                                disabled={!hasSelection}
                                 style={{
-                                  display: 'flex', alignItems: 'flex-start', width: '100%',
-                                  padding: '8px 14px', background: 'none', border: 'none',
+                                  alignItems: 'flex-start',
+                                  padding: '8px 14px',
                                   borderBottom: i < fmtItems.length - 1 ? '1px solid var(--border)' : 'none',
-                                  color: 'var(--text-primary)', fontSize: 13, cursor: hasSelection ? 'pointer' : 'default',
-                                  gap: 10, textAlign: 'left', opacity: hasSelection ? 1 : 0.4,
+                                  gap: 10,
                                 }}
                               >
-                                <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent)', flexShrink: 0, paddingTop: 1 }}>{icon}</span>
+                                <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', flexShrink: 0, paddingTop: 1 }} className="icon-wrapper">{icon}</span>
                                 <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                                   <span>{label}</span>
                                   <span style={{ color: 'var(--text-secondary)', fontSize: 10, fontFamily: 'monospace', opacity: 0.8 }}>{syntax}</span>
@@ -7006,7 +7004,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                     <>
                       <button
                         onClick={() => { togglePinChat(activeChat.chatId); setShowProfileMore(false); }}
-                        style={headerCtxItemStyle}
+                        className="ctx-menu-btn"
                       >
                         {pinnedChatIds.includes(activeChat.chatId)
                           ? <><PinOff size={14} style={{ marginRight: 8 }} />Unpin chat</>
@@ -7031,7 +7029,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                             setShowProfileMore(false);
                           }
                         }}
-                        style={headerCtxItemStyle}
+                        className="ctx-menu-btn"
                       >
                         {lockedChatIds.includes(activeChat.chatId)
                           ? <><Unlock size={14} style={{ marginRight: 8 }} />Unlock chat</>
@@ -7039,7 +7037,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       </button>
                       <button
                         onClick={() => { toggleArchiveChat(activeChat.chatId); setShowProfileMore(false); navigate('/chats'); }}
-                        style={headerCtxItemStyle}
+                        className="ctx-menu-btn"
                       >
                         {archivedChatIds.includes(activeChat.chatId)
                           ? <><ArchiveRestore size={14} style={{ marginRight: 8 }} />Unarchive chat</>
@@ -7048,13 +7046,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ chatId: chatIdProp, onBack }) =
                       <div style={{ height: 1, backgroundColor: 'var(--border)', margin: '2px 0' }} />
                       <button
                         onClick={() => { setChatConfirmDelete('me'); setShowProfileMore(false); }}
-                        style={headerCtxItemStyle}
+                        className="ctx-menu-btn"
                       >
                         <Trash2 size={14} style={{ marginRight: 8 }} />Delete for me
                       </button>
                       <button
                         onClick={() => { setChatConfirmDelete('both'); setShowProfileMore(false); }}
-                        style={{ ...headerCtxItemStyle, color: 'var(--error, #e74c3c)' }}
+                        className="ctx-menu-btn ctx-menu-btn--danger"
                       >
                         <Trash2 size={14} style={{ marginRight: 8 }} />Delete for everyone
                       </button>

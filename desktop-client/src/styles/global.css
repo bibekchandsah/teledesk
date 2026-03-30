@@ -325,6 +325,51 @@ body {
   display: none !important;
 }
 
+/* ─── Context Menu Buttons ──────────────────────────────────────────────────── */
+/* Shared hover style for all context menus (sidebar, message, header three-dot) */
+.ctx-menu-btn {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  border-radius: 0;
+  white-space: nowrap;
+}
+.ctx-menu-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--accent);
+}
+.ctx-menu-btn:hover svg {
+  color: var(--accent) !important;
+}
+.ctx-menu-btn:active {
+  background-color: var(--bg-active);
+}
+.ctx-menu-btn--danger {
+  color: var(--error, #e74c3c);
+}
+.ctx-menu-btn--danger:hover {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+  color: #ef4444 !important;
+}
+.ctx-menu-btn--danger:hover svg {
+  color: #ef4444 !important;
+}
+.ctx-menu-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+
 /* ─── Premium Message Bubble Styles ────────────────────────────────────────── */
 .message-bubble-wrapper {
   position: relative;
