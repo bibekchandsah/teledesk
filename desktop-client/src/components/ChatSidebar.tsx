@@ -45,6 +45,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const ctxRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const lastScrollTopRef = useRef(0);
   const cooldownRef = useRef(false);       // prevents flicker on layout reflow
@@ -235,12 +236,32 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
   useEffect(() => {
     if (ctxMenu && ctxRef.current) {
-      const rect = ctxRef.current.getBoundingClientRect();
-      const padding = 12;
+      const menuRect = ctxRef.current.getBoundingClientRect();
+      const padding = 8;
+
+      // Clamp within the sidebar's own bounding box so the menu never overflows the sidebar edge
+      const container = sidebarRef.current?.getBoundingClientRect() ?? {
+        left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight,
+      };
+
       let newX = ctxMenu.x;
       let newY = ctxMenu.y;
-      if (newX + rect.width > window.innerWidth) newX = window.innerWidth - rect.width - padding;
-      if (newY + rect.height > window.innerHeight) newY = window.innerHeight - rect.height - padding;
+
+      // Prevent overflowing the right edge of the sidebar
+      if (newX + menuRect.width + padding > container.right) {
+        newX = container.right - menuRect.width - padding;
+      }
+      // Prevent overflowing the left edge of the sidebar
+      if (newX < container.left + padding) {
+        newX = container.left + padding;
+      }
+      // Prevent overflowing the bottom of the viewport
+      if (newY + menuRect.height + padding > window.innerHeight) {
+        newY = window.innerHeight - menuRect.height - padding;
+      }
+      // Prevent overflowing the top
+      if (newY < padding) newY = padding;
+
       setAdjustedCtxPos({ x: newX, y: newY });
     } else {
       setAdjustedCtxPos(null);
@@ -387,6 +408,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
 
   return (
     <aside
+      ref={sidebarRef}
       className="chat-sidebar"
       style={{
         width: '100%',

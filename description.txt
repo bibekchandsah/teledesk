@@ -925,6 +925,14 @@ Whether using touch or a wheel, the logic remains consistent:
     Full App Reload (> 110px): A "Super Pull" that triggers a hard reset (window.location.reload()). This is indicated by a background blur and scaling effect.
 
 
+<------------------------------------------ mobile layout optimization ----------------------------->
+Dynamic Viewport Heights: I replaced static 100vh units with 100dvh across the entire application (including App.tsx, LoginPage, CallWindow, and all sub-pages). This ensures that the UI correctly resizes when browser toolbars (like the address bar) expand or collapse, preventing content clipping.
+Safe Area Handling: I integrated CSS env(safe-area-inset-top) and env(safe-area-inset-bottom) to account for device notches and home indicators.
+    Headers: CallHistoryPage, BookmarksPage, and LoginPage now have dynamic top padding to avoid being obscured by notches.
+    Navigation: The bottom navigation bar in mobile view now includes safe area padding at the bottom.
+Full-Screen Viewport Fit: Updated the viewport meta tag in index.html to viewport-fit=cover, allowing the application to utilize the full display area of modern devices.
+Overlay Optimization: Updated AccountSwitcher and MessageContextMenu to use dynamic height calculations, ensuring they remain fully interactive even when browser UI elements shift.
+
 <---------------- idea -------------------------->
 (fixed) login with google
 (fixed) chat during call 
@@ -937,6 +945,7 @@ Whether using touch or a wheel, the logic remains consistent:
 (fixed) pofile edit in profile 
 (fixed)ask before closing the audio/video call
 (fixed) in mobile device show the actual resolution of the video not 16:9 (web & desktop)
+(fixed) sidebar context menu in mobile device
 (not useful) add camera selection and preview in setting page
 use own r2 bucket 10GB for more secure data
 encrypt audio and video 
