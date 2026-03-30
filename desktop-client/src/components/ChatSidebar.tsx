@@ -244,6 +244,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
         left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight,
       };
 
+      // Account for the mobile bottom nav bar so the menu doesn't hide under it.
+      // On desktop the nav is a vertical left rail — it doesn't affect the bottom boundary.
+      const isMobileLayout = window.innerWidth <= 768;
+      const navEl = document.querySelector('.nav-sidebar') as HTMLElement | null;
+      const navBarHeight = (isMobileLayout && navEl) ? navEl.offsetHeight : 0;
+      const bottomBoundary = window.innerHeight - navBarHeight - padding;
+
       let newX = ctxMenu.x;
       let newY = ctxMenu.y;
 
@@ -255,9 +262,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({ onNewChat, width }) => {
       if (newX < container.left + padding) {
         newX = container.left + padding;
       }
-      // Prevent overflowing the bottom of the viewport
-      if (newY + menuRect.height + padding > window.innerHeight) {
-        newY = window.innerHeight - menuRect.height - padding;
+      // Prevent overflowing the bottom (above the nav bar on mobile)
+      if (newY + menuRect.height > bottomBoundary) {
+        newY = bottomBoundary - menuRect.height;
       }
       // Prevent overflowing the top
       if (newY < padding) newY = padding;
