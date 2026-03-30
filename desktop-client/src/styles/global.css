@@ -745,3 +745,23 @@ body {
     gap: 4px !important;
   }
 }
+
+/* --- Call History Page --- */
+.call-history-container {
+  width: 340px;
+  min-width: 280px;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+@media (max-width: 425px) {
+  .call-history-container {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+  }
+}

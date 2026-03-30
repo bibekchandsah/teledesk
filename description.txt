@@ -940,6 +940,17 @@ Destructive items (Delete for everyone) → red background tint + brighter red o
 Disabled items → 35% opacity, no hover, no pointer events
 Active press → slightly deeper accent background
 
+Destructive Actions (Delete for everyone / Delete selected for everyone):
+    They now properly use the standardized ctx-menu-btn--danger class which turns them red on hover with a faint red background (rgba(239, 68, 68, 0.08)).
+Message Text Box Right-Click Menu (Copy, Paste, Formatting):
+    Replaced all inline styles with the correct ctx-menu-btn CSS class.
+    You will now see the identical smooth accent color and background highlighting on hover for these options.
+    The disabled and active press states are now identical to the sidebar and chat header menus.
+
+<------------------------------- call histoy --------------------------------------->
+
+
+
 <---------------- idea -------------------------->
 (fixed) login with google
 (fixed) chat during call 
@@ -954,6 +965,7 @@ Active press → slightly deeper accent background
 (fixed) in mobile device show the actual resolution of the video not 16:9 (web & desktop)
 (fixed) sidebar context menu in mobile device
 (not useful) add camera selection and preview in setting page
+(fixed) call history page grouped under today, yesterday and older dates
 use own r2 bucket 10GB for more secure data
 encrypt audio and video 
 

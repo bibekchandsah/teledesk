@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Phone, Video, VideoOff, PhoneIncoming, PhoneOutgoing, PhoneMissed, PhoneOff, MoreVertical, Trash2, CheckSquare, X } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
@@ -19,12 +20,15 @@ interface CallEntry {
 
 const formatCallDate = (date: Date): string => {
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const inputDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today.getTime() - inputDate.getTime()) / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'long' });
+  if (now.getFullYear() === inputDate.getFullYear()) {
+    return date.toLocaleDateString([], { day: '2-digit', month: 'short' });
+  }
   return date.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
@@ -310,18 +314,7 @@ const CallHistoryPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        width: 340,
-        minWidth: 280,
-        height: '100dvh',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: 'var(--bg-primary)',
-        borderRight: '1px solid var(--border)',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="call-history-container">
       {/* Header */}
       <div
         style={{
@@ -597,9 +590,25 @@ const CallHistoryPage: React.FC = () => {
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    let x = e.clientX;
+                    let y = e.clientY;
+                    
+                    const container = e.currentTarget.closest('.call-history-container');
+                    if (container) {
+                      const rect = container.getBoundingClientRect();
+                      const menuWidth = 160;
+                      if (x + menuWidth > rect.right) {
+                        x = rect.right - menuWidth - 4;
+                      }
+                      const menuHeight = 44;
+                      if (y + menuHeight > rect.bottom) {
+                        y = rect.bottom - menuHeight - 4;
+                      }
+                    }
+
                     setContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
+                      x,
+                      y,
                       messageId: entry.message.messageId,
                     });
                   }}
@@ -739,7 +748,7 @@ const CallHistoryPage: React.FC = () => {
       </div>
 
       {/* Context Menu */}
-      {contextMenu && (
+      {contextMenu && createPortal(
         <div
           ref={contextMenuRef}
           style={{
@@ -757,26 +766,16 @@ const CallHistoryPage: React.FC = () => {
         >
           <button
             onClick={() => handleDeleteSingle(contextMenu.messageId)}
+            className="ctx-menu-btn ctx-menu-btn--danger"
             style={{
-              width: '100%',
               padding: '10px 16px',
-              background: 'none',
-              border: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontSize: 14,
-              color: '#ef4444',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-secondary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
-            <Trash2 size={16} />
+            <Trash2 size={16} style={{ marginRight: 8 }} />
             Delete
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Confirmation Modal */}
