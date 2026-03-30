@@ -35,6 +35,9 @@ const formatCallDate = (date: Date): string => {
 const formatCallTime = (date: Date): string =>
   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+const formatCallTimeWithSeconds = (date: Date): string =>
+  date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
 const CallHistoryPage: React.FC = () => {
   const { userProfiles, chats, nicknames } = useChatStore();
   const { currentUser } = useAuthStore();
@@ -600,7 +603,8 @@ const CallHistoryPage: React.FC = () => {
                       if (x + menuWidth > rect.right) {
                         x = rect.right - menuWidth - 4;
                       }
-                      const menuHeight = 44;
+                      const dur = entry.message.callDuration || 0;
+                      const menuHeight = dur > 0 ? 114 : 74;
                       if (y + menuHeight > rect.bottom) {
                         y = rect.bottom - menuHeight - 4;
                       }
@@ -748,35 +752,67 @@ const CallHistoryPage: React.FC = () => {
       </div>
 
       {/* Context Menu */}
-      {contextMenu && createPortal(
-        <div
-          ref={contextMenuRef}
-          style={{
-            position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            minWidth: 160,
-            zIndex: 10000,
-            overflow: 'hidden',
-          }}
-        >
-          <button
-            onClick={() => handleDeleteSingle(contextMenu.messageId)}
-            className="ctx-menu-btn ctx-menu-btn--danger"
+      {contextMenu && (() => {
+        const entry = callEntries.find(e => e.message.messageId === contextMenu.messageId);
+        if (!entry) return null;
+
+        const dur = entry.message.callDuration || 0;
+        const startTimeStr = formatCallTimeWithSeconds(entry.date);
+        let endTimeStr = '';
+        
+        if (dur > 0) {
+           const end = new Date(entry.date.getTime() + dur * 1000);
+           endTimeStr = formatCallTimeWithSeconds(end);
+        }
+
+        return createPortal(
+          <div
+            ref={contextMenuRef}
             style={{
-              padding: '10px 16px',
+              position: 'fixed',
+              top: contextMenu.y,
+              left: contextMenu.x,
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              minWidth: 160,
+              zIndex: 10000,
+              overflow: 'hidden',
             }}
           >
-            <Trash2 size={16} style={{ marginRight: 8 }} />
-            Delete
-          </button>
-        </div>,
-        document.body
-      )}
+            <div style={{ padding: '10px 16px', fontSize: 12, borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginBottom: dur > 0 ? 6 : 0 }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Started</span>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{startTimeStr}</span>
+              </div>
+              {dur > 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginBottom: 6 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Ended</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{endTimeStr}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Duration</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{formatDuration(dur)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => handleDeleteSingle(contextMenu.messageId)}
+              className="ctx-menu-btn ctx-menu-btn--danger"
+              style={{
+                padding: '10px 16px',
+              }}
+            >
+              <Trash2 size={16} style={{ marginRight: 8 }} />
+              Delete call log
+            </button>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
