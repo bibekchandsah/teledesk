@@ -1,5 +1,6 @@
 import { getIdToken, refreshIdToken } from './firebaseService';
 import { ApiResponse } from '@shared/types';
+import { db } from './dbService';
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -85,9 +86,22 @@ const authFetch = async <T>(
     }
   }
 
-  const data = await response.json();
+  const data = await response.json() as ApiResponse<T>;
 
-  return data as ApiResponse<T>;
+  // Side effect: Cache successful responses
+  if (data.success && data.data) {
+    if (endpoint === '/api/chats') {
+      db.chats.bulkPut(data.data as any);
+    } else if (endpoint.startsWith('/api/chats/') && endpoint.endsWith('/messages')) {
+      db.messages.bulkPut(data.data as any);
+    } else if (endpoint === '/api/users/me' || endpoint.startsWith('/api/users/')) {
+      db.users.put(data.data as any);
+    } else if (endpoint === '/api/saved-messages') {
+      db.savedMessages.bulkPut(data.data as any);
+    }
+  }
+
+  return data;
 };
 
 // ─── Auth / User API ───────────────────────────────────────────────────────

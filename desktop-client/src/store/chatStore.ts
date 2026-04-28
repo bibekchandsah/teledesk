@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+import Dexie from 'dexie';
 import { Chat, Message, User } from '@shared/types';
 import { updateMyPinnedChats as updateMyPinnedChatsApi, updateMyArchivedChats as updateMyArchivedChatsApi, updateMyNicknames as updateMyNicknamesApi, toggleLockChat as toggleLockChatApi } from '../services/apiService';
 import { LUMINA_AI_UID, LUMINA_PROFILE } from '../services/luminaService';
+import { db } from '../services/dbService';
 
 // ─── localStorage helpers for unread counts ────────────────────────────────
 const UNREAD_KEY = 'teledesk_unread_counts';
@@ -66,6 +68,9 @@ interface ChatState {
   lockedChatIds: string[];
   setLockedChatIds: (ids: string[]) => void;
   toggleLockChat: (chatId: string, lock: boolean) => Promise<void>;
+  
+  // Offline persistence
+  initFromOffline: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -94,6 +99,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
     saveUnreadCounts(seeded);
+    
+    // Persist to Dexie
+    db.chats.bulkPut(chats).catch(console.error);
+    
     return { chats, unreadCounts: seeded };
   }),
 
@@ -104,6 +113,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: (message) =>
     set((state) => {
+      // Persist to Dexie
+      db.messages.put(message).catch(console.error);
+      if (message.chatId) {
+        // Update chat last message time for proper sorting in Dexie
+        db.chats.update(message.chatId, { lastMessageAt: message.timestamp, lastMessage: message }).catch(() => {});
+      }
+
       const existing = state.messages[message.chatId] || [];
       const idx = existing.findIndex((m) => m.messageId === message.messageId);
       if (idx !== -1) {
@@ -420,6 +436,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ lockedChatIds: prev });
       console.error('[toggleLockChat]', err);
       throw err;
+    }
+  },
+
+  initFromOffline: async () => {
+    try {
+      const [chats, users] = await Promise.all([
+        db.chats.orderBy('lastMessageAt').reverse().toArray(),
+        db.users.toArray()
+      ]);
+
+      const userProfiles: Record<string, User> = { [LUMINA_AI_UID]: LUMINA_PROFILE };
+      users.forEach(u => { userProfiles[u.uid] = u; });
+
+      set({ 
+        chats, 
+        userProfiles,
+      });
+
+      // Load messages for the most recent chats (optional: only load active or top 5)
+      const messageMap: Record<string, Message[]> = {};
+      const recentChats = chats.slice(0, 10);
+      await Promise.all(recentChats.map(async (chat) => {
+         const msgs = await db.messages
+           .where('[chatId+timestamp]')
+           .between([chat.chatId, Dexie.minKey], [chat.chatId, Dexie.maxKey])
+           .limit(50)
+           .toArray();
+         messageMap[chat.chatId] = msgs;
+      }));
+      
+      set({ messages: { ...get().messages, ...messageMap } });
+    } catch (e) {
+      console.error('[initFromOffline] Failed:', e);
     }
   },
 

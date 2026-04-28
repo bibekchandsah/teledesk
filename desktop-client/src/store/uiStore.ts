@@ -18,6 +18,8 @@ interface UIState {
   appLockModal: { mode: 'setup' | 'verify' | 'reset' | 'change' } | null;
   toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null;
   setToast: (toast: { message: string, type: 'info' | 'offline' | 'online', sticky?: boolean } | null) => void;
+  isOnline: boolean;
+  setIsOnline: (isOnline: boolean) => void;
 
   setSidebarOpen: (open: boolean) => void;
   setSelectedMicId: (id: string) => void;
@@ -53,8 +55,9 @@ export const useUIStore = create<UIState>((set) => ({
   pinModal: null,
   appLockModal: null,
   toast: null,
-
   setToast: (toast) => set({ toast }),
+  isOnline: navigator.onLine,
+  setIsOnline: (isOnline) => set({ isOnline }),
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSelectedMicId: (id) => {

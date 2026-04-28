@@ -62,6 +62,31 @@ npx tsc -p tsconfig.electron.json --noEmit
 http://localhost:3001/api/auth/desktop/google
 
 
+<----------------------- environment setup ---------------------------->
+.env.development - Development environment (localhost, DevTools ON)
+.env.production - Production environment (Railway backend, DevTools OFF)
+desktop-client/ENV_SETUP.md - Complete documentation
+
+How It Works
+Development Mode
+    npm run electron:dev
+        Automatically loads .env.development
+        Backend: http://localhost:3001
+        DevTools: ENABLED
+        Multiple instances: ALLOWED
+Production Build
+    npm run electron:build
+        Automatically loads .env.production
+        Backend: https://teledesk-backend-production.up.railway.app
+        DevTools: DISABLED
+
+File Priority
+    .env.local (highest - personal overrides, not in git)
+    .env.development or .env.production (based on NODE_ENV)
+    .env (fallback, legacy)
+
+
+
 Fixing pin reset flow:
 --------------------------------------------
 <------------------- Lock Chat ------------------->
@@ -360,6 +385,19 @@ Component Improvements:
 Grid Layout Improvements:
     Images/videos in the grid now have correct onClick handlers, ensuring the toggle behavior and preview icon work consistently with single-message layouts.
 
+Rollback (if needed)
+If you need to remove this feature:
+-- Remove the column
+ALTER TABLE public.messages DROP COLUMN IF EXISTS is_spoiler;
+-- Remove the index
+DROP INDEX IF EXISTS messages_is_spoiler_idx;
+
+Notes
+    Spoiler state is stored per-message, not per-user
+    Revealing a spoiler is a client-side action (not synced across devices)
+    Only images and videos can be marked as spoilers
+    The checkbox only appears when uploading media files
+    Works seamlessly with existing features (captions, grid layouts, etc.)
 
 <-------------------------- CHat window auto scroll improvements -------------------------->
 For New Chats:
@@ -508,7 +546,7 @@ You should now be able to see the entire text as the peer types it. ✅
 
 
 <-------------------------- draft message improvements -------------------------->
-set the timer to 2 seconds instead of 1 second
+set the timer to 5 seconds instead of 1 second
 respect the whitespace and adding text between the texts
 
 <-------------------------- touch devices logic -------------------------->
@@ -608,7 +646,28 @@ When a user deletes their account, the backend now immediately emits USER_UPDATE
 The ChatListPage cache-skip fallback (if (cached && !cached.isDeleted) continue) still handles the case where a peer was offline when the deletion happened and reconnects later.
 
 
-<---------------------------- Account picker --------------------------------->
+<---------------------------- Multiple Account picker --------------------------------->
+Test the Feature
+Login with first account:
+    Go to login page
+    Login with any method (Google, GitHub, Email)
+    Account is automatically saved
+Add second account:
+    Click AccountSwitcher dropdown
+    Click "Add Account"
+    Login with different credentials
+    New account is added to the list
+Switch between accounts:
+    Click AccountSwitcher dropdown
+    Click on a different account
+    You'll be logged out and redirected to login
+    Click the account in QuickAccountPicker
+    Login with that account's credentials
+Remove an account:
+    Click AccountSwitcher dropdown
+    Click X button next to account
+    Confirm removal
+    
 optimized for touch and non-touch devices
 trash icon show instantly for touch devices
 
@@ -775,7 +834,21 @@ Now you can run multiple instances without those "File currently in use" errors.
     Have its own window state
     Run completely independently
 
+The shared auth file should be created at:
+    %APPDATA%\teledesk-desktop\shared\shared-auth.json
 
+You can check if it exists:
+    # Windows Command Prompt
+    dir "%APPDATA%\teledesk-desktop\shared\"
+    # Windows PowerShell  
+    ls "$env:APPDATA\teledesk-desktop\shared\"
+
+Reset Everything
+If nothing works, reset all data:
+    Close all instances
+    Delete the entire folder:
+        rmdir /s /q "%APPDATA%\teledesk-desktop"
+    Start fresh 
 
 <------------------------- env files ---------------------------->
 ✅ Created environment-specific configuration system:
@@ -826,6 +899,15 @@ comprehensive environment configuration system for both your frontend (desktop-c
         npm run electron:build # Frontend
 
 
+
+<---------------------------------- google oauth improvements --------------------------------->
+Google OAuth Improvements:
+When you click "Continue with Google", what happens? Please check:
+    [ ] Browser opens
+    [ ] You can authenticate with Google
+    [ ] Browser shows "Authentication Successful!"
+    [ ] Browser tries to redirect to teledesk://auth?token=...
+    [ ] App receives the token and logs in
 
 <------------------------------------ automatic token refresh --------------------------------->
 Backend:
@@ -948,6 +1030,53 @@ Message Text Box Right-Click Menu (Copy, Paste, Formatting):
     The disabled and active press states are now identical to the sidebar and chat header menus.
 
 <------------------------------- call histoy --------------------------------------->
+added the precise call duration into the right-click menu!
+Now, when you right-click on an answered call, the popup will show you:
+    Started: e.g., 08:30:15 PM
+    Ended: e.g., 08:31:33 PM
+    Duration: e.g., 01:18
+
+<------------------------------ 2FA -------------------------->
+Added Two-Factor Authentication (2FA) support for enhanced account security. Users can now enable 2FA in their profile settings, requiring a time-based one-time password (TOTP) from an authenticator app during login.
+Key Features:
+    Enable 2FA for a test account
+    Go to Settings → Two-Factor Authentication
+    Click "Regenerate QR"
+    Enter current verification code
+    Close the modal WITHOUT verifying the new QR code
+    Try logging in with your OLD authenticator code - it should still work!
+    Regenerate again and complete the verification - new code should now be active
+workflow:
+    User clicks "Regenerate QR"
+    User enters current verification code
+    Backend stores new secret in two_factor_pending_secret (old secret remains active)
+    User can close modal - old QR still works
+    When user completes verification, pending secret becomes active
+    If user closes modal, pending secret is cleared automatically
+Rollback
+If you need to rollback this migration:
+ALTER TABLE users 
+DROP COLUMN IF EXISTS two_factor_pending_secret,
+DROP COLUMN IF EXISTS two_factor_pending_backup_codes;
+Note: Rolling back will break the regeneration safety feature, but existing 2FA functionality will continue to work.
+
+<------------------------------- offline support --------------------------------------->
+implemented full offline capabilities for the TeleDesk PWA and desktop application, mirroring the seamless "Stale-While-Revalidate" and synchronization experience of Telegram.
+
+Key Achievements
+    Persistent Local Cache: Integrated Dexie.js (IndexedDB) to store chats, messages, users, and saved messages. The application now loads instantly from the local database on startup before fetching updates from the server.
+    Background Sync Queue: Created a robust SyncService that queues user actions (sending messages, reactions, etc.) performed while offline. These actions are automatically processed in the correct order once a connection is restored.
+    Seamless Connectivity Handling:
+        Socket Interception: Updated the SocketService to automatically reroute actions to the sync queue when the socket is disconnected.
+        Network Monitoring: Added logic to the NetworkListener to trigger the sync process immediately upon reconnection.
+    API Integration: Modified the core apiService to proactively cache all retrieved data, ensuring the local store stays synchronized with the cloud.
+    User Interface: Enabled a "Connection lost!" banner that provides immediate visual feedback when the app goes offline, while still allowing the user to interact and "send" messages into the persistent queue.
+
+Verification Performed
+    Storage Check: Verified that dbService.ts correctly initializes the IndexedDB schema.
+    Persistence Verification: Confirmed that ChatStore and BookmarkStore accurately persist data to Dexie.
+    Sync Logic: Validated that SyncService handles retries and processes queued actions sequentially upon reconnection.
+    UI Feedback: Ensured the connectivity banner displays and dismisses correctly based on navigator.onLine events.
 
 
 

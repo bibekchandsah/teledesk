@@ -61,7 +61,7 @@ const AppInner: React.FC = () => {
   const { theme, showArchived, setShowArchived, sidebarOpen, setSidebarOpen, toggleSidebar, lastActiveChatId, appLockModal, setAppLockModal } = useUIStore();
   const { activeCall, incomingCall} = useCallStore();
   // const { activeCall, incomingCall } = useCallStore();
-  const { archivedChatIds, lockedChatIds, toggleLockChat } = useChatStore();
+  const { archivedChatIds, lockedChatIds, toggleLockChat, initFromOffline } = useChatStore();
   const { showLocked, setShowLocked, isUnlocked, setIsUnlocked, pinModal, setPinModal } = useUIStore();
   const { accounts, activeAccountUid } = useMultiAccountStore();
   const hasArchived = archivedChatIds.length > 0;
@@ -93,6 +93,11 @@ const AppInner: React.FC = () => {
       window.removeEventListener('blur', onBlur);
     };
   }, []);
+
+  // Initial hydrate from IndexedDB for rapid start
+  useEffect(() => {
+    initFromOffline();
+  }, [initFromOffline]);
 
   // Disable right-click context menu globally (except for inputs)
   useEffect(() => {

@@ -43,3 +43,6 @@ fixed active status of multiple instances and account switchhing
 fixed live typing status independently
 fixed added multiple instance for same app 
 fixed ringtone for compiled exe
+
+auto start app on startup for desktop app (checked)
+start app on minimize for desktop app (auto start on startup)

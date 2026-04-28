@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { Message, SavedMessage } from '@shared/types';
 import { useAuthStore } from './authStore';
-import { deleteSavedMessage, getSavedMessages, upsertSavedMessage } from '../services/apiService';
+import { getSavedMessages } from '../services/apiService';
+import { db } from '../services/dbService';
+import { syncService } from '../services/syncService';
+import Dexie from 'dexie';
 
 const genId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -107,18 +110,44 @@ const mergeEntries = (local: SavedMessage[], remote: SavedMessage[]) => {
 const getUid = () => useAuthStore.getState().currentUser?.uid ?? null;
 
 const cloudUpsert = async (entry: SavedMessage) => {
+  if (!navigator.onLine) {
+    await syncService.addAction({
+      type: 'upsertSavedMessage',
+      payload: { messageId: entry.messageId, entry },
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  const { upsertSavedMessage } = await import('../services/apiService');
   try {
     await upsertSavedMessage(entry.messageId, entry);
   } catch {
-    // Offline / backend unavailable: keep local; next init will retry.
+    await syncService.addAction({
+      type: 'upsertSavedMessage',
+      payload: { messageId: entry.messageId, entry },
+      timestamp: new Date().toISOString()
+    });
   }
 };
 
 const cloudDelete = async (messageId: string) => {
+  if (!navigator.onLine) {
+    await syncService.addAction({
+      type: 'deleteSavedMessage',
+      payload: { messageId },
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+  const { deleteSavedMessage } = await import('../services/apiService');
   try {
     await deleteSavedMessage(messageId);
   } catch {
-    // Best-effort; we also write a tombstone via upsert in deleteEntry/removeBookmark.
+    await syncService.addAction({
+      type: 'deleteSavedMessage',
+      payload: { messageId },
+      timestamp: new Date().toISOString()
+    });
   }
 };
 
@@ -129,10 +158,9 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
 
   initializeForUser: async (uid) => {
     set({ isSyncing: true });
-    // 1) Load local cache (per-user, with legacy fallback/migration)
-    const local = loadLocal(uid);
+    // 1) Load local cache from Dexie
+    const local = await db.savedMessages.toArray();
     set({ savedEntries: local });
-    persistLocal(uid, local);
 
     // 2) Fetch cloud and merge
     try {
@@ -140,7 +168,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       if (res.success && res.data) {
         const merged = mergeEntries(local, res.data);
         set({ savedEntries: merged, isCloudSynced: true });
-        persistLocal(uid, merged);
+        await db.savedMessages.bulkPut(merged);
 
         // 3) Backfill cloud with any local entries that are newer/missing
         const remoteMap = byId(res.data);
@@ -149,7 +177,6 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
           return !r || getEntryUpdatedAt(e) > getEntryUpdatedAt(r);
         });
         for (const e of toUpsert) {
-          // Skip invalid entries (shouldn't happen, but guards legacy garbage)
           if (!e?.messageId) continue;
           await cloudUpsert(e);
         }
@@ -183,21 +210,19 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       deleted: false,
     };
     const updated = [...entries, entry];
-    persistLocal(getUid(), updated);
+    db.savedMessages.put(entry);
     set({ savedEntries: updated });
     void cloudUpsert(entry);
   },
 
   removeBookmark: (messageId) => {
-    const uid = getUid();
     const nowIso = new Date().toISOString();
     const updated = get().savedEntries.map((e) =>
       e.messageId === messageId ? { ...e, deleted: true, updatedAt: nowIso } : e,
     );
-    persistLocal(uid, updated);
-    set({ savedEntries: updated });
-    // Use both tombstone upsert (best for sync) and DELETE (best for storage hygiene)
     const tomb = updated.find((e) => e.messageId === messageId);
+    if (tomb) db.savedMessages.put(tomb);
+    set({ savedEntries: updated });
     if (tomb) void cloudUpsert(tomb);
     void cloudDelete(messageId);
   },

@@ -3,7 +3,6 @@ import { SOCKET_EVENTS } from '@shared/constants/events';
 import { Message } from '@shared/types';
 import { APP_CONFIG } from '@shared/constants/config';
 import { useChatStore } from '../store/chatStore';
-import { syncService } from './syncService';
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
@@ -27,8 +26,6 @@ export const initSocket = (token: string): Socket => {
   socket.on(SOCKET_EVENTS.CONNECT, () => {
     console.log('[Socket] Connected:', socket?.id);
     reconnectAttempts = 0;
-    // Process sync queue when socket connects
-    syncService.processQueue();
   });
 
   socket.on(SOCKET_EVENTS.DISCONNECT, (reason) => {
@@ -38,7 +35,6 @@ export const initSocket = (token: string): Socket => {
   socket.on(SOCKET_EVENTS.RECONNECT, (attempt) => {
     console.log('[Socket] Reconnected after', attempt, 'attempts');
     reconnectAttempts = 0;
-    syncService.processQueue();
   });
 
   socket.on('reconnect_attempt', (attempt) => {
@@ -99,17 +95,7 @@ export const sendMessage = (payload: {
   forwarded?: boolean;
   groupId?: string;
 }): void => {
-  if (socket?.connected) {
-    socket.emit(SOCKET_EVENTS.SEND_MESSAGE, payload);
-  } else {
-    // Offline: Queue it
-    syncService.addAction({ 
-      type: 'sendMessage', 
-      payload, 
-      timestamp: new Date().toISOString(),
-      chatId: payload.chatId
-    });
-  }
+  socket?.emit(SOCKET_EVENTS.SEND_MESSAGE, payload);
 };
 
 export const sendTyping = (chatId: string, isTyping: boolean, userName: string): void => {
@@ -125,29 +111,11 @@ export const sendReadReceipt = (chatId: string, messageId: string): void => {
 };
 
 export const sendReaction = (messageId: string, chatId: string, emoji: string): void => {
-  if (socket?.connected) {
-    socket.emit(SOCKET_EVENTS.REACTION_ADDED, { messageId, chatId, emoji });
-  } else {
-    syncService.addAction({ 
-      type: 'sendReaction', 
-      payload: { messageId, chatId, emoji }, 
-      timestamp: new Date().toISOString(),
-      chatId
-    });
-  }
+  socket?.emit(SOCKET_EVENTS.REACTION_ADDED, { messageId, chatId, emoji });
 };
 
 export const removeReaction = (messageId: string, chatId: string, emoji: string): void => {
-  if (socket?.connected) {
-    socket.emit(SOCKET_EVENTS.REACTION_REMOVED, { messageId, chatId, emoji });
-  } else {
-    syncService.addAction({ 
-      type: 'removeReaction', 
-      payload: { messageId, chatId, emoji }, 
-      timestamp: new Date().toISOString(),
-      chatId
-    });
-  }
+  socket?.emit(SOCKET_EVENTS.REACTION_REMOVED, { messageId, chatId, emoji });
 };
 
 // ─── Call Signaling ────────────────────────────────────────────────────────
