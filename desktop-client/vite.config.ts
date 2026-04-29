@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'url';
+import fs from 'fs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -87,6 +88,24 @@ export default defineConfig({
     port: 5173,
     host: true,
     strictPort: true,
+    https:
+      process.env.VITE_DEV_HTTPS_KEY && process.env.VITE_DEV_HTTPS_CERT
+        ? {
+            key: fs.readFileSync(process.env.VITE_DEV_HTTPS_KEY),
+            cert: fs.readFileSync(process.env.VITE_DEV_HTTPS_CERT),
+          }
+        : false,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_DEV_BACKEND_PROXY || 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: process.env.VITE_DEV_BACKEND_PROXY || 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
     fs: {
       allow: [
         fileURLToPath(new URL('.', import.meta.url)),

@@ -13,6 +13,7 @@ import {
   firebaseAuth,
   setCachedToken,
   refreshIdToken,
+  isUsableFirebaseIdToken,
 } from '../services/firebaseService';
 import { syncUserProfile, get2FAStatus } from '../services/apiService';
 import { initSocket, disconnectSocket } from '../services/socketService';
@@ -24,6 +25,7 @@ import { useMultiAccountStore } from '../store/multiAccountStore';
 import { sharedAuthService, SharedAuthData } from '../services/sharedAuthService';
 import { multiAccountAuthService, AccountData } from '../services/multiAccountAuthService';
 import TwoFactorVerifyModal from '../components/modals/TwoFactorVerifyModal';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
 interface AuthContextValue {
   firebaseUser: FirebaseUser | null;
@@ -79,6 +81,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (activeAccount) {
           console.log('[Auth] Found active account, restoring user profile...', activeAccount.email);
+
+          if (!isUsableFirebaseIdToken(activeAccount.accessToken)) {
+            console.warn('[Auth] Active account token is invalid/expired. Clearing active account and requiring re-login.');
+            await multiAccountAuthService.clearActiveAccount();
+            setCachedToken(null);
+            setLoading(false);
+            return;
+          }
           
           // Set the cached token for API calls
           setCachedToken(activeAccount.accessToken);
@@ -164,6 +174,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           if (activeAccount) {
             console.log('[MultiAccountAuth] Applying account update:', activeAccount.email);
+
+            if (!isUsableFirebaseIdToken(activeAccount.accessToken)) {
+              console.warn('[Auth] Ignoring account update with invalid/expired token.');
+              await multiAccountAuthService.clearActiveAccount();
+              setCachedToken(null);
+              setCurrentUser(null);
+              setLoading(false);
+              return;
+            }
             
             // Update Zustand store
             setActiveAccount(activeAccount.uid);
@@ -486,7 +505,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If in Electron, use the system browser
       if (window.electronAPI) {
-        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const BACKEND_URL = getBackendUrl();
         await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/google`);
         // Don't clear loading here - the deep link callback will handle it
         // But set a timeout to clear loading if callback never arrives
@@ -517,7 +536,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If in Electron, use the system browser
       if (window.electronAPI) {
-        const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const BACKEND_URL = getBackendUrl();
         await window.electronAPI.openExternalUrl(`${BACKEND_URL}/api/auth/desktop/github`);
         // Don't clear loading here - the deep link callback will handle it
         // But set a timeout to clear loading if callback never arrives

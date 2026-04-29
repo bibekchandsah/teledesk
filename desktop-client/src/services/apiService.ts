@@ -1,8 +1,9 @@
 import { getIdToken, refreshIdToken } from './firebaseService';
 import { ApiResponse } from '@shared/types';
 import { db } from './dbService';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = getBackendUrl();
 
 // ─── Authenticated Fetch Helper ────────────────────────────────────────────
 const authFetch = async <T>(

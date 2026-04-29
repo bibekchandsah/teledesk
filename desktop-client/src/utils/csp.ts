@@ -3,9 +3,21 @@
  * Updates CSP to allow connections to the configured backend URL
  */
 
+function getBrowserBackendUrl(): string {
+  if (typeof window === 'undefined') return 'http://localhost:3001';
+
+  const { hostname, protocol } = window.location;
+
+  if (!hostname || protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return 'http://localhost:3001';
+  }
+
+  return `${protocol}//${hostname}:3001`;
+}
+
 export const updateCSPForBackend = () => {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-  const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || getBrowserBackendUrl();
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || backendUrl;
   
   try {
     // Extract hostname and port from URLs

@@ -941,6 +941,10 @@ This mirrors how Google/Gmail handles it — the session stays alive indefinitel
 <------------------------------------ call window --------------------------------->
 Hangup on Close: The close button (and media error close button) now correctly triggers a full hangup, notifying the other participant and cleaning up resources.
 Snap Layouts: I enabled native Windows 11 Snap Layouts support by using Electron's titleBarOverlay. The custom React buttons are now hidden on Windows to avoid duplication, and the title bar layout has been adjusted to accommodate the native controls.
+dynamically recalculates the PiP frame based on the actual video track in the PiP slot, instead of assuming it's always the local camera. This ensures the aspect ratio and size are correct whether it's showing local or remote video, and it listens for track resize events to adjust on the fly.
+supports two-finger pinch resizing on touch devices, allowing you to smoothly zoom the PiP window in and out while maintaining the correct aspect ratio. The zoom level is clamped between 50% and 200% to prevent it from getting too small or too large.
+
+
 
 <------------------------------------ AI suggestion --------------------------------->
 Lumina Always Online + Featured in New Chat
@@ -1059,6 +1063,8 @@ ALTER TABLE users
 DROP COLUMN IF EXISTS two_factor_pending_secret,
 DROP COLUMN IF EXISTS two_factor_pending_backup_codes;
 Note: Rolling back will break the regeneration safety feature, but existing 2FA functionality will continue to work.
+
+
 
 <------------------------------- offline support --------------------------------------->
 implemented full offline capabilities for the TeleDesk PWA and desktop application, mirroring the seamless "Stale-While-Revalidate" and synchronization experience of Telegram.

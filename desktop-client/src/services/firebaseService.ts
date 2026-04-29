@@ -21,6 +21,7 @@ import {
 } from 'firebase/auth';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { User, Message, Chat } from '@shared/types';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
 // ─── Firebase Auth Configuration ──────────────────────────────────────────
 const firebaseConfig = {
@@ -116,6 +117,80 @@ export const onAuthChange = (
 // Store the last valid token for use when Firebase auth isn't available
 let cachedToken: string | null = null;
 
+// Persist cached token to sessionStorage so it survives page reloads and origin changes
+const TOKEN_STORAGE_KEY = 'teledesk-cached-token';
+
+const loadCachedTokenFromStorage = (): string | null => {
+  try {
+    const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored && isUsableFirebaseIdToken(stored)) {
+      console.log('[Firebase] Loaded cached token from sessionStorage');
+      cachedToken = stored;
+      return stored;
+    }
+    // Also try localStorage as fallback (for cross-origin access)
+    const localStored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (localStored && isUsableFirebaseIdToken(localStored)) {
+      console.log('[Firebase] Loaded cached token from localStorage');
+      cachedToken = localStored;
+      return localStored;
+    }
+  } catch (e) {
+    console.warn('[Firebase] Failed to load cached token from storage:', e);
+  }
+  return null;
+};
+
+const saveCachedTokenToStorage = (token: string | null): void => {
+  try {
+    if (token) {
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      console.log('[Firebase] Cached token persisted to storage');
+    } else {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      console.log('[Firebase] Cached token cleared from storage');
+    }
+  } catch (e) {
+    console.warn('[Firebase] Failed to persist cached token to storage:', e);
+  }
+};
+
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+export const isUsableFirebaseIdToken = (token: string | null): boolean => {
+  if (!token) return false;
+
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+
+  const exp = typeof payload.exp === 'number' ? payload.exp : 0;
+  const now = Math.floor(Date.now() / 1000);
+  // Consider tokens that expire in <30s as unusable to avoid edge races.
+  if (!exp || exp <= now + 30) return false;
+
+  const iss = typeof payload.iss === 'string' ? payload.iss : '';
+  const aud = typeof payload.aud === 'string' ? payload.aud : '';
+  const expectedProjectId = import.meta.env.VITE_FIREBASE_PROJECT_ID as string | undefined;
+
+  // Firebase ID tokens use securetoken issuer; custom tokens do not.
+  if (!iss.startsWith('https://securetoken.google.com/')) return false;
+  if (expectedProjectId && aud && aud !== expectedProjectId) return false;
+
+  return true;
+};
+
 export const getIdToken = async (): Promise<string | null> => {
   const user = firebaseAuth.currentUser;
   if (user) {
@@ -123,17 +198,31 @@ export const getIdToken = async (): Promise<string | null> => {
       // forceRefresh: false lets Firebase auto-refresh when the token is near expiry
       const token = await user.getIdToken(false);
       cachedToken = token; // Cache the fresh token
+      saveCachedTokenToStorage(token);
       return token;
     } catch (error) {
       console.error('[Firebase] Failed to get ID token:', error);
       // Fall through to cached token
     }
   }
-  // If no Firebase user or error, return cached token
-  if (cachedToken) {
-    console.log('[Firebase] No current user, using cached token');
+  
+  // If no Firebase user or error, try to load cached token (from memory or storage)
+  if (!cachedToken) {
+    loadCachedTokenFromStorage();
   }
-  return cachedToken;
+  
+  if (isUsableFirebaseIdToken(cachedToken)) {
+    console.log('[Firebase] No current user, using cached token');
+    return cachedToken;
+  }
+
+  if (cachedToken) {
+    console.warn('[Firebase] Discarding unusable cached token');
+    cachedToken = null;
+    saveCachedTokenToStorage(null);
+  }
+
+  return null;
 };
 
 /**
@@ -146,6 +235,7 @@ export const refreshIdToken = async (): Promise<string | null> => {
   try {
     const token = await user.getIdToken(true); // force refresh
     cachedToken = token;
+    saveCachedTokenToStorage(token);
     console.log('[Firebase] Token proactively refreshed');
     return token;
   } catch (error) {
@@ -156,8 +246,23 @@ export const refreshIdToken = async (): Promise<string | null> => {
 
 // Set cached token (called from AuthContext when restoring from shared auth)
 export const setCachedToken = (token: string | null): void => {
+  if (!token) {
+    cachedToken = null;
+    saveCachedTokenToStorage(null);
+    console.log('[Firebase] Cached token updated: token cleared');
+    return;
+  }
+
+  if (!isUsableFirebaseIdToken(token)) {
+    cachedToken = null;
+    saveCachedTokenToStorage(null);
+    console.warn('[Firebase] Rejected non-usable token for cache');
+    return;
+  }
+
   cachedToken = token;
-  console.log('[Firebase] Cached token updated:', token ? 'token set' : 'token cleared');
+  saveCachedTokenToStorage(token);
+  console.log('[Firebase] Cached token updated: token set');
 };
 
 export const reauthenticate = async (): Promise<{ success: boolean; error?: string }> => {
@@ -254,22 +359,24 @@ export const listenToUserChats = (
   uid: string,
   callback: (chats: Chat[]) => void,
 ): (() => void) => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
   let currentChats: Chat[] = [];
 
   const fetchAndNotify = async () => {
-    const token = await getIdToken();
     try {
-      const res = await fetch(`${BASE_URL}/api/chats`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        currentChats = data.data as Chat[];
+      // Use authFetch to ensure session refresh/expiry handling is applied
+      const { getChats } = await import('./apiService');
+      const res = await getChats();
+      if (res.success && Array.isArray(res.data)) {
+        currentChats = res.data as Chat[];
         callback(currentChats);
+        return;
       }
-    } catch {
-      // Network error – keep last known state
+
+      if (res.error) {
+        console.warn('[Chats] Failed to load chats:', res.error);
+      }
+    } catch (err) {
+      console.warn('[Chats] Network error while loading chats:', err);
     }
   };
 
@@ -297,7 +404,7 @@ export const listenToMessages = (
   onError?: () => void,
   limitCount = 30,
 ): (() => void) => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const BASE_URL = getBackendUrl();
 
   const fetchAndNotify = async () => {
     const token = await getIdToken();
@@ -334,7 +441,7 @@ export const listenToMessages = (
 
 // ─── User Profile (via backend API — no direct DB writes from client) ──────
 export const getUserProfile = async (uid: string): Promise<User | null> => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const BASE_URL = getBackendUrl();
   const token = await getIdToken();
   try {
     const res = await fetch(`${BASE_URL}/api/users/${uid}`, {
@@ -350,7 +457,7 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
 // Retained as a best-effort fallback for AuthContext when backend is unavailable.
 // Uses /api/users/sync which upserts the user in Supabase.
 export const upsertUserProfile = async (fbUser: FirebaseUser, fallbackName?: string): Promise<User> => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const BASE_URL = getBackendUrl();
   const token = await getIdToken();
   const now = new Date().toISOString();
   const displayName = fbUser.displayName || fallbackName || 'User';
@@ -388,7 +495,7 @@ export const getOrCreatePrivateChatDirect = async (
   myUid: string,
   targetUid: string,
 ): Promise<Chat> => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const BASE_URL = getBackendUrl();
   const token = await getIdToken();
   const res = await fetch(`${BASE_URL}/api/chats/private`, {
     method: 'POST',
@@ -416,7 +523,7 @@ export const uploadFile = (
   storagePath: string,
   onProgress: (progress: UploadProgress) => void,
 ): { cancel: () => void } => {
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  const BASE_URL = getBackendUrl();
   const chatId = storagePath.split('/')[1] ?? 'misc';
   const formData = new FormData();
   formData.append('file', file);

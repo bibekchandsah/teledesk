@@ -1,13 +1,14 @@
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_EVENTS } from '@shared/constants/events';
 import { Message } from '@shared/types';
+import { getSocketUrl } from '../utils/runtimeUrls';
 import { APP_CONFIG } from '@shared/constants/config';
 import { useChatStore } from '../store/chatStore';
 
 let socket: Socket | null = null;
 let reconnectAttempts = 0;
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_URL = getSocketUrl();
 
 // ─── Initialize Socket Connection ─────────────────────────────────────────
 export const initSocket = (token: string): Socket => {

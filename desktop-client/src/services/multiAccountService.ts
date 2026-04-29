@@ -1,8 +1,9 @@
 import { firebaseAuth, setCachedToken, signInWithCustomToken } from './firebaseService';
 import { StoredAccount } from '../store/multiAccountStore';
 import { multiAccountAuthService } from './multiAccountAuthService';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
-const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const API_BASE = getBackendUrl();
 
 /**
  * Refresh the access token for an account by requesting a new custom token from backend

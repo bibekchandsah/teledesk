@@ -1,7 +1,8 @@
 import { DeviceSession, ApiResponse } from '@shared/types';
 import { getIdToken } from './firebaseService';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
-const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const API_BASE = getBackendUrl();
 
 // Create authenticated headers
 const createHeaders = async (): Promise<HeadersInit> => {

@@ -17,6 +17,8 @@ import callAudioService from '../services/callAudioService';
 import { Pin, PinOff } from 'lucide-react';
 
 const BORDER_ZONE = 12;
+const DEFAULT_PIP_WIDTH_DESKTOP = 180;
+const DEFAULT_PIP_WIDTH_MOBILE = 150;
 
 function getPipResizeEdges(
   lx: number, ly: number, w: number, h: number, isCircle: boolean,
@@ -72,13 +74,14 @@ const CallScreen: React.FC = () => {
   const [localIsMain, setLocalIsMain] = useState(false);
   const [pipPos, setPipPos] = useState<{ top: number; left: number } | null>(null);
   const [pipShape, setPipShape] = useState<'rectangle' | 'circle'>('rectangle');
-  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: 240, h: 135 });
   const [pipCursor, setPipCursor] = useState('grab');
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
   // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
   const pipAspectRef = useRef<number>(16 / 9);
+  const defaultPipWidth = window.innerWidth < 768 ? DEFAULT_PIP_WIDTH_MOBILE : DEFAULT_PIP_WIDTH_DESKTOP;
+  const [pipSize, setPipSize] = useState<{ w: number; h: number }>({ w: defaultPipWidth, h: Math.round(defaultPipWidth / pipAspectRef.current) });
   const [gridView, setGridView] = useState(false);
   const [gridSwapped, setGridSwapped] = useState(false);
   const [gridSplit, setGridSplit] = useState(50); // percent for left panel
@@ -132,6 +135,17 @@ const CallScreen: React.FC = () => {
   }, [isMiniMode, miniSize.w]);
   const pipDragRef = useRef<{ startX: number; startY: number; origTop: number; origLeft: number } | null>(null);
   const pipMovedRef = useRef(false);
+  const pipTouchPointsRef = useRef(new Map<number, { x: number; y: number }>());
+  const pipPinchRef = useRef<{
+    active: boolean;
+    startDistance: number;
+    startW: number;
+    startH: number;
+    startTop: number;
+    startLeft: number;
+  } | null>(null);
+  const pipRafRef = useRef<number | null>(null);
+  const pipPendingRef = useRef<{ size?: { w: number; h: number }; pos?: { top: number; left: number } } | null>(null);
   const isResizing = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pipIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -306,7 +320,7 @@ const CallScreen: React.FC = () => {
         if (vw > 0 && vh > 0) {
           const aspect = vw / vh;
           pipAspectRef.current = aspect;
-          setPipSize({ w: 240, h: Math.round(240 / aspect) });
+          setPipSize({ w: defaultPipWidth, h: Math.round(defaultPipWidth / aspect) });
         }
       };
       const vw = settings.width ?? 0;
@@ -326,6 +340,71 @@ const CallScreen: React.FC = () => {
       }
     }
   }, [localStream]);
+
+  // Keep the PiP frame matched to whichever stream is currently in the PiP slot.
+  useEffect(() => {
+    const pipStream = localIsMain ? remoteStream : localStream;
+    const videoTrack = pipStream?.getVideoTracks()[0];
+    if (!videoTrack) return;
+
+    let cancelled = false;
+
+    const applyAspect = (width: number, height: number) => {
+      if (cancelled || width <= 0 || height <= 0) return;
+      const aspect = width / height;
+      pipAspectRef.current = aspect;
+      setPipSize((prev) => {
+        if (pipShape === 'circle') {
+          const square = Math.max(prev.w, prev.h, 120);
+          return { w: square, h: square };
+        }
+        const nextW = prev.w || defaultPipWidth;
+        return { w: nextW, h: Math.max(80, Math.round(nextW / aspect)) };
+      });
+    };
+
+    const syncFromSettings = () => {
+      const settings = videoTrack.getSettings();
+      const width = settings.width ?? 0;
+      const height = settings.height ?? 0;
+      if (width > 0 && height > 0) {
+        applyAspect(width, height);
+      }
+    };
+
+    syncFromSettings();
+
+    let previewVideo: HTMLVideoElement | null = null;
+    const settings = videoTrack.getSettings();
+    if (!settings.width || !settings.height) {
+      previewVideo = document.createElement('video');
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      previewVideo.srcObject = new MediaStream([videoTrack]);
+      previewVideo.onloadedmetadata = () => {
+        applyAspect(previewVideo?.videoWidth ?? 0, previewVideo?.videoHeight ?? 0);
+      };
+      previewVideo.play().catch(() => {});
+    }
+
+    const handleResize = () => {
+      syncFromSettings();
+      if (!videoTrack.getSettings().width || !videoTrack.getSettings().height) {
+        applyAspect(previewVideo?.videoWidth ?? 0, previewVideo?.videoHeight ?? 0);
+      }
+    };
+
+    videoTrack.addEventListener('resize', handleResize);
+    return () => {
+      cancelled = true;
+      videoTrack.removeEventListener('resize', handleResize);
+      if (previewVideo) {
+        previewVideo.srcObject = null;
+        previewVideo.onloadedmetadata = null;
+        previewVideo = null;
+      }
+    };
+  }, [localIsMain, localStream, remoteStream, pipShape]);
 
   // Listen for remote peer's mute / video-off status changes
   useEffect(() => {
@@ -520,6 +599,91 @@ const CallScreen: React.FC = () => {
     _currentLeft: number,
     _isCircle: boolean,
   ) => { /* replaced by border-drag resize in handlePipMouseDown */ };
+
+  const schedulePipUpdate = (nextSize?: { w: number; h: number }, nextPos?: { top: number; left: number }) => {
+    if (!nextSize && !nextPos) return;
+    const prev = pipPendingRef.current ?? {};
+    pipPendingRef.current = {
+      size: nextSize ?? prev.size,
+      pos: nextPos ?? prev.pos,
+    };
+    if (pipRafRef.current !== null) return;
+    pipRafRef.current = requestAnimationFrame(() => {
+      const pending = pipPendingRef.current;
+      pipPendingRef.current = null;
+      if (pending?.size) setPipSize(pending.size);
+      if (pending?.pos) setPipPos(pending.pos);
+      pipRafRef.current = null;
+    });
+  };
+
+  const handlePipTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      pipPinchRef.current = null;
+      pipTouchPointsRef.current.clear();
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const first = e.touches[0];
+    const second = e.touches[1];
+    const dx = second.clientX - first.clientX;
+    const dy = second.clientY - first.clientY;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const rect = pipContainerRef.current?.getBoundingClientRect();
+    pipTouchPointsRef.current.clear();
+    pipTouchPointsRef.current.set(first.identifier, { x: first.clientX, y: first.clientY });
+    pipTouchPointsRef.current.set(second.identifier, { x: second.clientX, y: second.clientY });
+    pipPinchRef.current = {
+      active: true,
+      startDistance: distance,
+      startW: pipSize.w,
+      startH: pipSize.h,
+      startTop: pipPos?.top ?? rect?.top ?? 0,
+      startLeft: pipPos?.left ?? rect?.left ?? 0,
+    };
+    pipMovedRef.current = true;
+  };
+
+  const handlePipTouchMove = (e: React.TouchEvent) => {
+    if (!pipPinchRef.current?.active || e.touches.length < 2) {
+      if (e.touches.length < 2) {
+        pipPinchRef.current = null;
+        pipTouchPointsRef.current.clear();
+      }
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const first = e.touches[0];
+    const second = e.touches[1];
+    const dx = second.clientX - first.clientX;
+    const dy = second.clientY - first.clientY;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const scale = distance / pipPinchRef.current.startDistance;
+    const minSize = 96;
+    const maxSize = 720;
+    let nextW = Math.max(minSize, Math.min(maxSize, Math.round(pipPinchRef.current.startW * scale)));
+    let nextH = Math.max(minSize, Math.min(maxSize, Math.round(pipPinchRef.current.startH * scale)));
+    if (pipShape === 'circle') {
+      const side = Math.max(nextW, nextH);
+      nextW = side;
+      nextH = side;
+    }
+    const centerX = pipPinchRef.current.startLeft + pipPinchRef.current.startW / 2;
+    const centerY = pipPinchRef.current.startTop + pipPinchRef.current.startH / 2;
+    schedulePipUpdate(
+      { w: nextW, h: nextH },
+      { top: Math.max(0, centerY - nextH / 2), left: Math.max(0, centerX - nextW / 2) },
+    );
+  };
+
+  const handlePipTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      pipPinchRef.current = null;
+      pipTouchPointsRef.current.clear();
+    }
+  };
 
   const handleMainPointerDown = (e: React.PointerEvent) => {
     if (!isMiniMode || !mainContainerRef.current) return;
@@ -807,6 +971,7 @@ const CallScreen: React.FC = () => {
             const pos = pipPos ?? { top: containerH - PIP_H - (isMiniMode ? 10 : 100), left: containerW - PIP_W - (isMiniMode ? 10 : 20) };
 
             const handlePipPointerDown = (e: React.PointerEvent) => {
+              if (e.pointerType === 'touch' && pipPinchRef.current?.active) return;
               e.stopPropagation();
               e.preventDefault(); // suppress touch scroll/context-menu
               const target = pipContainerRef.current;
@@ -836,8 +1001,7 @@ const CallScreen: React.FC = () => {
                     nW = s;
                     nH = oH;
                   }
-                  setPipSize({ w: nW, h: nH });
-                  setPipPos({ top: Math.max(0, nT), left: Math.max(0, nL) });
+                  schedulePipUpdate({ w: nW, h: nH }, { top: Math.max(0, nT), left: Math.max(0, nL) });
                 };
 
                 const onUp = () => {
@@ -919,6 +1083,10 @@ const CallScreen: React.FC = () => {
                 key="pip"
                 ref={pipContainerRef}
                 onPointerDown={handlePipPointerDown}
+                onTouchStart={handlePipTouchStart}
+                onTouchMove={handlePipTouchMove}
+                onTouchEnd={handlePipTouchEnd}
+                onTouchCancel={handlePipTouchEnd}
                 onContextMenu={(e) => { e.preventDefault(); setShowPipMenu(true); }}
                 onMouseMove={(e) => { 
                   handleInteraction();

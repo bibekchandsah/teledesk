@@ -1,6 +1,7 @@
 import { getIdToken } from './firebaseService';
+import { getBackendUrl } from '../utils/runtimeUrls';
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BASE_URL = getBackendUrl();
 
 export interface UsernameCheckResult {
   available: boolean;
