@@ -1103,6 +1103,6 @@ Verification Performed
 (fixed) call history page grouped under today, yesterday and older dates
 use own r2 bucket 10GB for more secure data
 encrypt audio and video 
-
+edge light effect for video call (web & desktop - share screen, edge light effect for active speaker in three dot)
 
 

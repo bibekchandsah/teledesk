@@ -78,6 +78,7 @@ const CallScreen: React.FC = () => {
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
+  const [pipSnap, setPipSnap] = useState(false);
   // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
   const pipAspectRef = useRef<number>(16 / 9);
   const defaultPipWidth = window.innerWidth < 768 ? DEFAULT_PIP_WIDTH_MOBILE : DEFAULT_PIP_WIDTH_DESKTOP;
@@ -133,6 +134,9 @@ const CallScreen: React.FC = () => {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [isMiniMode, miniSize.w]);
+  useEffect(() => () => {
+    if (pipSnapTimerRef.current) clearTimeout(pipSnapTimerRef.current);
+  }, []);
   const pipDragRef = useRef<{ startX: number; startY: number; origTop: number; origLeft: number } | null>(null);
   const pipMovedRef = useRef(false);
   const pipTouchPointsRef = useRef(new Map<number, { x: number; y: number }>());
@@ -146,6 +150,7 @@ const CallScreen: React.FC = () => {
   } | null>(null);
   const pipRafRef = useRef<number | null>(null);
   const pipPendingRef = useRef<{ size?: { w: number; h: number }; pos?: { top: number; left: number } } | null>(null);
+  const pipSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isResizing = useRef(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pipIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -680,8 +685,14 @@ const CallScreen: React.FC = () => {
 
   const handlePipTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2) {
+      const wasPinching = !!pipPinchRef.current?.active;
       pipPinchRef.current = null;
       pipTouchPointsRef.current.clear();
+      if (wasPinching) {
+        setPipSnap(true);
+        if (pipSnapTimerRef.current) clearTimeout(pipSnapTimerRef.current);
+        pipSnapTimerRef.current = setTimeout(() => setPipSnap(false), 180);
+      }
     }
   };
 
@@ -1105,6 +1116,7 @@ const CallScreen: React.FC = () => {
                   userSelect: 'none',
                   cursor: pipCursor,
                   touchAction: 'none',
+                  transition: pipSnap ? 'top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease' : 'none',
                   ...(isMiniMode ? {
                     bottom: miniSize.h - pos.top - PIP_H,
                     right: miniSize.w - pos.left - PIP_W,

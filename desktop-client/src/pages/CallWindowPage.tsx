@@ -120,6 +120,7 @@ const CallWindowPage: React.FC = () => {
   const [pipHidden, setPipHidden] = useState(false);
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
+  const [pipSnap, setPipSnap] = useState(false);
   // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
   // Defaults to 16/9 until we know the actual device ratio.
   const pipAspectRef = useRef<number>(16 / 9);
@@ -180,7 +181,12 @@ const CallWindowPage: React.FC = () => {
   } | null>(null);
   const pipRafRef = useRef<number | null>(null);
   const pipPendingRef = useRef<{ size?: { w: number; h: number }; pos?: { top: number; left: number } } | null>(null);
+  const pipSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridResizingRef = useRef(false);
+
+  useEffect(() => () => {
+    if (pipSnapTimerRef.current) clearTimeout(pipSnapTimerRef.current);
+  }, []);
 
   // ─── Bootstrap chats + user profiles for the in-call chat sidebar ──────────
   useEffect(() => {
@@ -1232,8 +1238,14 @@ const CallWindowPage: React.FC = () => {
 
   const handlePipTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length < 2) {
+      const wasPinching = !!pipPinchRef.current?.active;
       pipPinchRef.current = null;
       pipTouchPointsRef.current.clear();
+      if (wasPinching) {
+        setPipSnap(true);
+        if (pipSnapTimerRef.current) clearTimeout(pipSnapTimerRef.current);
+        pipSnapTimerRef.current = setTimeout(() => setPipSnap(false), 180);
+      }
     }
   };
 
@@ -1855,7 +1867,7 @@ const CallWindowPage: React.FC = () => {
                   }}
                   onClick={() => { if (!pipMovedRef.current) setLocalIsMain((v) => !v); }}
                   title="Drag · Click to swap"
-                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none', willChange: 'transform, top, left', ['WebkitAppRegion' as any]: 'no-drag' }}
+                  style={{ position: 'fixed', top: pos.top, left: pos.left, width: PIP_W, height: PIP_H, zIndex: 20, userSelect: 'none', cursor: pipCursor, touchAction: 'none', transition: pipSnap ? 'top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease' : 'none', willChange: 'transform, top, left', ['WebkitAppRegion' as any]: 'no-drag' }}
                 >
                   <div style={{ position: 'absolute', inset: 0, borderRadius: borderRad, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'border-radius 0.35s ease' }}>
                     <VideoStream
