@@ -121,9 +121,6 @@ const CallWindowPage: React.FC = () => {
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [pipSnap, setPipSnap] = useState(false);
-  const mainVideoAreaRef = useRef<HTMLDivElement | null>(null);
-  const [mainVideoSize, setMainVideoSize] = useState({ w: 0, h: 0 });
-  const [mainAspect, setMainAspect] = useState(16 / 9);
   // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
   // Defaults to 16/9 until we know the actual device ratio.
   const pipAspectRef = useRef<number>(16 / 9);
@@ -186,27 +183,6 @@ const CallWindowPage: React.FC = () => {
   const pipPendingRef = useRef<{ size?: { w: number; h: number }; pos?: { top: number; left: number } } | null>(null);
   const pipSnapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridResizingRef = useRef(false);
-
-  useEffect(() => {
-    const node = mainVideoAreaRef.current;
-    if (!node) return;
-
-    const updateSize = () => {
-      const rect = node.getBoundingClientRect();
-      setMainVideoSize({ w: rect.width, h: rect.height });
-    };
-
-    updateSize();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateSize);
-      return () => window.removeEventListener('resize', updateSize);
-    }
-
-    const ro = new ResizeObserver(() => updateSize());
-    ro.observe(node);
-    return () => ro.disconnect();
-  }, []);
 
   useEffect(() => () => {
     if (pipSnapTimerRef.current) clearTimeout(pipSnapTimerRef.current);
@@ -892,44 +868,6 @@ const CallWindowPage: React.FC = () => {
     };
   }, [localIsMain, localStream, remoteStream, pipShape]);
 
-  useEffect(() => {
-    const mainStream = localIsMain ? localStream : remoteStream;
-    const videoTrack = mainStream?.getVideoTracks()[0];
-    if (!videoTrack) return;
-
-    let cancelled = false;
-
-    const applyAspect = (width: number, height: number) => {
-      if (cancelled || width <= 0 || height <= 0) return;
-      setMainAspect(width / height);
-    };
-
-    const settings = videoTrack.getSettings();
-    const width = settings.width ?? 0;
-    const height = settings.height ?? 0;
-    if (width > 0 && height > 0) {
-      applyAspect(width, height);
-    } else {
-      const previewVideo = document.createElement('video');
-      previewVideo.muted = true;
-      previewVideo.playsInline = true;
-      previewVideo.srcObject = new MediaStream([videoTrack]);
-      previewVideo.onloadedmetadata = () => {
-        applyAspect(previewVideo.videoWidth, previewVideo.videoHeight);
-        previewVideo.srcObject = null;
-      };
-      previewVideo.play().catch(() => {});
-      return () => {
-        cancelled = true;
-        previewVideo.srcObject = null;
-      };
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [localIsMain, localStream, remoteStream]);
-
 
 
   // ─── Auto-hide controls after 5s of mouse idle ───────────────────────────
@@ -1422,26 +1360,6 @@ const CallWindowPage: React.FC = () => {
   const localHasVideo = (isVideoCall && !isVideoOff) || isLocalVideoEnabled;
   const effectiveIsVideo = localHasVideo || remoteHasVideo || isScreenSharing;
 
-  const mainFrame = useMemo(() => {
-    if (!mainVideoSize.w || !mainVideoSize.h) return null;
-    const containerRatio = mainVideoSize.w / mainVideoSize.h;
-    let frameW = mainVideoSize.w;
-    let frameH = mainVideoSize.h;
-    if (containerRatio > mainAspect) {
-      frameH = mainVideoSize.h;
-      frameW = frameH * mainAspect;
-    } else {
-      frameW = mainVideoSize.w;
-      frameH = frameW / mainAspect;
-    }
-    return {
-      width: frameW,
-      height: frameH,
-      left: (mainVideoSize.w - frameW) / 2,
-      top: (mainVideoSize.h - frameH) / 2,
-    };
-  }, [mainVideoSize.w, mainVideoSize.h, mainAspect]);
-
   // ─── Media error screen ───────────────────────────────────────────────
   if (mediaError) {
     return (
@@ -1737,7 +1655,6 @@ const CallWindowPage: React.FC = () => {
 
       {/* ── Video / audio area ─────────────────────────────────────── */}
       <div
-        ref={mainVideoAreaRef}
         style={{
           flex: 1,
           position: 'relative',
@@ -1859,18 +1776,11 @@ const CallWindowPage: React.FC = () => {
             <div
               style={{
                 position: 'absolute',
-                ...(mainFrame
-                  ? {
-                      left: mainFrame.left,
-                      top: mainFrame.top,
-                      width: mainFrame.width,
-                      height: mainFrame.height,
-                    }
-                  : { inset: 0 }),
+                inset: 8,
                 borderRadius: 18,
                 overflow: 'hidden',
                 background: '#0b1220',
-                border: '1px solid rgba(255,255,255,0.22)',
+                boxShadow: '0 0 0 1px rgba(255,255,255,0.22)',
               }}
             >
               <VideoStream
@@ -1878,7 +1788,7 @@ const CallWindowPage: React.FC = () => {
                 label={localIsMain ? 'You' : displayName}
                 muted={localIsMain}
                 mirror={localIsMain}
-                objectFit="cover"
+                objectFit="contain"
                 style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }}
               />
             </div>
