@@ -79,6 +79,9 @@ const CallScreen: React.FC = () => {
   const [pipControlsVisible, setPipControlsVisible] = useState(false);
   const [showPipMenu, setShowPipMenu] = useState(false);
   const [pipSnap, setPipSnap] = useState(false);
+  const mainVideoAreaRef = useRef<HTMLDivElement | null>(null);
+  const [mainVideoSize, setMainVideoSize] = useState({ w: 0, h: 0 });
+  const [mainAspect, setMainAspect] = useState(16 / 9);
   // Real camera aspect ratio (w/h) — updated once the local stream is acquired.
   const pipAspectRef = useRef<number>(16 / 9);
   const defaultPipWidth = window.innerWidth < 768 ? DEFAULT_PIP_WIDTH_MOBILE : DEFAULT_PIP_WIDTH_DESKTOP;
@@ -103,6 +106,27 @@ const CallScreen: React.FC = () => {
   
   const [mainCursor, setMainCursor] = useState('default');
   const gridResizingRef = useRef(false);
+
+  useEffect(() => {
+    const node = mainVideoAreaRef.current;
+    if (!node) return;
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setMainVideoSize({ w: rect.width, h: rect.height });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSize);
+      return () => window.removeEventListener('resize', updateSize);
+    }
+
+    const ro = new ResizeObserver(() => updateSize());
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
 
   // Clamp pipPos when window is resized so PiP never goes off-screen
   useEffect(() => {
@@ -170,6 +194,26 @@ const CallScreen: React.FC = () => {
   );
   const localHasVideo = (isVideo && !isVideoOff) || isLocalVideoEnabled;
   const effectiveIsVideo = localHasVideo || remoteHasVideo;
+
+  const mainFrame = useMemo(() => {
+    if (!mainVideoSize.w || !mainVideoSize.h) return null;
+    const containerRatio = mainVideoSize.w / mainVideoSize.h;
+    let frameW = mainVideoSize.w;
+    let frameH = mainVideoSize.h;
+    if (containerRatio > mainAspect) {
+      frameH = mainVideoSize.h;
+      frameW = frameH * mainAspect;
+    } else {
+      frameW = mainVideoSize.w;
+      frameH = frameW / mainAspect;
+    }
+    return {
+      width: frameW,
+      height: frameH,
+      left: (mainVideoSize.w - frameW) / 2,
+      top: (mainVideoSize.h - frameH) / 2,
+    };
+  }, [mainVideoSize.w, mainVideoSize.h, mainAspect]);
 
   // Manage outgoing ringtone for calls initiated by current user
   useEffect(() => {
@@ -410,6 +454,44 @@ const CallScreen: React.FC = () => {
       }
     };
   }, [localIsMain, localStream, remoteStream, pipShape]);
+
+  useEffect(() => {
+    const mainStream = localIsMain ? localStream : remoteStream;
+    const videoTrack = mainStream?.getVideoTracks()[0];
+    if (!videoTrack) return;
+
+    let cancelled = false;
+
+    const applyAspect = (width: number, height: number) => {
+      if (cancelled || width <= 0 || height <= 0) return;
+      setMainAspect(width / height);
+    };
+
+    const settings = videoTrack.getSettings();
+    const width = settings.width ?? 0;
+    const height = settings.height ?? 0;
+    if (width > 0 && height > 0) {
+      applyAspect(width, height);
+    } else {
+      const previewVideo = document.createElement('video');
+      previewVideo.muted = true;
+      previewVideo.playsInline = true;
+      previewVideo.srcObject = new MediaStream([videoTrack]);
+      previewVideo.onloadedmetadata = () => {
+        applyAspect(previewVideo.videoWidth, previewVideo.videoHeight);
+        previewVideo.srcObject = null;
+      };
+      previewVideo.play().catch(() => {});
+      return () => {
+        cancelled = true;
+        previewVideo.srcObject = null;
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [localIsMain, localStream, remoteStream]);
 
   // Listen for remote peer's mute / video-off status changes
   useEffect(() => {
@@ -869,6 +951,7 @@ const CallScreen: React.FC = () => {
 
       {/* ── Video / audio area ─────────────────────────────────────── */}
       <div
+        ref={mainVideoAreaRef}
         style={{
           flex: 1,
           position: 'relative',
@@ -899,9 +982,20 @@ const CallScreen: React.FC = () => {
                   height: gridOrientation === 'horizontal' ? '100%' : `${gridSplit}%`, 
                   position: 'relative', flexShrink: 0, backgroundColor: '#000' 
                 }}>
-                  <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
-                    objectFit="contain"
-                    style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 8,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      background: '#0b1220',
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.22)',
+                    }}
+                  >
+                    <VideoStream stream={leftStream} label={leftLabel} muted={leftMuted} mirror={leftMirror}
+                      objectFit="contain"
+                      style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                  </div>
                   <div style={{
                     position: 'absolute', top: 10, left: 12,
                     background: 'rgba(0,0,0,0.5)', color: '#fff',
@@ -944,9 +1038,20 @@ const CallScreen: React.FC = () => {
                 </div>
                 {/* Right panel */}
                 <div style={{ flex: 1, position: 'relative', backgroundColor: '#000' }}>
-                  <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
-                    objectFit="contain"
-                    style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 8,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      background: '#0b1220',
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.22)',
+                    }}
+                  >
+                    <VideoStream stream={rightStream} label={rightLabel} muted={rightMuted} mirror={rightMirror}
+                      objectFit="contain"
+                      style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }} />
+                  </div>
                   <div style={{
                     position: 'absolute', top: 10, left: 12,
                     background: 'rgba(0,0,0,0.5)', color: '#fff',
@@ -960,14 +1065,32 @@ const CallScreen: React.FC = () => {
       ) : effectiveIsVideo && activeCall.status !== 'ringing' ? (
         <>
           {/* Full-screen stream */}
-          <VideoStream
-            stream={localIsMain ? localStream : remoteStream}
-            label={localIsMain ? 'You' : peerName}
-            muted={localIsMain} // Only mute if showing local stream (prevent echo)
-            mirror={localIsMain}
-            objectFit="contain"
-            style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}
-          />
+          <div
+            style={{
+              position: 'absolute',
+              ...(mainFrame
+                ? {
+                    left: mainFrame.left,
+                    top: mainFrame.top,
+                    width: mainFrame.width,
+                    height: mainFrame.height,
+                  }
+                : { inset: 0 }),
+              borderRadius: 18,
+              overflow: 'hidden',
+              background: '#0b1220',
+              border: '1px solid rgba(255,255,255,0.22)',
+            }}
+          >
+            <VideoStream
+              stream={localIsMain ? localStream : remoteStream}
+              label={localIsMain ? 'You' : peerName}
+              muted={localIsMain} // Only mute if showing local stream (prevent echo)
+              mirror={localIsMain}
+              objectFit="cover"
+              style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, borderRadius: 0 }}
+            />
+          </div>
 
           {/* PiP stream — draggable, menu, shape toggle, hide */}
           {(localIsMain ? remoteStream : localStream) && (() => {

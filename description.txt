@@ -62,6 +62,21 @@ npx tsc -p tsconfig.electron.json --noEmit
 http://localhost:3001/api/auth/desktop/google
 
 
+<-------------------- local configuration ------------------------------>
+Chrome or Android: chrome://flags → “Insecure origins treated as secure” → add http://10.5.234.63:5173
+or,
+Install mkcert (one-time):
+    choco install mkcert
+    mkcert -install
+Generate a cert:
+    mkcert 10.5.234.63 localhost 127.0.0.1
+Set env vars (PowerShell example):
+    $env:VITE_DEV_HTTPS_CERT="C:\path\to\10.5.234.63+2.pem"
+    $env:VITE_DEV_HTTPS_KEY="C:\path\to\10.5.234.63+2-key.pem"
+Restart Vite dev server.
+Open https://10.5.234.63:5173 on phone and laptop.
+
+
 <----------------------- environment setup ---------------------------->
 .env.development - Development environment (localhost, DevTools ON)
 .env.production - Production environment (Railway backend, DevTools OFF)
@@ -632,11 +647,24 @@ For new chats, navigates immediately after createPrivateChat returns — no long
 getChats() still runs but in the background, so the sidebar updates without delaying navigation
 
 
-<--------------------------- voice note ---------------------------------->
+<--------------------------- voice/video note ---------------------------------->
+allow users to record and send voice and video notes. Voice notes will feature a sound frequency graph during recording, and video notes will be captured and displayed in a circular format.
+To toggle between voice and video mode, users can tap the icon next to the input.
 make the voice note waveforms interactive, allowing you to click or drag to seek through the audio
 Interactive Seeker: Tap or click anywhere on the waveform to jump playback.
 Precision Scrubbing: Smooth real-time seeking via mouse drag or touch sliding.
 Visual Feedback: The progress highlight and timestamp update instantly as you seek.
+
+Manual Verification
+Voice Note:
+    Tap/Hold the mic icon.
+    Verify frequency graph fluctuates with sound.
+    Send and verify it plays back in the chat with correct duration.
+Video Note:
+    Toggle to video mode.
+    Tap/Hold the camera icon.
+    Verify circular preview appears.
+    Send and verify it appears as a circular clip in the chat.
 
 
 <--------------------------- Delete account -------------------------------->
@@ -1101,8 +1129,8 @@ Verification Performed
 (fixed) sidebar context menu in mobile device
 (not useful) add camera selection and preview in setting page
 (fixed) call history page grouped under today, yesterday and older dates
+(fixed) encrypt audio and video (bydefault webrtc is encrypted)
 use own r2 bucket 10GB for more secure data
-encrypt audio and video 
 edge light effect for video call (web & desktop - share screen, edge light effect for active speaker in three dot)
 
 
